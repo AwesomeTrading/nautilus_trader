@@ -201,7 +201,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::common::testing::load_event_fixture;
+    use crate::common::testing::{load_event_fixture, load_fixture_string};
 
     #[rstest]
     fn test_deserialize_execution_report_new() {
@@ -218,8 +218,8 @@ mod tests {
 
     #[rstest]
     fn test_deserialize_execution_report_trade() {
-        let json = include_str!("../../../../test_data/ws_spot_execution_report_trade.json");
-        let msg: BinanceSpotExecutionReport = serde_json::from_str(json).unwrap();
+        let json = load_fixture_string("spot/user_data_json/execution_report_trade.json");
+        let msg: BinanceSpotExecutionReport = serde_json::from_str(&json).unwrap();
 
         assert_eq!(msg.execution_type, BinanceSpotExecutionType::Trade);
         assert_eq!(msg.order_status, BinanceOrderStatus::Filled);
@@ -231,8 +231,8 @@ mod tests {
 
     #[rstest]
     fn test_deserialize_execution_report_canceled() {
-        let json = include_str!("../../../../test_data/ws_spot_execution_report_canceled.json");
-        let msg: BinanceSpotExecutionReport = serde_json::from_str(json).unwrap();
+        let json = load_fixture_string("spot/user_data_json/execution_report_canceled.json");
+        let msg: BinanceSpotExecutionReport = serde_json::from_str(&json).unwrap();
 
         assert_eq!(msg.execution_type, BinanceSpotExecutionType::Canceled);
         assert_eq!(msg.order_status, BinanceOrderStatus::Canceled);

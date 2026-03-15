@@ -243,6 +243,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::common::testing::load_fixture_string;
     use crate::spot::websocket::trading::user_data::BinanceSpotExecutionReport;
 
     const PRICE_PRECISION: u8 = 2;
@@ -254,8 +255,8 @@ mod tests {
 
     #[rstest]
     fn test_parse_execution_report_to_order_status_report() {
-        let json = include_str!("../../../../test_data/ws_spot_execution_report_new.json");
-        let msg: BinanceSpotExecutionReport = serde_json::from_str(json).unwrap();
+        let json = load_fixture_string("spot/user_data_json/execution_report_new.json");
+        let msg: BinanceSpotExecutionReport = serde_json::from_str(&json).unwrap();
         let account_id = AccountId::from("BINANCE-001");
         let ts_init = UnixNanos::from(1_000_000_000u64);
 
@@ -284,8 +285,8 @@ mod tests {
 
     #[rstest]
     fn test_parse_execution_report_stop_loss_has_trigger_price() {
-        let json = include_str!("../../../../test_data/ws_spot_execution_report_stop_loss.json");
-        let msg: BinanceSpotExecutionReport = serde_json::from_str(json).unwrap();
+        let json = load_fixture_string("spot/user_data_json/execution_report_stop_loss.json");
+        let msg: BinanceSpotExecutionReport = serde_json::from_str(&json).unwrap();
         let account_id = AccountId::from("BINANCE-001");
         let ts_init = UnixNanos::from(1_000_000_000u64);
 
@@ -314,8 +315,8 @@ mod tests {
 
     #[rstest]
     fn test_parse_execution_report_to_fill_report() {
-        let json = include_str!("../../../../test_data/ws_spot_execution_report_trade.json");
-        let msg: BinanceSpotExecutionReport = serde_json::from_str(json).unwrap();
+        let json = load_fixture_string("spot/user_data_json/execution_report_trade.json");
+        let msg: BinanceSpotExecutionReport = serde_json::from_str(&json).unwrap();
         let account_id = AccountId::from("BINANCE-001");
         let ts_init = UnixNanos::from(1_000_000_000u64);
 
@@ -342,8 +343,8 @@ mod tests {
 
     #[rstest]
     fn test_parse_account_position() {
-        let json = include_str!("../../../../test_data/ws_spot_account_position.json");
-        let msg: BinanceSpotAccountPositionMsg = serde_json::from_str(json).unwrap();
+        let json = load_fixture_string("spot/user_data_json/account_position.json");
+        let msg: BinanceSpotAccountPositionMsg = serde_json::from_str(&json).unwrap();
         let account_id = AccountId::from("BINANCE-001");
         let ts_init = UnixNanos::from(1_000_000_000u64);
 
