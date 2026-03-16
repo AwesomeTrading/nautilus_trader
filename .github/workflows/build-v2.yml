@@ -63,6 +63,8 @@ jobs:
     env:
       BUILD_MODE: release
       RUST_BACKTRACE: 1
+      # Keep v2 Cargo artifacts separate from the legacy build and per-Python ABI.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target-v2/py${{ matrix.python-version }}
     # yamllint disable rule:line-length
     services:
       redis:
@@ -107,6 +109,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
+          rust-cache-key: build-v2-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
 
       - name: Install Nautilus CLI
         env:

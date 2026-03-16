@@ -13,6 +13,14 @@ inputs:
     description: Type of build (pre-commit, test, release)
     required: false
     default: "release"
+  rust-cache-key:
+    description: Extra rust-cache key material to partition cache entries
+    required: false
+    default: ""
+  rust-cache-workspaces:
+    description: Optional rust-cache workspace mapping, e.g. ". -> target-v2/py3.13"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -96,6 +104,8 @@ runs:
       with:
         toolchain: ${{ env.TOOLCHAIN }}
         components: clippy,rustfmt
+        cache-key: ${{ inputs.rust-cache-key }}
+        cache-workspaces: ${{ inputs.rust-cache-workspaces || '. -> target' }}
         override: true
 
     - name: Install cargo-nextest
