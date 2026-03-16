@@ -268,8 +268,8 @@ async fn main() -> anyhow::Result<()> {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send order.place: {e}"))?;
 
-        // Wait for order response and user data events
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        // Drain frames while waiting for order events
+        drain_frames(&mut raw_rx, &mut early_frames, Duration::from_secs(3)).await;
 
         // Cancel the order
         println!("Canceling order for {}", config.symbol);
@@ -288,8 +288,8 @@ async fn main() -> anyhow::Result<()> {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send order.cancel: {e}"))?;
 
-        // Wait for cancel events
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        // Drain frames while waiting for cancel events
+        drain_frames(&mut raw_rx, &mut early_frames, Duration::from_secs(3)).await;
     }
 
     // Capture raw binary frames
@@ -301,7 +301,10 @@ async fn main() -> anyhow::Result<()> {
     let mut fixtures = Vec::new();
     let mut counts: std::collections::HashMap<u16, usize> = std::collections::HashMap::new();
 
-    // Process any binary frames received during the handshake
+    // Process any binary frames received during handshake and order flow
+    if !early_frames.is_empty() {
+        println!("Processing {} early binary frames...", early_frames.len());
+    }
     for data in early_frames {
         capture_binary_frame(&data, &output_root, &mut counts, &mut fixtures)?;
     }
@@ -316,7 +319,7 @@ async fn main() -> anyhow::Result<()> {
                         capture_binary_frame(&data, &output_root, &mut counts, &mut fixtures)?;
                     }
                     Some(Message::Text(text)) => {
-                        log::debug!("Text frame: {text}");
+                        println!("  Text frame: {text}");
                     }
                     Some(_) => {}
                     None => {
@@ -519,6 +522,35 @@ fn build_signed_request_with_params(
     Ok(serde_json::to_string(&request)?)
 }
 
+/// Drains binary frames from the channel for a duration, collecting them.
+async fn drain_frames(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<Message>,
+    collected: &mut Vec<Vec<u8>>,
+    duration: Duration,
+) {
+    let deadline = tokio::time::Instant::now() + duration;
+
+    loop {
+        tokio::select! {
+            msg = rx.recv() => {
+                match msg {
+                    Some(Message::Binary(data)) => {
+                        collected.push(data.to_vec());
+                    }
+                    Some(Message::Text(text)) => {
+                        println!("  Text frame during drain: {text}");
+                    }
+                    Some(_) => {}
+                    None => break,
+                }
+            }
+            () = tokio::time::sleep_until(deadline) => {
+                break;
+            }
+        }
+    }
+}
+
 /// Waits for a JSON text response matching the given context.
 ///
 /// Returns any binary frames received while waiting so they are not lost.
@@ -535,7 +567,13 @@ async fn wait_for_response(
             msg = rx.recv() => {
                 match msg {
                     Some(Message::Text(text)) => {
-                        let json: serde_json::Value = serde_json::from_str(&text)?;
+                        let json: serde_json::Value = match serde_json::from_str(&text) {
+                            Ok(v) => v,
+                            Err(_) => {
+                                log::debug!("Non-JSON text frame: {text}");
+                                continue;
+                            }
+                        };
 
                         if let Some(error) = json.get("error") {
                             anyhow::bail!("{context} error: {error}");
@@ -628,14 +666,10 @@ where
         index += 1;
     }
 
-    if config.include_order_flow {
-        if config.order_quantity.is_none() || config.order_price.is_none() {
-            anyhow::bail!("--include-order-flow requires both --order-quantity and --order-price");
-        }
-
-        if matches!(config.environment, BinanceEnvironment::Mainnet) {
-            anyhow::bail!("--include-order-flow is only allowed on testnet or demo");
-        }
+    if config.include_order_flow
+        && (config.order_quantity.is_none() || config.order_price.is_none())
+    {
+        anyhow::bail!("--include-order-flow requires both --order-quantity and --order-price");
     }
 
     Ok(config)

@@ -967,4 +967,54 @@ mod tests {
         assert_eq!(us_to_ms(1709654400000000), 1709654400000);
         assert_eq!(us_to_ms(1709654400123456), 1709654400123);
     }
+
+    #[rstest]
+    fn test_decode_captured_execution_report_new() {
+        let data = crate::common::testing::load_fixture_bytes(
+            "spot/user_data_sbe/mainnet/execution_report_event_1.sbe",
+        );
+        let report = decode_execution_report(&data).unwrap();
+
+        assert_eq!(report.symbol, "BTCUSDT");
+        assert_eq!(report.client_order_id, "O-20200101-000000-000-000-0");
+        assert_eq!(report.execution_type, BinanceSpotExecutionType::New);
+        assert_eq!(report.order_status, BinanceOrderStatus::New);
+        assert_eq!(report.side, BinanceSide::Buy);
+        assert_eq!(report.order_type, "LIMIT");
+        assert_eq!(report.time_in_force, BinanceTimeInForce::Gtc);
+        assert_eq!(report.order_id, 12345678);
+        assert!(report.is_working);
+        assert!(!report.is_maker);
+        assert_eq!(report.trade_id, -1);
+    }
+
+    #[rstest]
+    fn test_decode_captured_execution_report_canceled() {
+        let data = crate::common::testing::load_fixture_bytes(
+            "spot/user_data_sbe/mainnet/execution_report_event_2.sbe",
+        );
+        let report = decode_execution_report(&data).unwrap();
+
+        assert_eq!(report.symbol, "BTCUSDT");
+        assert_eq!(report.execution_type, BinanceSpotExecutionType::Canceled);
+        assert_eq!(report.order_status, BinanceOrderStatus::Canceled);
+        assert_eq!(report.order_id, 12345678);
+        assert!(!report.is_working);
+    }
+
+    #[rstest]
+    fn test_decode_captured_account_position() {
+        let data = crate::common::testing::load_fixture_bytes(
+            "spot/user_data_sbe/mainnet/outbound_account_position_event_1.sbe",
+        );
+        let msg = decode_account_position(&data).unwrap();
+
+        assert_eq!(msg.event_type, "outboundAccountPosition");
+        assert_eq!(msg.balances.len(), 3);
+        assert_eq!(msg.balances[0].asset, "BTC");
+        assert_eq!(msg.balances[0].free, "1.00000000");
+        assert_eq!(msg.balances[1].asset, "BNB");
+        assert_eq!(msg.balances[2].asset, "USDT");
+        assert_eq!(msg.balances[2].free, "50000.00000000");
+    }
 }
