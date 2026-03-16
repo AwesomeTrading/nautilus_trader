@@ -1,7 +1,11 @@
 # %% [markdown]
 # # Loading External Data
 #
-# This tutorial demonstrates how to load external data into the `ParquetDataCatalog`, and then use this to run a one-shot backtest using a `BacktestNode`.
+# Load CSV market data into the Parquet data catalog, then run a backtest with
+# `BacktestNode`. This is a common workflow when you have historical data from an
+# external vendor that is not directly supported by a NautilusTrader adapter.
+#
+# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/loading_external_data.py).
 
 # %%
 import shutil
@@ -24,6 +28,14 @@ from nautilus_trader.persistence.wranglers import QuoteTickDataWrangler
 from nautilus_trader.test_kit.providers import CSVTickDataLoader
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
+# %% [markdown]
+# ## Load and wrangle the data
+#
+# Point `DATA_DIR` at a folder containing CSV tick files (e.g. from
+# [histdata.com](https://www.histdata.com/)). `CSVTickDataLoader` reads the raw
+# CSV into a DataFrame, and `QuoteTickDataWrangler` converts it into Nautilus
+# `QuoteTick` objects.
+
 # %%
 DATA_DIR = "~/Downloads/Data/"
 
@@ -45,6 +57,13 @@ EURUSD = TestInstrumentProvider.default_fx_ccy("EUR/USD")
 wrangler = QuoteTickDataWrangler(EURUSD)
 
 ticks = wrangler.process(df)
+
+# %% [markdown]
+# ## Write to the data catalog
+#
+# Create a `ParquetDataCatalog` and write the instrument definition and tick
+# data. The catalog stores data in Parquet format for efficient querying across
+# backtest runs.
 
 # %%
 CATALOG_PATH = Path.cwd() / "catalog"
@@ -70,6 +89,13 @@ end = dt_to_unix_nanos(pd.Timestamp("2020-01-04", tz="UTC"))
 
 ticks = catalog.quote_ticks(instrument_ids=[EURUSD.id.value], start=start, end=end)
 ticks[:10]
+
+# %% [markdown]
+# ## Configure and run the backtest
+#
+# Set up venue, data, and strategy configs, then run through `BacktestNode`.
+# The strategies and actors you build here carry forward to live trading
+# with `TradingNode`.
 
 # %%
 instrument = catalog.instruments()[0]
@@ -121,3 +147,8 @@ node = BacktestNode(configs=[config])
 
 # %%
 result
+
+# %% [markdown]
+# ---
+#
+# **Previous**: [Backtest (high-level API)](../getting_started/backtest_high_level) | **Next**: [Backtest with FX bar data](backtest_fx_bars)

@@ -1,25 +1,18 @@
 # %% [markdown]
-# # Backtest: Binance OrderBook data
+# # Backtest with Order Book Depth Data (Binance)
 #
-# Tutorial for [NautilusTrader](https://nautilustrader.io/docs/latest/) a high-performance algorithmic trading platform and event-driven backtester.
+# Backtest an order book imbalance strategy using exchange depth data and
+# `BacktestNode`. This example uses Binance order book snapshots, but the same
+# approach works with depth data from any supported venue.
 #
 # [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/backtest_binance_orderbook.py).
 
 # %% [markdown]
-# ## Overview
-#
-# This tutorial sets up the data catalog and a `BacktestNode` to backtest an `OrderBookImbalance` strategy on order book data. You need to bring your own Binance order book data.
-
-# %% [markdown]
 # ## Prerequisites
 #
-# - Python 3.12+ installed
-# - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`uv pip install nautilus_trader`)
-
-# %% [markdown]
-# ## Imports
-#
-# We'll start with all of our imports for the remainder of this tutorial:
+# - Python 3.12+
+# - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`pip install nautilus_trader`)
+# - Binance order book depth data (bring your own)
 
 # %%
 import shutil
@@ -188,3 +181,8 @@ engine.trader.generate_positions_report()
 
 # %%
 engine.trader.generate_account_report(Venue("BINANCE"))
+
+# %% [markdown]
+# ---
+#
+# **Previous**: [Backtest with FX bar data](backtest_fx_bars) | **Next**: [Backtest with order book depth data (Bybit)](backtest_bybit_orderbook)

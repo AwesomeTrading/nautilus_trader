@@ -1,28 +1,24 @@
 # %% [markdown]
-# # Databento data catalog
+# # Data Catalog with Databento
 #
-# Tutorial for [NautilusTrader](https://nautilustrader.io/docs/latest/) a high-performance algorithmic trading platform and event-driven backtester.
+# Set up a Nautilus Parquet data catalog with market data from Databento. The
+# catalog provides efficient storage and querying for backtests and research.
 #
 # [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/databento_data_catalog.py).
 
 # %% [markdown]
-# ## Overview
-#
-# This tutorial walks through setting up a Nautilus Parquet data catalog with various Databento schemas.
-
-# %% [markdown]
 # ## Prerequisites
 #
-# - Python 3.12+ installed
-# - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`uv pip install nautilus_trader`)
-# - [databento](https://pypi.org/project/databento/) Python client library installed to make data requests (`uv pip install databento`)
-# - [Databento](https://databento.com) account
+# - Python 3.12+
+# - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`pip install nautilus_trader`)
+# - [databento](https://pypi.org/project/databento/) Python client library (`pip install databento`)
+# - [Databento](https://databento.com) account with API key set as `DATABENTO_API_KEY`
 
 # %% [markdown]
-# ## Requesting data
-
-# %% [markdown]
-# We'll use a Databento historical client for the rest of this tutorial. You can either initialize one by passing your Databento API key to the constructor, or implicitly use the `DATABENTO_API_KEY` environment variable (as shown).
+# ## Request data
+#
+# Initialize a Databento historical client. The client reads your API key from
+# the `DATABENTO_API_KEY` environment variable by default.
 
 # %%
 import databento as db
@@ -219,3 +215,8 @@ trades = catalog.trade_ticks([instrument_id])
 
 # %%
 len(trades)
+
+# %% [markdown]
+# ---
+#
+# **Previous**: [Backtest with order book depth data (Bybit)](backtest_bybit_orderbook) | **Next**: [Mean reversion with proxy FX data](ax_fx_mean_reversion)

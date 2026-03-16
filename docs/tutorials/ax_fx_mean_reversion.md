@@ -1,4 +1,4 @@
-# AX Exchange - FX Perpetual Mean Reversion
+# Mean Reversion with Proxy FX Data (AX Exchange)
 
 This tutorial walks through backtesting a **Bollinger Band mean reversion** strategy on
 **EURUSD-PERP** (EUR/USD perpetual) using [AX Exchange](https://architect.exchange) instrument
@@ -275,5 +275,9 @@ For connection setup and API key configuration, refer to the
 
 - [AX Exchange mean reversion backtest example](https://github.com/nautechsystems/nautilus_trader/tree/develop/examples/backtest/architect_ax_mean_reversion.py)
 - [`BBMeanReversion` strategy source](https://github.com/nautechsystems/nautilus_trader/tree/develop/nautilus_trader/examples/strategies/bb_mean_reversion.py)
-- [AX Exchange gold book imbalance tutorial](ax_gold_book_imbalance.md)
+- [Gold perpetual book imbalance tutorial](ax_gold_book_imbalance.md)
 - [Architect Exchange documentation](https://docs.architect.exchange/)
+
+---
+
+**Previous**: [Data catalog with Databento](databento_data_catalog) | **Next**: [Gold perpetual book imbalance](ax_gold_book_imbalance)

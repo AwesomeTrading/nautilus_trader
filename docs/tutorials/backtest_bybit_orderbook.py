@@ -1,26 +1,18 @@
 # %% [markdown]
-# # Backtest: Bybit OrderBook data
+# # Backtest with Order Book Depth Data (Bybit)
 #
-# Tutorial for [NautilusTrader](https://nautilustrader.io/docs/latest/) a high-performance algorithmic trading platform and event-driven backtester.
+# This tutorial follows the same pattern as
+# [Backtest with order book depth data (Binance)](backtest_binance_orderbook)
+# using Bybit depth data instead.
 #
 # [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/backtest_bybit_orderbook.py).
 
 # %% [markdown]
-# ## Overview
-#
-# This tutorial sets up the data catalog and a `BacktestNode` to backtest an `OrderBookImbalance` strategy on order book data. This example requires order book depth data from Bybit.
-#
-
-# %% [markdown]
 # ## Prerequisites
 #
-# - Python 3.12+ installed
-# - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`uv pip install nautilus_trader`)
-
-# %% [markdown]
-# ## Imports
-#
-# We'll start with all of our imports for the remainder of this tutorial:
+# - Python 3.12+
+# - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`pip install nautilus_trader`)
+# - Bybit order book depth data (bring your own)
 
 # %%
 import shutil
@@ -182,3 +174,8 @@ engine.trader.generate_positions_report()
 
 # %%
 engine.trader.generate_account_report(Venue("BYBIT"))
+
+# %% [markdown]
+# ---
+#
+# **Previous**: [Backtest with order book depth data (Binance)](backtest_binance_orderbook) | **Next**: [Data catalog with Databento](databento_data_catalog)

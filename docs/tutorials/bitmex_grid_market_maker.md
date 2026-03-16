@@ -1,4 +1,4 @@
-# BitMEX - Grid Market Making with Deadman's Switch
+# Grid Market Making with a Deadman's Switch (BitMEX)
 
 This tutorial walks through backtesting a grid market making strategy on BitMEX using free
 historical quote tick data from [Tardis.dev](https://tardis.dev), then running it live
@@ -533,9 +533,13 @@ All endpoints and credential environment variables are resolved automatically.
 ## Further reading
 
 - [BitMEX integration guide](../integrations/bitmex.md): full adapter reference.
-- [dYdX grid market maker tutorial](./dydx_grid_market_maker.md): comparison with
+- [On-chain grid market making with short-term orders](./dydx_grid_market_maker.md): comparison with
   short-term order expiry as an alternative to the deadman's switch.
 - [Tardis downloadable CSV files](https://docs.tardis.dev/downloadable-csv-files): full
   schema documentation for `incremental_book_L2` and other data types.
 - [BitMEX API documentation](https://www.bitmex.com/app/apiOverview): `cancelAllAfter`
   endpoint and order management reference.
+
+---
+
+**Previous**: [Gold perpetual book imbalance](ax_gold_book_imbalance) | **Next**: [On-chain grid market making with short-term orders](dydx_grid_market_maker)
