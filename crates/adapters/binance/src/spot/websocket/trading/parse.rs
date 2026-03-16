@@ -243,8 +243,10 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::common::testing::load_fixture_string;
-    use crate::spot::websocket::trading::user_data::BinanceSpotExecutionReport;
+    use crate::{
+        common::testing::load_fixture_string,
+        spot::websocket::trading::user_data::BinanceSpotExecutionReport,
+    };
 
     const PRICE_PRECISION: u8 = 2;
     const SIZE_PRECISION: u8 = 5;

@@ -568,13 +568,56 @@ impl BinanceSpotWsTradingHandler {
 
             // User data stream events arrive as SBE with their own template IDs
             // (not wrapped in WebSocketResponse template 50).
-            // TODO: Decode SBE templates 603 (ExecutionReportEvent) and
-            //       607 (OutboundAccountPositionEvent) using generated codecs
             match template_id {
+                601 => {
+                    log::debug!("Received SBE BalanceUpdateEvent ({} bytes)", data.len());
+                    match super::decode_sbe::decode_balance_update(data) {
+                        Ok(msg) => {
+                            log::debug!(
+                                "SBE balance update: asset={}, delta={}",
+                                msg.asset,
+                                msg.delta
+                            );
+                            return Ok(BinanceSpotWsTradingMessage::BalanceUpdate(msg));
+                        }
+                        Err(e) => {
+                            log::error!("Failed to decode SBE BalanceUpdateEvent: {e}");
+                            return Ok(BinanceSpotWsTradingMessage::Error(format!(
+                                "SBE BalanceUpdateEvent decode failed: {e}"
+                            )));
+                        }
+                    }
+                }
                 603 => {
                     log::debug!("Received SBE ExecutionReportEvent ({} bytes)", data.len());
+                    match super::decode_sbe::decode_execution_report(data) {
+                        Ok(report) => {
+                            log::debug!(
+                                "SBE execution report: symbol={}, order_id={}, exec={:?}, status={:?}",
+                                report.symbol,
+                                report.order_id,
+                                report.execution_type,
+                                report.order_status
+                            );
+                            return Ok(BinanceSpotWsTradingMessage::ExecutionReport(Box::new(
+                                report,
+                            )));
+                        }
+                        Err(e) => {
+                            log::error!("Failed to decode SBE ExecutionReportEvent: {e}");
+                            return Ok(BinanceSpotWsTradingMessage::Error(format!(
+                                "SBE ExecutionReportEvent decode failed: {e}"
+                            )));
+                        }
+                    }
+                }
+                606 => {
+                    log::debug!(
+                        "Received SBE ListStatusEvent ({} bytes), not yet decoded",
+                        data.len()
+                    );
                     return Ok(BinanceSpotWsTradingMessage::Error(
-                        "SBE ExecutionReportEvent decoding not yet implemented".to_string(),
+                        "SBE ListStatusEvent decoding not yet implemented".to_string(),
                     ));
                 }
                 607 => {
@@ -582,9 +625,18 @@ impl BinanceSpotWsTradingHandler {
                         "Received SBE OutboundAccountPositionEvent ({} bytes)",
                         data.len()
                     );
-                    return Ok(BinanceSpotWsTradingMessage::Error(
-                        "SBE OutboundAccountPositionEvent decoding not yet implemented".to_string(),
-                    ));
+                    match super::decode_sbe::decode_account_position(data) {
+                        Ok(msg) => {
+                            log::debug!("SBE account position: {} balance(s)", msg.balances.len());
+                            return Ok(BinanceSpotWsTradingMessage::AccountPosition(msg));
+                        }
+                        Err(e) => {
+                            log::error!("Failed to decode SBE OutboundAccountPositionEvent: {e}");
+                            return Ok(BinanceSpotWsTradingMessage::Error(format!(
+                                "SBE OutboundAccountPositionEvent decode failed: {e}"
+                            )));
+                        }
+                    }
                 }
                 _ => {} // Fall through to WebSocketResponse parsing
             }
@@ -659,12 +711,15 @@ impl BinanceSpotWsTradingHandler {
                     responses,
                 })
             }
-            BinanceSpotWsTradingRequestMeta::SessionLogon
-            | BinanceSpotWsTradingRequestMeta::SubscribeUserData => {
-                // These responses arrive as JSON text, not SBE binary
-                Ok(BinanceSpotWsTradingMessage::Error(format!(
-                    "Unexpected SBE response for request {request_id}"
-                )))
+            BinanceSpotWsTradingRequestMeta::SessionLogon => {
+                log::info!("Session authenticated (SBE response)");
+                Ok(BinanceSpotWsTradingMessage::Authenticated)
+            }
+            BinanceSpotWsTradingRequestMeta::SubscribeUserData => {
+                log::info!("User data stream subscribed (SBE response)");
+                Ok(BinanceSpotWsTradingMessage::UserDataSubscribed {
+                    subscription_id: request_id,
+                })
             }
         }
     }

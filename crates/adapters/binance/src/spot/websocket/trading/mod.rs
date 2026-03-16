@@ -37,6 +37,7 @@
 //! - Inline user data stream (`session.logon` + `userDataStream.subscribe`)
 
 pub mod client;
+pub mod decode_sbe;
 pub mod error;
 pub mod handler;
 pub mod messages;
