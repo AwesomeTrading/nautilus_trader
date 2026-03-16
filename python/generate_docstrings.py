@@ -178,8 +178,10 @@ def collect_source_docs(src_dir: Path) -> dict[tuple[str | None, str], list[str]
                     r"\s*pub(?:\([^)]*\))?\s+(?:const\s+|async\s+)?fn\s+(\w+)",
                     line,
                 )
+
                 if fn_m:
                     name = fn_m.group(1)
+
                     if not is_banner:
                         docs[(current_impl, name)] = list(doc_block)
                 else:
@@ -187,8 +189,10 @@ def collect_source_docs(src_dir: Path) -> dict[tuple[str | None, str], list[str]
                         r"\s*pub(?:\([^)]*\))?\s+(?:struct|enum)\s+(\w+)",
                         line,
                     )
+
                     if type_m:
                         name = type_m.group(1)
+
                         if not is_banner:
                             docs[(None, name)] = list(doc_block)
 
@@ -322,6 +326,7 @@ def parse_pyo3_items(lines: list[str]) -> list[dict]:  # noqa: C901
         fn_m = re.match(r"\s*(?:pub\s+)?(?:const\s+)?fn\s+(py_\w+)", line)
         if fn_m:
             insert = first_attr_line if first_attr_line is not None else i
+
             if doc_start is not None:
                 insert = doc_start
 

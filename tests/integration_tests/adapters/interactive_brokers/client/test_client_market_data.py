@@ -750,6 +750,7 @@ async def test_process_bar_data_completion_timeout_fix(ib_client):
                         ts_init=ts_init,
                         is_revision=False,
                     )
+
                     if nautilus_bar and not (
                         nautilus_bar.is_single_price() and nautilus_bar.open.as_double() == 0
                     ):

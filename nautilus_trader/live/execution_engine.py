@@ -1035,6 +1035,7 @@ class LiveExecutionEngine(ExecutionEngine):
                 venue_report,
                 instrument_id,
             )
+
             if still_discrepant:
                 reconciliation_report = venue_report or self._create_flat_position_report(
                     instrument_id=instrument_id,
@@ -1223,6 +1224,7 @@ class LiveExecutionEngine(ExecutionEngine):
                 venue_report,
                 instrument_id,
             )
+
             if still_discrepant:
                 cached_qty_now = sum(p.signed_decimal_qty() for p in cached_after)
                 self._position_recon_retries[instrument_id] = retries + 1
@@ -1684,6 +1686,7 @@ class LiveExecutionEngine(ExecutionEngine):
                         if report.filled_qty is not None
                         else Quantity.zero(order.quantity.precision)
                     )
+
                     if order.filled_qty != report_filled:
                         should_reconcile = True
                         reconcile_reason = (
@@ -2267,6 +2270,7 @@ class LiveExecutionEngine(ExecutionEngine):
         client_order_id: ClientOrderId | None = self._cache.client_order_id(
             report.venue_order_id,
         )
+
         if client_order_id is None:
             self._log.warning(
                 f"FillReport received before OrderStatusReport for {report.venue_order_id!r}, "
@@ -2285,6 +2289,7 @@ class LiveExecutionEngine(ExecutionEngine):
                     instrument_id=report.instrument_id,
                     order_side=None,  # Don't filter by side to find any matching order
                 )
+
                 if order is not None:
                     self._log.debug(
                         f"Found order {order.client_order_id} by venue_order_id "
@@ -2577,6 +2582,7 @@ class LiveExecutionEngine(ExecutionEngine):
 
             # Calculate current position average price if available (needed for reconciliation)
             current_avg_px = None
+
             if positions_open:
                 # Calculate weighted average price of current positions
                 total_value = Decimal(0)
@@ -2617,11 +2623,13 @@ class LiveExecutionEngine(ExecutionEngine):
                 diff_quantity=diff_quantity,
                 current_avg_px=current_avg_px,
             )
+
             if diff_report:
                 self._reconcile_order_report(diff_report, trades=[], is_external=False)
         elif quantities_match and report.avg_px_open is not None:
             # Quantities match, but verify avg_px_open also matches
             current_avg_px = None
+
             if positions_open:
                 # Calculate weighted average price of current positions
                 total_value = Decimal(0)
@@ -2682,6 +2690,7 @@ class LiveExecutionEngine(ExecutionEngine):
 
         # Use current position average price for closing
         close_price = None
+
         if current_avg_px is not None:
             close_price = instrument.make_price(current_avg_px)
         else:
@@ -2690,6 +2699,7 @@ class LiveExecutionEngine(ExecutionEngine):
                 close_price = quote.ask_price if close_side == OrderSide.BUY else quote.bid_price
 
         close_result = False
+
         if close_price:
             # Fix 2: Check for matching cached order before creating synthetic order
             close_avg_px = close_price.as_decimal()
@@ -2750,6 +2760,7 @@ class LiveExecutionEngine(ExecutionEngine):
 
         # Use venue's reported average price for the new position
         open_price = None
+
         if report.avg_px_open is not None:
             open_price = instrument.make_price(report.avg_px_open)
         else:
@@ -2781,6 +2792,7 @@ class LiveExecutionEngine(ExecutionEngine):
                 )
 
         open_result = False
+
         if open_price:
             # Fix 2: Check for matching cached order before creating synthetic order
             open_avg_px = open_price.as_decimal()
@@ -2897,6 +2909,7 @@ class LiveExecutionEngine(ExecutionEngine):
             # Only reuse cached orders for netting mode - hedge mode positions are tracked
             # separately and reusing orders could match the wrong position
             matching_diff_order = None
+
             if report.venue_position_id is None:
                 matching_diff_order = self._find_matching_cached_order(
                     instrument_id=report.instrument_id,
@@ -2953,6 +2966,7 @@ class LiveExecutionEngine(ExecutionEngine):
 
             # Only reuse cached orders for netting mode
             matching_diff_order = None
+
             if report.venue_position_id is None:
                 matching_diff_order = self._find_matching_cached_order(
                     instrument_id=report.instrument_id,
@@ -3081,6 +3095,7 @@ class LiveExecutionEngine(ExecutionEngine):
                     instrument_id=report.instrument_id,
                     order_side=report.order_side,
                 )
+
                 if cached_order is not None:
                     client_order_id = cached_order.client_order_id
                     self._log.debug(
@@ -3159,6 +3174,7 @@ class LiveExecutionEngine(ExecutionEngine):
             if order.is_closed:
                 # Use the higher precision for tolerance check
                 precision = max(report.filled_qty.precision, order.filled_qty.precision)
+
                 if is_within_single_unit_tolerance(
                     report.filled_qty.as_decimal(),
                     order.filled_qty.as_decimal(),
@@ -3306,6 +3322,7 @@ class LiveExecutionEngine(ExecutionEngine):
         current_total = sum(
             event.last_qty for event in order.events if isinstance(event, OrderFilled)
         )
+
         if current_total != order.filled_qty:
             self._log.error(
                 f"INCONSISTENCY DETECTED before applying fill: "
@@ -3500,6 +3517,7 @@ class LiveExecutionEngine(ExecutionEngine):
             # All unclaimed reconciliation uses EXTERNAL strategy ID
             # Tags distinguish the source for filtering purposes
             strategy_id = StrategyId("EXTERNAL")
+
             if is_external:
                 # Actual external order found on venue
                 tags = ["VENUE"]

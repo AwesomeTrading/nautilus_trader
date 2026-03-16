@@ -91,6 +91,7 @@ class _OKXAttachedOcoBinding:
 
     def child_client_order_ids(self) -> list[ClientOrderId]:
         child_ids: list[ClientOrderId] = []
+
         if self.sl_client_order_id is not None:
             child_ids.append(self.sl_client_order_id)
         if self.tp_client_order_id is not None and self.tp_client_order_id not in child_ids:
@@ -539,6 +540,7 @@ class OKXExecutionClient(LiveExecutionClient):
                 report = OrderStatusReport.from_pyo3(pyo3_report)
                 self._apply_client_order_alias(report)
                 canonical_report_id = self._canonical_client_order_id(report.client_order_id)
+
                 if (
                     canonical_requested_id
                     and canonical_report_id is not None
@@ -579,6 +581,7 @@ class OKXExecutionClient(LiveExecutionClient):
                 candidate,
                 pyo3_instrument_id,
             )
+
             if candidate_report is not None:
                 return candidate_report
             algo_id = self._algo_order_ids.get(candidate)
@@ -590,6 +593,7 @@ class OKXExecutionClient(LiveExecutionClient):
                 algo_id,
                 pyo3_instrument_id,
             )
+
             if candidate_report is not None:
                 return candidate_report
 
@@ -617,6 +621,7 @@ class OKXExecutionClient(LiveExecutionClient):
                 instrument_id=pyo3_instrument_id,
                 client_order_id=pyo3_client_order_id,
             )
+
             if algo_report is None:
                 return None
 
@@ -1227,6 +1232,7 @@ class OKXExecutionClient(LiveExecutionClient):
         child_orders = [
             order for order in orders if order.parent_order_id == parent_order.client_order_id
         ]
+
         if not child_orders:
             raise ValueError("OKX attached TP/SL requires at least one child protective order")
 
@@ -1363,6 +1369,7 @@ class OKXExecutionClient(LiveExecutionClient):
         parent_candidate = (
             self._cache.order(order.parent_order_id) if order.parent_order_id else None
         )
+
         if parent_candidate is not None:
             add_order(parent_candidate.client_order_id)
             for linked_id in parent_candidate.linked_order_ids or []:
@@ -1610,6 +1617,7 @@ class OKXExecutionClient(LiveExecutionClient):
             order = self._cache.order(client_order_id)
             is_advance = order is not None and order.order_type == OrderType.TRAILING_STOP_MARKET
             pyo3_pair = (nautilus_pyo3.InstrumentId.from_str(inst_id.value), algo_id)
+
             if is_advance:
                 advance_algos.append(pyo3_pair)
                 advance_client_order_ids.append(client_order_id)
@@ -1873,6 +1881,7 @@ class OKXExecutionClient(LiveExecutionClient):
                     message = str(e)
                     alias_text = str(alias_lookup_key) if alias_lookup_key is not None else ""
                     client_text = str(command.client_order_id) if command.client_order_id else ""
+
                     if (
                         "already canceled" not in message
                         and algo_id not in message
@@ -2387,6 +2396,7 @@ class OKXExecutionClient(LiveExecutionClient):
         duplicate_reason = reason.endswith(repr(event.client_order_id)) or (
             canonical_repr and reason.endswith(canonical_repr)
         )
+
         if duplicate_reason:
             return
         order = self._cache.order(event.client_order_id)
@@ -2472,6 +2482,7 @@ class OKXExecutionClient(LiveExecutionClient):
                 and report.venue_order_id is not None
                 and order.venue_order_id != report.venue_order_id
             )
+
             if (
                 (child is None or child == report.client_order_id)
                 and report.venue_order_id
@@ -2668,6 +2679,7 @@ class OKXExecutionClient(LiveExecutionClient):
                 and report.venue_order_id is not None
                 and order.venue_order_id != report.venue_order_id
             )
+
             if venue_id_changed:
                 self._cache.add_venue_order_id(
                     client_order_id=order.client_order_id,

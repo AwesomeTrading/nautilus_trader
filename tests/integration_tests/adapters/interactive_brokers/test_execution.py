@@ -73,6 +73,7 @@ def order_setup(
         instrument=instrument,
         client_order_id=client_order_id,
     )
+
     if status == OrderStatus.SUBMITTED:
         order = TestExecStubs.make_submitted_order(order)
     elif status == OrderStatus.ACCEPTED:

@@ -433,6 +433,7 @@ class InteractiveBrokersDataClient(LiveMarketDataClient):
             use_rth=self._use_regular_trading_hours,
             timeout=self._client._request_timeout_secs,
         )
+
         if not ticks:
             self._log.warning(f"No quote tick data received for {request.instrument_id}")
             return
@@ -471,6 +472,7 @@ class InteractiveBrokersDataClient(LiveMarketDataClient):
             use_rth=self._use_regular_trading_hours,
             timeout=self._client._request_timeout_secs,
         )
+
         if not ticks:
             self._log.warning(f"No trades received for {request.instrument_id}")
             return
@@ -732,6 +734,7 @@ class InteractiveBrokersDataClient(LiveMarketDataClient):
                 segment_duration,
                 timeout=timeout,
             )
+
             if bars:
                 self._log.info(
                     f"{bar_type.instrument_id}: Number of bars retrieved in batch: {len(bars)}",

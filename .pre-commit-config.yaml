@@ -205,12 +205,20 @@ repos:
         files: '\.rs$'
         pass_filenames: false
 
-      - id: check-if-spacing
-        name: check if spacing
-        description: Enforces blank line above if statements
-        entry: bash .pre-commit-hooks/check_if_spacing.sh
+      - id: check-formatting-rs
+        name: check formatting (Rust)
+        description: Enforces formatting conventions in Rust code
+        entry: bash .pre-commit-hooks/check_formatting_rs.sh
         language: system
         files: '\.rs$'
+        pass_filenames: false
+
+      - id: check-formatting-py
+        name: check formatting (Python)
+        description: Enforces formatting conventions in Python code
+        entry: bash .pre-commit-hooks/check_formatting_py.sh
+        language: system
+        files: '\.py$'
         pass_filenames: false
 
       - id: check-docs-conventions

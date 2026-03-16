@@ -1529,6 +1529,7 @@ class TestBacktestPnLAlignmentAcceptance:
         from decimal import Decimal
 
         position_report_sum = Decimal(0)
+
         if not positions_report.empty:
             for pnl_str in positions_report["realized_pnl"]:
                 pnl_money = Money.from_str(pnl_str)
@@ -1879,6 +1880,7 @@ class TestBacktestNodeWithBacktestDataIterator:
         catalog_data_path = (
             PACKAGE_ROOT / "tests" / "test_data" / "databento" / "options_catalog" / "data"
         )
+
         if catalog_data_path.exists():
             shutil.rmtree(catalog_data_path)
 

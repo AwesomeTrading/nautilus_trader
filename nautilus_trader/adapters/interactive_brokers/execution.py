@@ -671,6 +671,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
 
         # Create client order ID from order reference if available
         client_order_id = None
+
         if execution.orderRef:
             # Remove the order ID suffix that IB adds
             order_ref = execution.orderRef.rsplit(":", 1)[0]
@@ -815,6 +816,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
         self.reconciliation_active = True
 
         since: pd.Timestamp | None = None
+
         if lookback_mins is not None:
             since = self._clock.utc_now() - timedelta(minutes=lookback_mins)
 
@@ -1561,6 +1563,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
             return
 
         nautilus_order = None
+
         if order_ref:
             nautilus_order = self._cache.order(ClientOrderId(order_ref))
 
@@ -1665,6 +1668,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
 
         # Include avg_px in info if we have it stored
         info = {}
+
         if nautilus_order.client_order_id in self._order_avg_prices:
             info["avg_px"] = self._order_avg_prices[nautilus_order.client_order_id]
 
@@ -1825,6 +1829,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
 
             # Include avg_px in info if we have it stored
             info = {}
+
             if nautilus_order.client_order_id in self._order_avg_prices:
                 info["avg_px"] = self._order_avg_prices[nautilus_order.client_order_id]
 
@@ -1911,6 +1916,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
 
             # Include avg_px in info if we have it stored for the parent order
             info = {}
+
             if nautilus_order.client_order_id in self._order_avg_prices:
                 info["avg_px"] = self._order_avg_prices[nautilus_order.client_order_id]
 

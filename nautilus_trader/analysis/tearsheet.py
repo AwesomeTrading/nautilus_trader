@@ -49,6 +49,7 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError:
     PLOTLY_AVAILABLE = False
+
     if not TYPE_CHECKING:
         # Define dummy types for when plotly is not installed
         go = None  # type: ignore
@@ -343,10 +344,12 @@ def create_tearsheet(  # noqa: C901
     total_positions = f"{len(positions):_}"
 
     elapsed_time = "N/A"
+
     if engine.run_finished and engine.run_started:
         elapsed_time = str(engine.run_finished - engine.run_started)
 
     backtest_range = "N/A"
+
     if engine.backtest_start and engine.backtest_end:
         backtest_range = str(engine.backtest_end - engine.backtest_start)
 
@@ -366,6 +369,7 @@ def create_tearsheet(  # noqa: C901
 
     # Determine which currencies to display
     all_currencies = analyzer.currencies
+
     if currency is not None:
         # User specified a currency, only show that one
         currencies = [currency] if currency in all_currencies else []
@@ -375,6 +379,7 @@ def create_tearsheet(  # noqa: C901
 
     # Extract account information per currency
     account_info = {}
+
     if currencies:
         for curr in currencies:
             starting = analyzer._account_balances_starting.get(curr)
@@ -385,6 +390,7 @@ def create_tearsheet(  # noqa: C901
 
     # Get PnL stats for selected currencies
     all_stats_pnls = {}
+
     if currencies:
         for curr in currencies:
             curr_stats = analyzer.get_performance_stats_pnls(currency=curr)
@@ -1435,6 +1441,7 @@ def _render_run_info(
         for key, value in section_data.items():
             metrics.append(key)
             values.append(str(value))
+
             if len(fill_colors) % 2 == 0:
                 fill_colors.append(theme_config["colors"]["table_row_odd"])
             else:
