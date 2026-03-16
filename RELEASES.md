@@ -11,6 +11,7 @@ Released on TBD (UTC).
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
+- Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
 
 ### Breaking Changes
 - Renamed `OrderEvent.kind()` to `type_name()` in Rust
@@ -18,6 +19,7 @@ Released on TBD (UTC).
 
 ### Security
 - Hardened Docker Compose to bind all ports to localhost and add `no-new-privileges` to all services
+- Hardened CI egress policy to block by default and fall back to `audit` mode for fork pull requests
 - Upgraded all `nautilustrader.io` URLs from HTTP to HTTPS (#3686), thanks @04cb
 
 ### Fixes
@@ -27,8 +29,11 @@ Released on TBD (UTC).
 - Fixed spurious "Timer replaced" warnings for expired timers in `LiveClock` and `TestClock` (#3690), thanks @HaakonFlaaronning
 - Fixed time bar historical event deferral (#3698), thanks @faysou
 - Fixed `SimulatedExchange` account balance adjustment mutation (#3704), thanks for reporting @thaning0
+- Fixed analyzer and tearsheet returns to prefer portfolio-level daily returns when they can be derived from account balances
 - Fixed backtest analyzer to include position snapshots in Rust (#3710), thanks @necofx
 - Fixed Sandbox reconciliation missing `account_id` (#3705), thanks for reporting @eliotOrderson
+- Fixed Rust `Portfolio` account-scoped `net_exposure`, `net_exposures`, and balance updates in multi-account mode
+- Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
 - Fixed Betfair order modify `Quantity` serialization for partial cancel size reduction
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
 - Fixed Binance SBE price/quantity precision derivation (#3670), thanks @husariancom
