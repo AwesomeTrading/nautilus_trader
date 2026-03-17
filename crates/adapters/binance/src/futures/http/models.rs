@@ -1345,6 +1345,51 @@ mod tests {
     }
 
     #[rstest]
+    fn test_account_info_to_account_state_zero_margins() {
+        let json = load_fixture_string("futures/http_json/account_info_v2.json");
+        let account: BinanceFuturesAccountInfo =
+            serde_json::from_str(&json).expect("Failed to parse account info");
+
+        let account_id = AccountId::from("BINANCE-001");
+        let ts_init = UnixNanos::from(1_000_000_000u64);
+        let state = account.to_account_state(account_id, ts_init).unwrap();
+
+        assert_eq!(state.account_id, account_id);
+        assert_eq!(state.account_type, AccountType::Margin);
+        assert!(!state.balances.is_empty());
+        assert_eq!(state.margins.len(), 0);
+    }
+
+    #[rstest]
+    fn test_account_info_to_account_state_with_margins() {
+        let json = r#"{
+            "totalInitialMargin": "500.25000000",
+            "totalMaintMargin": "250.75000000",
+            "totalWalletBalance": "10000.00000000",
+            "assets": [{
+                "asset": "USDT",
+                "walletBalance": "10000.00000000",
+                "availableBalance": "9500.00000000",
+                "updateTime": 1617939110373
+            }],
+            "positions": []
+        }"#;
+        let account: BinanceFuturesAccountInfo =
+            serde_json::from_str(json).expect("Failed to parse account info");
+
+        let account_id = AccountId::from("BINANCE-001");
+        let ts_init = UnixNanos::from(1_000_000_000u64);
+        let state = account.to_account_state(account_id, ts_init).unwrap();
+
+        assert_eq!(state.margins.len(), 1);
+        let margin = &state.margins[0];
+        assert_eq!(margin.instrument_id.symbol.as_str(), "ACCOUNT");
+        assert_eq!(margin.instrument_id.venue.as_str(), "BINANCE");
+        assert_eq!(margin.initial.as_f64(), 500.25);
+        assert_eq!(margin.maintenance.as_f64(), 250.75);
+    }
+
+    #[rstest]
     fn test_parse_position_risk() {
         let json = load_fixture_string("futures/http_json/position_risk.json");
         let positions: Vec<BinancePositionRisk> =

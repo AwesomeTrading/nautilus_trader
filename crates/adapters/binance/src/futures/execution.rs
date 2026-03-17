@@ -53,7 +53,9 @@ use nautilus_model::{
         AccountState, OrderAccepted, OrderCancelRejected, OrderCanceled, OrderEventAny,
         OrderFilled, OrderModifyRejected, OrderRejected, OrderUpdated,
     },
-    identifiers::{AccountId, ClientId, ClientOrderId, InstrumentId, TradeId, Venue, VenueOrderId},
+    identifiers::{
+        AccountId, ClientId, ClientOrderId, InstrumentId, Symbol, TradeId, Venue, VenueOrderId,
+    },
     instruments::Instrument,
     orders::Order,
     reports::{ExecutionMassStatus, FillReport, OrderStatusReport, PositionStatusReport},
@@ -308,9 +310,32 @@ impl BinanceFuturesExecutionClient {
             })
             .collect();
 
-        // Margin balances in futures are position-specific, not account-level,
-        // so we don't create MarginBalance entries here as they require instrument_id.
-        let margins: Vec<MarginBalance> = Vec::new();
+        let mut margins: Vec<MarginBalance> = Vec::new();
+
+        let initial_margin_dec = account_info
+            .total_initial_margin
+            .as_ref()
+            .and_then(|s| Decimal::from_str_exact(s).ok());
+        let maint_margin_dec = account_info
+            .total_maint_margin
+            .as_ref()
+            .and_then(|s| Decimal::from_str_exact(s).ok());
+
+        if let (Some(initial_dec), Some(maint_dec)) = (initial_margin_dec, maint_margin_dec)
+            && (!initial_dec.is_zero() || !maint_dec.is_zero())
+        {
+            let margin_currency = Currency::USDT();
+            let margin_instrument_id = InstrumentId::new(Symbol::new("ACCOUNT"), *BINANCE_VENUE);
+            let initial_margin = Money::from_decimal(initial_dec, margin_currency)
+                .unwrap_or_else(|_| Money::zero(margin_currency));
+            let maintenance_margin = Money::from_decimal(maint_dec, margin_currency)
+                .unwrap_or_else(|_| Money::zero(margin_currency));
+            margins.push(MarginBalance::new(
+                initial_margin,
+                maintenance_margin,
+                margin_instrument_id,
+            ));
+        }
 
         AccountState::new(
             self.core.account_id,

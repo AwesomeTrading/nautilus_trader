@@ -451,7 +451,7 @@ pub enum KrakenAssetClass {
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenFuturesOrderType {
-    #[serde(rename = "lmt")]
+    #[serde(rename = "lmt", alias = "limit")]
     #[strum(serialize = "lmt")]
     Limit,
     #[serde(rename = "ioc")]
@@ -460,7 +460,7 @@ pub enum KrakenFuturesOrderType {
     #[serde(rename = "post")]
     #[strum(serialize = "post")]
     Post,
-    #[serde(rename = "mkt")]
+    #[serde(rename = "mkt", alias = "market")]
     #[strum(serialize = "mkt")]
     Market,
     #[serde(rename = "stp")]
