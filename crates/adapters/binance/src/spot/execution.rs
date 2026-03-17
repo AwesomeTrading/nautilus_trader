@@ -37,6 +37,7 @@ use nautilus_common::{
 };
 use nautilus_core::{
     MUTEX_POISONED, UUID4, UnixNanos,
+    datetime::mins_to_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
@@ -899,7 +900,7 @@ impl ExecutionClient for BinanceSpotExecutionClient {
         let ts_now = self.clock.get_time_ns();
 
         let start = lookback_mins.map(|mins| {
-            let lookback_ns = mins * 60 * 1_000_000_000;
+            let lookback_ns = mins_to_nanos(mins);
             UnixNanos::from(ts_now.as_u64().saturating_sub(lookback_ns))
         });
 
@@ -1712,7 +1713,7 @@ fn dispatch_tracked_execution_report(
     ts_init: UnixNanos,
 ) {
     let venue_order_id = VenueOrderId::new(report.order_id.to_string());
-    let ts_event = UnixNanos::from((report.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(report.event_time as u64);
 
     match report.execution_type {
         BinanceSpotExecutionType::New => {

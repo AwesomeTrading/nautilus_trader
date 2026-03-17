@@ -52,7 +52,7 @@ pub fn parse_spot_exec_report_to_order_status(
         BINANCE_NAUTILUS_SPOT_BROKER_ID,
     ));
     let venue_order_id = VenueOrderId::new(msg.order_id.to_string());
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let order_side = match msg.side {
         BinanceSide::Buy => OrderSide::Buy,
@@ -125,7 +125,7 @@ pub fn parse_spot_exec_report_to_fill(
     ));
     let venue_order_id = VenueOrderId::new(msg.order_id.to_string());
     let trade_id = TradeId::new(msg.trade_id.to_string());
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let order_side = match msg.side {
         BinanceSide::Buy => OrderSide::Buy,
@@ -172,7 +172,7 @@ pub fn parse_spot_account_position(
     account_id: AccountId,
     ts_init: UnixNanos,
 ) -> AccountState {
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let balances: Vec<AccountBalance> = msg
         .balances

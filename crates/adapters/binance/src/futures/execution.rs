@@ -40,6 +40,7 @@ use nautilus_common::{
 };
 use nautilus_core::{
     MUTEX_POISONED, UUID4, UnixNanos,
+    datetime::{NANOSECONDS_IN_MILLISECOND, mins_to_nanos},
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
@@ -1287,8 +1288,12 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             }
         } else if let Some(instrument_id) = cmd.instrument_id {
             let symbol = instrument_id.symbol.to_string();
-            let start_time = cmd.start.map(|t| t.as_i64() / 1_000_000); // ns to ms
-            let end_time = cmd.end.map(|t| t.as_i64() / 1_000_000);
+            let start_time = cmd
+                .start
+                .map(|t| t.as_i64() / NANOSECONDS_IN_MILLISECOND as i64);
+            let end_time = cmd
+                .end
+                .map(|t| t.as_i64() / NANOSECONDS_IN_MILLISECOND as i64);
 
             let mut builder = BinanceAllOrdersParamsBuilder::default();
             builder.symbol(symbol);
@@ -1330,8 +1335,12 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
         };
 
         let symbol = instrument_id.symbol.to_string();
-        let start_time = cmd.start.map(|t| t.as_i64() / 1_000_000);
-        let end_time = cmd.end.map(|t| t.as_i64() / 1_000_000);
+        let start_time = cmd
+            .start
+            .map(|t| t.as_i64() / NANOSECONDS_IN_MILLISECOND as i64);
+        let end_time = cmd
+            .end
+            .map(|t| t.as_i64() / NANOSECONDS_IN_MILLISECOND as i64);
 
         let mut builder = BinanceUserTradesParamsBuilder::default();
         builder.symbol(symbol);
@@ -1414,7 +1423,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
         let ts_now = self.clock.get_time_ns();
 
         let start = lookback_mins.map(|mins| {
-            let lookback_ns = mins * 60 * 1_000_000_000;
+            let lookback_ns = mins_to_nanos(mins);
             UnixNanos::from(ts_now.as_u64().saturating_sub(lookback_ns))
         });
 
@@ -2099,7 +2108,7 @@ fn dispatch_order_update(
     let order = &msg.order;
     let symbol_ustr = ustr::Ustr::from(order.symbol.as_str());
     let ts_init = clock.get_time_ns();
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let cache = http_client.instruments_cache();
     let cached_instrument = cache.get(&symbol_ustr);
@@ -2349,7 +2358,7 @@ fn dispatch_algo_update(
 
     let algo_data = &msg.algo_order;
     let ts_init = clock.get_time_ns();
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
     let client_order_id = decode_algo_client_id(algo_data);
 
     let symbol_ustr = ustr::Ustr::from(algo_data.symbol.as_str());

@@ -70,7 +70,7 @@ pub fn parse_agg_trade(
         AggressorSide::Buyer
     };
 
-    let ts_event = UnixNanos::from(msg.trade_time as u64 * 1_000_000); // ms to ns
+    let ts_event = UnixNanos::from_millis(msg.trade_time as u64);
     let trade_id = TradeId::new(msg.agg_trade_id.to_string());
 
     Ok(TradeTick::new(
@@ -113,7 +113,7 @@ pub fn parse_trade(
         AggressorSide::Buyer
     };
 
-    let ts_event = UnixNanos::from(msg.trade_time as u64 * 1_000_000); // ms to ns
+    let ts_event = UnixNanos::from_millis(msg.trade_time as u64);
     let trade_id = TradeId::new(msg.trade_id.to_string());
 
     Ok(TradeTick::new(
@@ -158,7 +158,7 @@ pub fn parse_book_ticker(
         .parse::<f64>()
         .map_err(|e| BinanceWsError::ParseError(e.to_string()))?;
 
-    let ts_event = UnixNanos::from(msg.transaction_time as u64 * 1_000_000); // ms to ns
+    let ts_event = UnixNanos::from_millis(msg.transaction_time as u64);
 
     Ok(QuoteTick::new(
         instrument_id,
@@ -185,7 +185,7 @@ pub fn parse_depth_update(
     let price_precision = instrument.price_precision();
     let size_precision = instrument.size_precision();
 
-    let ts_event = UnixNanos::from(msg.transaction_time as u64 * 1_000_000); // ms to ns
+    let ts_event = UnixNanos::from_millis(msg.transaction_time as u64);
 
     let mut deltas = Vec::with_capacity(msg.bids.len() + msg.asks.len());
 
@@ -290,9 +290,9 @@ pub fn parse_mark_price(
         .parse::<f64>()
         .map_err(|e| BinanceWsError::ParseError(e.to_string()))?;
 
-    let ts_event = UnixNanos::from(msg.event_time as u64 * 1_000_000); // ms to ns
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
     let next_funding_ns = if msg.next_funding_time > 0 {
-        Some(UnixNanos::from(msg.next_funding_time as u64 * 1_000_000))
+        Some(UnixNanos::from_millis(msg.next_funding_time as u64))
     } else {
         None
     };
@@ -428,7 +428,7 @@ pub fn parse_kline(
         .map_err(|e| BinanceWsError::ParseError(e.to_string()))?;
 
     // Use the kline close time as the event timestamp
-    let ts_event = UnixNanos::from(msg.kline.close_time as u64 * 1_000_000); // ms to ns
+    let ts_event = UnixNanos::from_millis(msg.kline.close_time as u64);
 
     let bar = Bar::new(
         bar_type,

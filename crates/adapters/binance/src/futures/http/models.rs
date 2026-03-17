@@ -800,7 +800,7 @@ impl BinanceFuturesAccountInfo {
 
         let ts_event = self
             .update_time
-            .map_or(ts_init, |t| UnixNanos::from((t * 1_000_000) as u64));
+            .map_or(ts_init, |t| UnixNanos::from_millis(t as u64));
 
         Ok(AccountState::new(
             account_id,
@@ -939,7 +939,7 @@ impl BinanceFuturesOrder {
     ) -> anyhow::Result<OrderStatusReport> {
         let ts_event = self
             .update_time
-            .map_or(ts_init, |t| UnixNanos::from((t * 1_000_000) as u64));
+            .map_or(ts_init, |t| UnixNanos::from_millis(t as u64));
 
         let client_order_id = ClientOrderId::new(decode_broker_id(
             &self.client_order_id,
@@ -1049,7 +1049,7 @@ impl BinanceUserTrade {
         size_precision: u8,
         ts_init: UnixNanos,
     ) -> anyhow::Result<FillReport> {
-        let ts_event = UnixNanos::from((self.time * 1_000_000) as u64);
+        let ts_event = UnixNanos::from_millis(self.time as u64);
 
         let venue_order_id = VenueOrderId::new(self.order_id.to_string());
         let trade_id = TradeId::new(self.id.to_string());
@@ -1226,7 +1226,7 @@ impl BinanceFuturesAlgoOrder {
         let ts_event = self
             .update_time
             .or(self.create_time)
-            .map_or(ts_init, |t| UnixNanos::from((t * 1_000_000) as u64));
+            .map_or(ts_init, |t| UnixNanos::from_millis(t as u64));
 
         let client_order_id = ClientOrderId::new(decode_broker_id(
             &self.client_algo_id,

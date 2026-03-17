@@ -57,7 +57,7 @@ pub fn parse_futures_order_update_to_order_status(
     ts_init: UnixNanos,
 ) -> anyhow::Result<OrderStatusReport> {
     let order = &msg.order;
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let client_order_id = ClientOrderId::new(decode_broker_id(
         &order.client_order_id,
@@ -144,7 +144,7 @@ pub fn parse_futures_order_update_to_fill(
     ts_init: UnixNanos,
 ) -> anyhow::Result<FillReport> {
     let order = &msg.order;
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let client_order_id = ClientOrderId::new(decode_broker_id(
         &order.client_order_id,
@@ -205,7 +205,7 @@ pub fn parse_futures_algo_update_to_order_status(
     account_id: AccountId,
     ts_init: UnixNanos,
 ) -> Option<OrderStatusReport> {
-    let ts_event = UnixNanos::from((event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(event_time as u64);
 
     let client_order_id = ClientOrderId::new(decode_broker_id(
         &algo_data.client_algo_id,
@@ -259,7 +259,7 @@ pub fn parse_futures_account_update(
     account_id: AccountId,
     ts_init: UnixNanos,
 ) -> Option<AccountState> {
-    let ts_event = UnixNanos::from((msg.event_time * 1_000_000) as u64);
+    let ts_event = UnixNanos::from_millis(msg.event_time as u64);
 
     let balances: Vec<AccountBalance> = msg
         .account

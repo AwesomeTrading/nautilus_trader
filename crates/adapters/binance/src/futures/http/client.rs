@@ -19,7 +19,9 @@ use std::{collections::HashMap, num::NonZeroU32, sync::Arc, time::Duration};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use nautilus_core::{consts::NAUTILUS_USER_AGENT, nanos::UnixNanos, time::AtomicTime};
+use nautilus_core::{
+    consts::NAUTILUS_USER_AGENT, datetime::SECONDS_IN_DAY, nanos::UnixNanos, time::AtomicTime,
+};
 use nautilus_model::{
     data::{Bar, BarType, TradeTick},
     enums::{AggregationSource, AggressorSide, BarAggregation, OrderSide, OrderType, TimeInForce},
@@ -524,7 +526,8 @@ impl BinanceRawFuturesHttpClient {
             BinanceRateLimitInterval::Second => Quota::per_second(burst),
             BinanceRateLimitInterval::Minute => Some(Quota::per_minute(burst)),
             BinanceRateLimitInterval::Day => {
-                Quota::with_period(Duration::from_secs(86_400)).map(|q| q.allow_burst(burst))
+                Quota::with_period(Duration::from_secs(SECONDS_IN_DAY))
+                    .map(|q| q.allow_burst(burst))
             }
         }
     }
@@ -2142,7 +2145,7 @@ impl BinanceFuturesHttpClient {
         for trade in trades {
             let price: f64 = trade.price.parse().unwrap_or(0.0);
             let size: f64 = trade.qty.parse().unwrap_or(0.0);
-            let ts_event = UnixNanos::from((trade.time * 1_000_000) as u64);
+            let ts_event = UnixNanos::from_millis(trade.time as u64);
 
             let aggressor_side = if trade.is_buyer_maker {
                 AggressorSide::Seller
@@ -2221,7 +2224,7 @@ impl BinanceFuturesHttpClient {
             let volume: f64 = kline.volume.parse().unwrap_or(0.0);
 
             // close_time is end of interval, add 1ms for next bar's open
-            let ts_event = UnixNanos::from((kline.close_time * 1_000_000) as u64);
+            let ts_event = UnixNanos::from_millis(kline.close_time as u64);
 
             let bar = Bar::new(
                 bar_type,

@@ -35,7 +35,9 @@ use std::{collections::HashMap, fmt::Debug, num::NonZeroU32, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use nautilus_core::{consts::NAUTILUS_USER_AGENT, nanos::UnixNanos, time::AtomicTime};
+use nautilus_core::{
+    consts::NAUTILUS_USER_AGENT, datetime::SECONDS_IN_DAY, nanos::UnixNanos, time::AtomicTime,
+};
 use nautilus_model::{
     data::{Bar, BarType, TradeTick},
     enums::{AggregationSource, BarAggregation, OrderSide, OrderType, TimeInForce},
@@ -461,7 +463,7 @@ impl BinanceRawSpotHttpClient {
             BinanceRateLimitInterval::Second => Quota::per_second(burst),
             BinanceRateLimitInterval::Minute => Some(Quota::per_minute(burst)),
             BinanceRateLimitInterval::Day => {
-                Quota::with_period(std::time::Duration::from_secs(86_400))
+                Quota::with_period(std::time::Duration::from_secs(SECONDS_IN_DAY))
                     .map(|q| q.allow_burst(burst))
             }
         }
