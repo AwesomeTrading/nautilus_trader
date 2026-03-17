@@ -176,15 +176,32 @@ runs:
       run: |
         echo "PRE_COMMIT_VERSION=$(bash scripts/pre-commit-version.sh)" >> $GITHUB_ENV
 
+    - name: Get cache fingerprints
+      shell: bash
+      env:
+        CACHE_SCOPE: ${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}
+      run: |
+        echo "CACHE_SCOPE=$CACHE_SCOPE" >> "$GITHUB_ENV"
+        python - <<'PY' >> "$GITHUB_ENV"
+        import hashlib
+        from pathlib import Path
+
+        print(
+            f"PRE_COMMIT_CONFIG_HASH={hashlib.sha256(Path('.pre-commit-config.yaml').read_bytes()).hexdigest()}"
+        )
+        print(f"UV_LOCK_HASH={hashlib.sha256(Path('uv.lock').read_bytes()).hexdigest()}")
+        PY
+
     - name: Cache Python site-packages
       id: cached-site-packages
       # https://github.com/actions/cache
       uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ~/.local/lib/python${{ inputs.python-version }}/site-packages
-        key: ${{ runner.os }}-${{ inputs.python-version }}-site-packages
+        key: ${{ env.CACHE_SCOPE }}-site-packages-${{ env.PRE_COMMIT_VERSION }}-${{ env.PRE_COMMIT_CONFIG_HASH }}
         restore-keys: |
-          ${{ runner.os }}-site-packages-
+          ${{ env.CACHE_SCOPE }}-site-packages-${{ env.PRE_COMMIT_VERSION }}-
+          ${{ env.CACHE_SCOPE }}-site-packages-
 
     - name: Install pre-commit
       shell: bash
@@ -217,7 +234,9 @@ runs:
       uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ${{ env.UV_CACHE_DIR }}
-        key: ${{ runner.os }}-${{ env.PYTHON_VERSION }}-uv-${{ hashFiles('**/uv.lock') }}
+        key: ${{ env.CACHE_SCOPE }}-uv-${{ env.UV_VERSION }}-${{ env.UV_LOCK_HASH }}
+        restore-keys: |
+          ${{ env.CACHE_SCOPE }}-uv-${{ env.UV_VERSION }}-
 
     # > --------------------------------------------------
     # > pre-commit
@@ -230,4 +249,6 @@ runs:
       uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ~/.cache/pre-commit
-        key: ${{ runner.os }}-${{ env.PYTHON_VERSION }}-pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+        key: ${{ env.CACHE_SCOPE }}-pre-commit-${{ env.PRE_COMMIT_VERSION }}-${{ env.PRE_COMMIT_CONFIG_HASH }}
+        restore-keys: |
+          ${{ env.CACHE_SCOPE }}-pre-commit-${{ env.PRE_COMMIT_VERSION }}-
