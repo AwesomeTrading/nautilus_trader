@@ -51,6 +51,7 @@ arrow = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+flate2 = { workspace = true }
 log = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
@@ -84,4 +85,9 @@ doc = false
 [[example]]
 name = "betfair-exec-tester"
 path = "examples/node_exec_tester.rs"
+doc = false
+
+[[example]]
+name = "betfair-load-file"
+path = "examples/load_betfair_file.rs"
 doc = false

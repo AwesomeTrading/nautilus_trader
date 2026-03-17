@@ -4931,6 +4931,7 @@ dependencies = [
  "bytes",
  "chrono",
  "dotenvy",
+ "flate2",
  "log",
  "nautilus-common",
  "nautilus-core",
