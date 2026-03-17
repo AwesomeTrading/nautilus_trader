@@ -716,19 +716,17 @@ async fn test_submit_order_generates_submitted_and_accepted_events() {
     );
 
     client.submit_order(&submit_cmd).unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let mut events = Vec::new();
-    while let Ok(event) = rx.try_recv() {
-        events.push(event);
-    }
-
-    assert!(!events.is_empty(), "Expected at least one event");
-
-    let has_accepted = events
-        .iter()
-        .any(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Accepted(_))));
-    assert!(has_accepted, "Expected OrderAccepted event");
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Accepted(_))));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
 }
 
 #[rstest]
@@ -757,22 +755,17 @@ async fn test_cancel_all_orders_generates_canceled_events() {
     );
 
     client.cancel_all_orders(&cancel_all_cmd).unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let mut events = Vec::new();
-    while let Ok(event) = rx.try_recv() {
-        events.push(event);
-    }
-
-    let canceled_count = events
-        .iter()
-        .filter(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Canceled(_))))
-        .count();
-
-    assert!(
-        canceled_count >= 1,
-        "Expected at least one OrderCanceled event, was {canceled_count}"
-    );
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Canceled(_))));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
 }
 
 // Note: This test is ignored because query_account uses block_on internally
@@ -800,16 +793,15 @@ async fn test_query_account_generates_account_state_event() {
     );
 
     client.query_account(&query_cmd).unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
-    let mut events = Vec::new();
-    while let Ok(event) = rx.try_recv() {
-        events.push(event);
-    }
-
-    let has_account_state = events
-        .iter()
-        .any(|e| matches!(e, ExecutionEvent::Account(_)));
-
-    assert!(has_account_state, "Expected AccountState event");
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Account(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
 }
