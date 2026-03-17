@@ -5,7 +5,7 @@
 # `BacktestNode`. This example uses Binance order book snapshots, but the same
 # approach works with depth data from any supported venue.
 #
-# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/backtest_binance_orderbook.py).
+# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/backtest_orderbook_binance.py).
 
 # %% [markdown]
 # ## Prerequisites
@@ -15,6 +15,7 @@
 # - Binance order book depth data (bring your own)
 
 # %%
+import os
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -39,11 +40,11 @@ from nautilus_trader.test_kit.providers import TestInstrumentProvider
 # ## Loading data
 
 # %%
-# Path to your data directory, using user /Downloads as an example
-DATA_DIR = "~/Downloads"
+# Set NAUTILUS_DATA_DIR to the parent directory if your data lives elsewhere.
+DATA_DIR = Path(os.environ.get("NAUTILUS_DATA_DIR", "~/Downloads/Data")).expanduser() / "Binance"
 
 # %%
-data_path = Path(DATA_DIR).expanduser() / "Data" / "Binance"
+data_path = DATA_DIR
 raw_files = [f for f in data_path.iterdir() if f.is_file()]
 assert raw_files, f"Unable to find any data files in directory {data_path}"
 raw_files
@@ -113,7 +114,7 @@ book_type = "L2_MBP"  # Data book type must match venue book type
 
 data_configs = [
     BacktestDataConfig(
-        catalog_path=CATALOG_PATH,
+        catalog_path=str(CATALOG_PATH),
         data_cls=OrderBookDelta,
         instrument_id=instrument.id,
         # start_time=start,  # Run across all data
@@ -181,8 +182,3 @@ engine.trader.generate_positions_report()
 
 # %%
 engine.trader.generate_account_report(Venue("BINANCE"))
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Backtest with FX bar data](backtest_fx_bars) | **Next**: [Backtest with order book depth data (Bybit)](backtest_bybit_orderbook)

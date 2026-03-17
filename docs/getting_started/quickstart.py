@@ -217,8 +217,3 @@ engine.trader.generate_order_fills_report()
 
 # %%
 engine.dispose()
-
-# %% [markdown]
-# ---
-#
-# **Next**: [Backtest (low-level API)](backtest_low_level)

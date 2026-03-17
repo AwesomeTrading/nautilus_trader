@@ -304,7 +304,3 @@ For connection setup and API key configuration, refer to the
 - [`OrderBookImbalance` strategy source](https://github.com/nautechsystems/nautilus_trader/tree/develop/nautilus_trader/examples/strategies/orderbook_imbalance.py)
 - [Architect Exchange documentation](https://docs.architect.exchange/)
 - [Databento: HFT signals with sklearn](https://databento.com/blog/hft-sklearn-python)
-
----
-
-**Previous**: [Mean reversion with proxy FX data](ax_fx_mean_reversion) | **Next**: [Grid market making with a deadman's switch](bitmex_grid_market_maker)

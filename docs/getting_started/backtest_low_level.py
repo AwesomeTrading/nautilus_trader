@@ -184,8 +184,3 @@ engine.reset()
 # %%
 # Once done, good practice to dispose of the object if the script continues
 engine.dispose()
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Quickstart](quickstart) | **Next**: [Backtest (high-level API)](backtest_high_level)

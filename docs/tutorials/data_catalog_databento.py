@@ -4,7 +4,7 @@
 # Set up a Nautilus Parquet data catalog with market data from Databento. The
 # catalog provides efficient storage and querying for backtests and research.
 #
-# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/databento_data_catalog.py).
+# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/data_catalog_databento.py).
 
 # %% [markdown]
 # ## Prerequisites
@@ -215,8 +215,3 @@ trades = catalog.trade_ticks([instrument_id])
 
 # %%
 len(trades)
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Backtest with order book depth data (Bybit)](backtest_bybit_orderbook) | **Next**: [Mean reversion with proxy FX data](ax_fx_mean_reversion)

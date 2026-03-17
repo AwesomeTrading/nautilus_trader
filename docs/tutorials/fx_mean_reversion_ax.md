@@ -275,9 +275,5 @@ For connection setup and API key configuration, refer to the
 
 - [AX Exchange mean reversion backtest example](https://github.com/nautechsystems/nautilus_trader/tree/develop/examples/backtest/architect_ax_mean_reversion.py)
 - [`BBMeanReversion` strategy source](https://github.com/nautechsystems/nautilus_trader/tree/develop/nautilus_trader/examples/strategies/bb_mean_reversion.py)
-- [Gold perpetual book imbalance tutorial](ax_gold_book_imbalance.md)
+- [Gold perpetual book imbalance tutorial](gold_book_imbalance_ax.md)
 - [Architect Exchange documentation](https://docs.architect.exchange/)
-
----
-
-**Previous**: [Data catalog with Databento](databento_data_catalog) | **Next**: [Gold perpetual book imbalance](ax_gold_book_imbalance)

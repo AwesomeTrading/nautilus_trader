@@ -8,6 +8,7 @@
 # [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/loading_external_data.py).
 
 # %%
+import os
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -31,16 +32,17 @@ from nautilus_trader.test_kit.providers import TestInstrumentProvider
 # %% [markdown]
 # ## Load and wrangle the data
 #
-# Point `DATA_DIR` at a folder containing CSV tick files (e.g. from
-# [histdata.com](https://www.histdata.com/)). `CSVTickDataLoader` reads the raw
-# CSV into a DataFrame, and `QuoteTickDataWrangler` converts it into Nautilus
-# `QuoteTick` objects.
+# Place CSV tick files (e.g. from [histdata.com](https://www.histdata.com/))
+# into `~/Downloads/Data/HISTDATA/`. Set the `NAUTILUS_DATA_DIR` environment
+# variable to the parent directory if your data lives elsewhere.
+# `CSVTickDataLoader` reads the raw CSV into a DataFrame, and
+# `QuoteTickDataWrangler` converts it into Nautilus `QuoteTick` objects.
 
 # %%
-DATA_DIR = "~/Downloads/Data/"
+DATA_DIR = Path(os.environ.get("NAUTILUS_DATA_DIR", "~/Downloads/Data")).expanduser() / "HISTDATA"
 
 # %%
-path = Path(DATA_DIR).expanduser() / "HISTDATA"
+path = DATA_DIR
 raw_files = [
     f for f in path.iterdir() if f.is_file() and (f.suffix == ".csv" or f.name.endswith(".csv.gz"))
 ]
@@ -50,6 +52,7 @@ raw_files
 # %%
 # Load the first data file into a pandas DataFrame
 df = CSVTickDataLoader.load(raw_files[0], index_col=0, datetime_format="%Y%m%d %H%M%S%f")
+df = df.iloc[:, :2]
 df.columns = ["bid_price", "ask_price"]
 
 # Process quotes using a wrangler
@@ -147,8 +150,3 @@ node = BacktestNode(configs=[config])
 
 # %%
 result
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Backtest (high-level API)](../getting_started/backtest_high_level) | **Next**: [Backtest with FX bar data](backtest_fx_bars)

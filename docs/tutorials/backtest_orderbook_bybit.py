@@ -2,10 +2,10 @@
 # # Backtest with Order Book Depth Data (Bybit)
 #
 # This tutorial follows the same pattern as
-# [Backtest with order book depth data (Binance)](backtest_binance_orderbook)
+# [Backtest with order book depth data (Binance)](backtest_orderbook_binance)
 # using Bybit depth data instead.
 #
-# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/backtest_bybit_orderbook.py).
+# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/backtest_orderbook_bybit.py).
 
 # %% [markdown]
 # ## Prerequisites
@@ -15,6 +15,7 @@
 # - Bybit order book depth data (bring your own)
 
 # %%
+import os
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -39,11 +40,11 @@ from nautilus_trader.test_kit.providers import TestInstrumentProvider
 # ## Loading data
 
 # %%
-# Path to your data directory, using user /Downloads as an example
-DATA_DIR = "~/Downloads"
+# Set NAUTILUS_DATA_DIR to the parent directory if your data lives elsewhere.
+DATA_DIR = Path(os.environ.get("NAUTILUS_DATA_DIR", "~/Downloads/Data")).expanduser() / "Bybit"
 
 # %%
-data_path = Path(DATA_DIR).expanduser() / "Data" / "Bybit"
+data_path = DATA_DIR
 raw_files = [f for f in data_path.iterdir() if f.is_file()]
 assert raw_files, f"Unable to find any data files in directory {data_path}"
 raw_files
@@ -106,7 +107,7 @@ book_type = "L2_MBP"  # Data book type must match venue book type
 
 data_configs = [
     BacktestDataConfig(
-        catalog_path=CATALOG_PATH,
+        catalog_path=str(CATALOG_PATH),
         data_cls=OrderBookDelta,
         instrument_id=instrument.id,
         # start_time=start,  # Run across all data
@@ -118,7 +119,7 @@ venues_configs = [
     BacktestVenueConfig(
         name="BYBIT",
         oms_type="NETTING",
-        account_type="CASH",
+        account_type="MARGIN",
         base_currency=None,
         starting_balances=["200000 XRP", "100000 USDT"],
         book_type=book_type,  # <-- Venues book type
@@ -174,8 +175,3 @@ engine.trader.generate_positions_report()
 
 # %%
 engine.trader.generate_account_report(Venue("BYBIT"))
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Backtest with order book depth data (Binance)](backtest_binance_orderbook) | **Next**: [Data catalog with Databento](databento_data_catalog)

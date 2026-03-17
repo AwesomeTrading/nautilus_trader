@@ -152,8 +152,3 @@ engine.trader.generate_order_fills_report()
 
 # %%
 engine.trader.generate_positions_report()
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Loading external data](loading_external_data) | **Next**: [Backtest with order book depth data (Binance)](backtest_binance_orderbook)

@@ -17,6 +17,7 @@
 # - [NautilusTrader](https://pypi.org/project/nautilus_trader/) latest release installed (`pip install nautilus_trader`)
 
 # %%
+import os
 import shutil
 from decimal import Decimal
 from pathlib import Path
@@ -47,13 +48,15 @@ from nautilus_trader.test_kit.providers import TestInstrumentProvider
 # - `DAT_ASCII_EURUSD_T_202410.csv` (EUR/USD for October 2024)
 # - `DAT_ASCII_EURUSD_T_202411.csv` (EUR/USD for November 2024)
 #
-# Extract the CSV files into a folder and set `DATA_DIR` below to that path.
+# Extract the CSV files into `~/Downloads/Data/HISTDATA/` (or set the
+# `NAUTILUS_DATA_DIR` environment variable to the parent directory containing a
+# `HISTDATA` subfolder).
 
 # %%
-DATA_DIR = "~/Downloads/Data/HISTDATA/"
+DATA_DIR = Path(os.environ.get("NAUTILUS_DATA_DIR", "~/Downloads/Data")).expanduser() / "HISTDATA"
 
 # %%
-path = Path(DATA_DIR).expanduser()
+path = DATA_DIR
 raw_files = [
     f for f in path.iterdir() if f.is_file() and (f.suffix == ".csv" or f.name.endswith(".csv.gz"))
 ]
@@ -235,8 +238,3 @@ node = BacktestNode(configs=[config])
 
 results = node.run()
 results
-
-# %% [markdown]
-# ---
-#
-# **Previous**: [Backtest (low-level API)](backtest_low_level) | **Next**: [Loading external data](../tutorials/loading_external_data)

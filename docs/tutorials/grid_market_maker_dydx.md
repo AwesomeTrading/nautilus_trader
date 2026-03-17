@@ -595,7 +595,3 @@ based on this flag.
 - [dYdX v4 Integration Guide](../integrations/dydx.md): full adapter reference.
 - [dYdX Protocol Documentation](https://docs.dydx.xyz/): official protocol docs.
 - [Order types](https://docs.dydx.xyz/concepts/trading/orders): protocol-level order mechanics.
-
----
-
-**Previous**: [Grid market making with a deadman's switch](bitmex_grid_market_maker)
