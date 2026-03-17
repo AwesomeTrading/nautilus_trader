@@ -10,6 +10,7 @@ Released on TBD (UTC).
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
+- Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
 - Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
 
@@ -43,6 +44,7 @@ Released on TBD (UTC).
 - Fixed Interactive Brokers live-session synchronization and reconciliation (#3715), thanks @faysou
 - Fixed Interactive Brokers shared historical request dedup for concurrent warmup (#3719), thanks @Johnkhk
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
+- Fixed OKX `base_url_ws` ignored for private and business WebSocket channels (#3727), thanks for reporting @Stamppot82
 - Fixed Polymarket WebSocket initial vs incremental subscribe (#3717), thanks @Javdu10
 
 ### Internal Improvements

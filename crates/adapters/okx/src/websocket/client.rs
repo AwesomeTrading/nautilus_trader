@@ -166,6 +166,7 @@ pub struct OKXWebSocketClient {
     vip_level: Arc<AtomicU8>,
     credential: Option<Credential>,
     heartbeat: Option<u64>,
+    auth_timeout_secs: u64,
     auth_tracker: AuthTracker,
     signal: Arc<AtomicBool>,
     connection_mode: Arc<ArcSwap<AtomicU8>>,
@@ -188,7 +189,7 @@ pub struct OKXWebSocketClient {
 
 impl Default for OKXWebSocketClient {
     fn default() -> Self {
-        Self::new(None, None, None, None, None, None).unwrap()
+        Self::new(None, None, None, None, None, None, None).unwrap()
     }
 }
 
@@ -215,6 +216,7 @@ impl OKXWebSocketClient {
         api_passphrase: Option<String>,
         account_id: Option<AccountId>,
         heartbeat: Option<u64>,
+        auth_timeout_secs: Option<u64>,
     ) -> anyhow::Result<Self> {
         let url = url.unwrap_or(OKX_WS_PUBLIC_URL.to_string());
         let account_id = account_id.unwrap_or(AccountId::from("OKX-master"));
@@ -242,6 +244,7 @@ impl OKXWebSocketClient {
             vip_level: Arc::new(AtomicU8::new(0)),
             credential,
             heartbeat,
+            auth_timeout_secs: auth_timeout_secs.unwrap_or(AUTHENTICATION_TIMEOUT_SECS),
             auth_tracker: AuthTracker::new(),
             signal,
             connection_mode: Arc::new(ArcSwap::from_pointee(AtomicU8::new(
@@ -282,6 +285,7 @@ impl OKXWebSocketClient {
         api_passphrase: Option<String>,
         account_id: Option<AccountId>,
         heartbeat: Option<u64>,
+        auth_timeout_secs: Option<u64>,
     ) -> anyhow::Result<Self> {
         let url = url.unwrap_or(OKX_WS_PUBLIC_URL.to_string());
         let api_key = get_or_env_var(api_key, "OKX_API_KEY")?;
@@ -295,6 +299,7 @@ impl OKXWebSocketClient {
             Some(api_passphrase),
             account_id,
             heartbeat,
+            auth_timeout_secs,
         )
     }
 
@@ -315,6 +320,7 @@ impl OKXWebSocketClient {
             Some(api_key),
             Some(api_secret),
             Some(api_passphrase),
+            None,
             None,
             None,
         )
@@ -756,7 +762,7 @@ impl OKXWebSocketClient {
 
         match self
             .auth_tracker
-            .wait_for_result::<OKXWsError>(Duration::from_secs(AUTHENTICATION_TIMEOUT_SECS), rx)
+            .wait_for_result::<OKXWsError>(Duration::from_secs(self.auth_timeout_secs), rx)
             .await
         {
             Ok(()) => {
@@ -2752,6 +2758,7 @@ mod tests {
             Some("test_passphrase".to_string()),
             None,
             None,
+            None,
         )
         .unwrap();
         assert!(client.credential.is_some());
@@ -2765,6 +2772,7 @@ mod tests {
             Some("test_key".to_string()),
             None,
             Some("test_passphrase".to_string()),
+            None,
             None,
             None,
         );
@@ -2796,7 +2804,7 @@ mod tests {
         assert!(!client.is_active());
 
         let client_with_heartbeat =
-            OKXWebSocketClient::new(None, None, None, None, None, Some(30)).unwrap();
+            OKXWebSocketClient::new(None, None, None, None, None, Some(30), None).unwrap();
 
         assert!(client_with_heartbeat.heartbeat.is_some());
         assert_eq!(client_with_heartbeat.heartbeat.unwrap(), 30);
@@ -2869,6 +2877,7 @@ mod tests {
             None,
             None,
             Some(30), // 30 second heartbeat
+            None,
         )
         .unwrap();
 
@@ -2877,7 +2886,7 @@ mod tests {
 
         let account_id = AccountId::from("test-account-123");
         let client_with_account =
-            OKXWebSocketClient::new(None, None, None, None, Some(account_id), None).unwrap();
+            OKXWebSocketClient::new(None, None, None, None, Some(account_id), None, None).unwrap();
 
         assert_eq!(client_with_account.account_id, account_id);
     }
@@ -2975,6 +2984,7 @@ mod tests {
             Some("test_passphrase".to_string()),
             Some(AccountId::from("test-account")),
             None,
+            None,
         )
         .unwrap();
 
@@ -3064,6 +3074,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("Failed to create client");
 
@@ -3093,6 +3104,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("Failed to create client");
 
@@ -3112,6 +3124,7 @@ mod tests {
 
         let client = OKXWebSocketClient::new(
             Some("wss://test.okx.com".to_string()),
+            None,
             None,
             None,
             None,
@@ -3141,6 +3154,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("Failed to create client");
 
@@ -3164,6 +3178,7 @@ mod tests {
         // 3. confirm_subscribe() - restore to confirmed state
         let client = OKXWebSocketClient::new(
             Some("wss://test.okx.com".to_string()),
+            None,
             None,
             None,
             None,
@@ -3221,6 +3236,7 @@ mod tests {
         // This is the race condition fixed in the subscription tracker.
         let client = OKXWebSocketClient::new(
             Some("wss://test.okx.com".to_string()),
+            None,
             None,
             None,
             None,
@@ -3291,6 +3307,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect("Failed to create client");
 
@@ -3342,6 +3359,7 @@ mod tests {
             Some("test_passphrase".to_string()),
             Some(AccountId::new("OKX-TEST")),
             None,
+            None,
         )
         .expect("Failed to create client");
 
@@ -3377,6 +3395,7 @@ mod tests {
         // The subscription tracker should be idempotent and not create duplicate state.
         let client = OKXWebSocketClient::new(
             Some("wss://test.okx.com".to_string()),
+            None,
             None,
             None,
             None,

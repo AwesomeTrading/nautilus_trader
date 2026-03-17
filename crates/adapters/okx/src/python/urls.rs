@@ -47,6 +47,13 @@ pub fn get_okx_ws_url_business(is_demo: bool) -> String {
     urls::get_ws_base_url_business(is_demo).to_string()
 }
 
+/// Derives a WebSocket URL for a given channel from a base URL.
+#[pyfunction]
+#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.adapters.okx")]
+pub fn derive_okx_ws_url(base_url: &str, channel: &str) -> String {
+    urls::derive_ws_url(base_url, channel)
+}
+
 /// Checks if OKX endpoint requires authentication.
 #[pyfunction]
 #[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.adapters.okx")]

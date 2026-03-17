@@ -175,7 +175,7 @@ impl OKXWebSocketError {
 impl OKXWebSocketClient {
     /// Provides a WebSocket client for connecting to [OKX](https://okx.com).
     #[new]
-    #[pyo3(signature = (url=None, api_key=None, api_secret=None, api_passphrase=None, account_id=None, heartbeat=None))]
+    #[pyo3(signature = (url=None, api_key=None, api_secret=None, api_passphrase=None, account_id=None, heartbeat=None, auth_timeout_secs=None))]
     fn py_new(
         url: Option<String>,
         api_key: Option<String>,
@@ -183,6 +183,7 @@ impl OKXWebSocketClient {
         api_passphrase: Option<String>,
         account_id: Option<AccountId>,
         heartbeat: Option<u64>,
+        auth_timeout_secs: Option<u64>,
     ) -> PyResult<Self> {
         Self::new(
             url,
@@ -191,13 +192,14 @@ impl OKXWebSocketClient {
             api_passphrase,
             account_id,
             heartbeat,
+            auth_timeout_secs,
         )
         .map_err(to_pyvalue_err)
     }
 
     #[staticmethod]
     #[pyo3(name = "with_credentials")]
-    #[pyo3(signature = (url=None, api_key=None, api_secret=None, api_passphrase=None, account_id=None, heartbeat=None))]
+    #[pyo3(signature = (url=None, api_key=None, api_secret=None, api_passphrase=None, account_id=None, heartbeat=None, auth_timeout_secs=None))]
     fn py_with_credentials(
         url: Option<String>,
         api_key: Option<String>,
@@ -205,6 +207,7 @@ impl OKXWebSocketClient {
         api_passphrase: Option<String>,
         account_id: Option<AccountId>,
         heartbeat: Option<u64>,
+        auth_timeout_secs: Option<u64>,
     ) -> PyResult<Self> {
         Self::with_credentials(
             url,
@@ -213,6 +216,7 @@ impl OKXWebSocketClient {
             api_passphrase,
             account_id,
             heartbeat,
+            auth_timeout_secs,
         )
         .map_err(to_pyvalue_err)
     }
