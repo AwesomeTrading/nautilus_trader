@@ -1376,7 +1376,8 @@ impl Cache {
 
     /// Returns whether an order with the `client_order_id` is locally active.
     ///
-    /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state.
+    /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state
+    /// (a superset of emulated orders).
     #[pyo3(name = "is_order_active_local")]
     fn py_is_order_active_local(&self, client_order_id: ClientOrderId) -> bool {
         self.is_order_active_local(&client_order_id)
@@ -1384,7 +1385,8 @@ impl Cache {
 
     /// Returns all locally active orders matching the optional filter parameters.
     ///
-    /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state.
+    /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state
+    /// (a superset of emulated orders).
     #[pyo3(name = "orders_active_local")]
     fn py_orders_active_local(
         &self,
@@ -1409,7 +1411,8 @@ impl Cache {
 
     /// Returns the count of all locally active orders.
     ///
-    /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state.
+    /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state
+    /// (a superset of emulated orders).
     #[pyo3(name = "orders_active_local_count")]
     fn py_orders_active_local_count(
         &self,
