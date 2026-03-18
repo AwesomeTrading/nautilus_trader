@@ -1124,6 +1124,13 @@ The project uses several tools for code quality:
 
 - **rustfmt**: Automatic code formatting (see `rustfmt.toml`).
 - **clippy**: Linting and best practices (see `clippy.toml`).
+  When suppressing `missing_panics_doc` or `missing_errors_doc`, include a `reason`
+  explaining why the lint does not apply:
+
+  ```rust
+  #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+  ```
+
 - **cbindgen**: C header generation for FFI.
 
 ## Rust version management

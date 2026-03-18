@@ -652,7 +652,7 @@ async fn test_invalid_product_type_rejected() {
 
 #[rstest]
 #[tokio::test]
-async fn test_stream_limit_enforcement() {
+async fn test_pool_creates_second_connection_on_overflow() {
     let (addr, state) = start_test_server().await.unwrap();
     let mut client = create_test_client(&addr);
 
@@ -664,11 +664,159 @@ async fn test_stream_limit_enforcement() {
     )
     .await;
 
-    // Build a list exceeding the 200 stream limit
+    // 201 streams exceeds the 200-per-connection limit, so the pool
+    // should create a second connection automatically
     let streams: Vec<String> = (0..201).map(|i| format!("stream{i}@aggTrade")).collect();
 
     let result = client.subscribe(streams).await;
-    assert!(result.is_err());
+    assert!(result.is_ok());
+
+    wait_until_async(
+        || async { *state.connection_count.lock().await >= 2 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    assert_eq!(*state.connection_count.lock().await, 2);
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pool_streams_distributed_across_slots() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let mut client = create_test_client(&addr);
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { *state.connection_count.lock().await > 0 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    // Subscribe 150 streams (fits in slot 0)
+    let batch1: Vec<String> = (0..150).map(|i| format!("sym{i}@aggTrade")).collect();
+    client.subscribe(batch1).await.unwrap();
+
+    // Subscribe another 100 (50 fit in slot 0, 50 overflow to slot 1)
+    let batch2: Vec<String> = (150..250).map(|i| format!("sym{i}@aggTrade")).collect();
+    client.subscribe(batch2).await.unwrap();
+
+    wait_until_async(
+        || async { *state.connection_count.lock().await >= 2 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    assert_eq!(*state.connection_count.lock().await, 2);
+
+    // All 250 streams should be subscribed across the two connections
+    wait_until_async(
+        || async { state.subscribed_streams().await.len() >= 250 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pool_duplicate_subscribe_ignored() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let mut client = create_test_client(&addr);
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { *state.connection_count.lock().await > 0 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let streams = vec!["btcusdt@aggTrade".to_string()];
+    client.subscribe(streams.clone()).await.unwrap();
+
+    wait_until_async(
+        || async { !state.subscribed_streams().await.is_empty() },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    // Subscribing the same stream again should be a no-op
+    client.subscribe(streams).await.unwrap();
+
+    // Still only one connection
+    assert_eq!(*state.connection_count.lock().await, 1);
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pool_unsubscribe_frees_capacity() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let mut client = create_test_client(&addr);
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { *state.connection_count.lock().await > 0 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    // Fill slot 0 to exactly 200 streams
+    let streams: Vec<String> = (0..200).map(|i| format!("sym{i}@aggTrade")).collect();
+    client.subscribe(streams).await.unwrap();
+
+    wait_until_async(
+        || async { state.subscribed_streams().await.len() >= 200 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    // Unsubscribe 10 streams from slot 0
+    let unsub: Vec<String> = (0..10).map(|i| format!("sym{i}@aggTrade")).collect();
+    client.unsubscribe(unsub).await.unwrap();
+
+    // Now subscribing 10 new streams should fit in slot 0 (no new connection)
+    let new_streams: Vec<String> = (200..210).map(|i| format!("sym{i}@aggTrade")).collect();
+    client.subscribe(new_streams).await.unwrap();
+
+    // Should still be just 1 connection
+    assert_eq!(*state.connection_count.lock().await, 1);
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_pool_single_batch_under_limit_uses_one_connection() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let mut client = create_test_client(&addr);
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { *state.connection_count.lock().await > 0 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    // 200 streams exactly fits in one connection
+    let streams: Vec<String> = (0..200).map(|i| format!("sym{i}@aggTrade")).collect();
+    client.subscribe(streams).await.unwrap();
+
+    wait_until_async(
+        || async { state.subscribed_streams().await.len() >= 200 },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    assert_eq!(*state.connection_count.lock().await, 1);
 
     client.close().await.unwrap();
 }

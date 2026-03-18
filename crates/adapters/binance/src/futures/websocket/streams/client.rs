@@ -20,18 +20,18 @@
 //! - USD-M Endpoint: `wss://fstream.binance.com/ws`
 //! - COIN-M Endpoint: `wss://dstream.binance.com/ws`
 //! - Max streams: 200 per connection
+//! - Max connections: 20 per pool (up to 4,000 total streams)
 //! - Connection validity: 24 hours
 //! - Ping/pong: Every 3 minutes
 
 use std::{
     fmt::Debug,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
 };
 
-use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use futures_util::Stream;
 use nautilus_common::live::get_runtime;
@@ -65,7 +65,26 @@ use crate::common::{
 /// Maximum streams per WebSocket connection for Futures.
 pub const MAX_STREAMS_PER_CONNECTION: usize = 200;
 
+/// Maximum connections per pool.
+const MAX_CONNECTIONS: usize = 20;
+
+// State for a single WebSocket connection within the pool
+struct ConnectionSlot {
+    cmd_tx: tokio::sync::mpsc::UnboundedSender<BinanceFuturesWsStreamsCommand>,
+    streams: Vec<String>,
+    subscriptions_state: SubscriptionState,
+    handler_task: tokio::task::JoinHandle<()>,
+    bytes_task: tokio::task::JoinHandle<()>,
+    cancellation_token: CancellationToken,
+    connection_mode: Arc<AtomicU8>,
+}
+
 /// Binance Futures WebSocket client for JSON market data streams.
+///
+/// Manages a pool of up to 20 connections, each supporting up to 200 streams.
+/// New connections are created automatically when subscribing exceeds the current
+/// connection's stream limit. All connections feed into a single output stream,
+/// transparent to the data client.
 #[derive(Clone)]
 pub struct BinanceFuturesWebSocketClient {
     url: String,
@@ -73,20 +92,12 @@ pub struct BinanceFuturesWebSocketClient {
     credential: Option<Arc<SigningCredential>>,
     heartbeat: Option<u64>,
     signal: Arc<AtomicBool>,
-    connection_mode: Arc<ArcSwap<AtomicU8>>,
-    cmd_tx: Arc<
-        tokio::sync::RwLock<tokio::sync::mpsc::UnboundedSender<BinanceFuturesWsStreamsCommand>>,
-    >,
-    out_rx: Arc<
-        std::sync::Mutex<
-            Option<tokio::sync::mpsc::UnboundedReceiver<BinanceFuturesWsStreamsMessage>>,
-        >,
-    >,
-    task_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
-    subscriptions_state: SubscriptionState,
+    slots: Arc<Mutex<Vec<ConnectionSlot>>>,
+    out_tx: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedSender<BinanceFuturesWsStreamsMessage>>>>,
+    out_rx:
+        Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<BinanceFuturesWsStreamsMessage>>>>,
     request_id_counter: Arc<AtomicU64>,
     instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
-    cancellation_token: CancellationToken,
 }
 
 impl Debug for BinanceFuturesWebSocketClient {
@@ -133,24 +144,17 @@ impl BinanceFuturesWebSocketClient {
             _ => None,
         };
 
-        let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::unbounded_channel();
-
         Ok(Self {
             url,
             product_type,
             credential,
             heartbeat,
             signal: Arc::new(AtomicBool::new(false)),
-            connection_mode: Arc::new(ArcSwap::new(Arc::new(AtomicU8::new(
-                ConnectionMode::Closed as u8,
-            )))),
-            cmd_tx: Arc::new(tokio::sync::RwLock::new(cmd_tx)),
-            out_rx: Arc::new(std::sync::Mutex::new(None)),
-            task_handle: None,
-            subscriptions_state: SubscriptionState::new('@'),
+            slots: Arc::new(Mutex::new(Vec::new())),
+            out_tx: Arc::new(Mutex::new(None)),
+            out_rx: Arc::new(Mutex::new(None)),
             request_id_counter: Arc::new(AtomicU64::new(1)),
             instruments_cache: Arc::new(DashMap::new()),
-            cancellation_token: CancellationToken::new(),
         })
     }
 
@@ -160,41 +164,285 @@ impl BinanceFuturesWebSocketClient {
         self.product_type
     }
 
-    /// Returns whether the client is actively connected.
+    /// Returns whether any connection in the pool is active.
     #[must_use]
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
     pub fn is_active(&self) -> bool {
-        let mode_u8 = self.connection_mode.load().load(Ordering::Relaxed);
-        mode_u8 == ConnectionMode::Active as u8
+        let slots = self.slots.lock().expect("slots lock poisoned");
+        slots
+            .iter()
+            .any(|s| s.connection_mode.load(Ordering::Relaxed) == ConnectionMode::Active as u8)
     }
 
-    /// Returns whether the client is closed.
+    /// Returns whether all connections in the pool are closed.
     #[must_use]
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
     pub fn is_closed(&self) -> bool {
-        let mode_u8 = self.connection_mode.load().load(Ordering::Relaxed);
-        mode_u8 == ConnectionMode::Closed as u8
+        let slots = self.slots.lock().expect("slots lock poisoned");
+        slots.is_empty()
+            || slots
+                .iter()
+                .all(|s| s.connection_mode.load(Ordering::Relaxed) == ConnectionMode::Closed as u8)
     }
 
-    /// Returns the number of confirmed subscriptions.
+    /// Returns the total number of confirmed subscriptions across all connections.
     #[must_use]
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
     pub fn subscription_count(&self) -> usize {
-        self.subscriptions_state.len()
+        let slots = self.slots.lock().expect("slots lock poisoned");
+        slots.iter().map(|s| s.subscriptions_state.len()).sum()
     }
 
-    /// Connects to the WebSocket server.
+    /// Connects the first WebSocket connection in the pool.
     ///
     /// # Errors
     ///
     /// Returns an error if connection fails.
-    // Mutex poisoning is not documented individually
-    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
     pub async fn connect(&mut self) -> BinanceWsResult<()> {
         self.signal.store(false, Ordering::Relaxed);
-        self.cancellation_token = CancellationToken::new();
+
+        let (out_tx, out_rx) = tokio::sync::mpsc::unbounded_channel();
+        *self.out_tx.lock().expect("out_tx lock poisoned") = Some(out_tx);
+        *self.out_rx.lock().expect("out_rx lock poisoned") = Some(out_rx);
+
+        let slot = self.create_connection().await?;
+        self.slots.lock().expect("slots lock poisoned").push(slot);
+
+        log::info!(
+            "Connected to Binance Futures stream pool: url={}, product_type={:?}",
+            self.url,
+            self.product_type
+        );
+        Ok(())
+    }
+
+    /// Closes all WebSocket connections in the pool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if disconnect fails.
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+    pub async fn close(&mut self) -> BinanceWsResult<()> {
+        self.signal.store(true, Ordering::Relaxed);
+
+        let slots: Vec<ConnectionSlot> = {
+            let mut guard = self.slots.lock().expect("slots lock poisoned");
+            guard.drain(..).collect()
+        };
+
+        for slot in slots {
+            slot.cancellation_token.cancel();
+            let _ = slot.cmd_tx.send(BinanceFuturesWsStreamsCommand::Disconnect);
+            let _ = slot.handler_task.await;
+            slot.bytes_task.abort();
+        }
+
+        *self.out_tx.lock().expect("out_tx lock poisoned") = None;
+        *self.out_rx.lock().expect("out_rx lock poisoned") = None;
+
+        log::info!("Disconnected from Binance Futures stream pool");
+        Ok(())
+    }
+
+    /// Subscribes to the specified streams.
+    ///
+    /// Streams are distributed across pool connections. New connections are created
+    /// automatically when existing ones reach the 200-stream limit, up to a maximum
+    /// of 20 connections.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pool is exhausted or command delivery fails.
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+    pub async fn subscribe(&self, streams: Vec<String>) -> BinanceWsResult<()> {
+        // Phase 1: filter already-subscribed streams (brief lock)
+        let new_streams: Vec<String> = {
+            let slots = self.slots.lock().expect("slots lock poisoned");
+            streams
+                .into_iter()
+                .filter(|s| !slots.iter().any(|slot| slot.streams.contains(s)))
+                .collect()
+        };
+
+        if new_streams.is_empty() {
+            return Ok(());
+        }
+
+        // Phase 2: create connections if needed (no lock held during async connect)
+        loop {
+            let (remaining_capacity, slot_count) = {
+                let slots = self.slots.lock().expect("slots lock poisoned");
+                let cap: usize = slots
+                    .iter()
+                    .map(|s| MAX_STREAMS_PER_CONNECTION - s.streams.len())
+                    .sum();
+                (cap, slots.len())
+            };
+
+            if remaining_capacity >= new_streams.len() || slot_count >= MAX_CONNECTIONS {
+                break;
+            }
+
+            let new_slot = self.create_connection().await?;
+            let slot_count = {
+                let mut slots = self.slots.lock().expect("slots lock poisoned");
+                slots.push(new_slot);
+                slots.len()
+            };
+            log::info!(
+                "Pool slot {} connected: url={}, product_type={:?}",
+                slot_count - 1,
+                self.url,
+                self.product_type
+            );
+        }
+
+        // Phase 3: assign streams to slots and send commands (brief lock).
+        // Stage assignments first so a capacity error leaves slots unchanged.
+        let mut slots = self.slots.lock().expect("slots lock poisoned");
+        let mut slot_batches: Vec<(usize, Vec<String>)> = Vec::new();
+        let mut slot_counts: Vec<usize> = slots.iter().map(|s| s.streams.len()).collect();
+
+        for stream in &new_streams {
+            let slot_idx = slot_counts
+                .iter()
+                .position(|&count| count < MAX_STREAMS_PER_CONNECTION)
+                .ok_or_else(|| {
+                    let max_total = MAX_CONNECTIONS * MAX_STREAMS_PER_CONNECTION;
+                    BinanceWsError::ClientError(format!(
+                        "Pool exhausted: {max_total} total subscriptions \
+                         ({MAX_CONNECTIONS} connections x {MAX_STREAMS_PER_CONNECTION} streams)"
+                    ))
+                })?;
+
+            slot_counts[slot_idx] += 1;
+
+            if let Some(batch) = slot_batches.iter_mut().find(|(i, _)| *i == slot_idx) {
+                batch.1.push(stream.clone());
+            } else {
+                slot_batches.push((slot_idx, vec![stream.clone()]));
+            }
+        }
+
+        // Send commands first; only update slot state on success
+        for (slot_idx, batch) in &slot_batches {
+            slots[*slot_idx]
+                .cmd_tx
+                .send(BinanceFuturesWsStreamsCommand::Subscribe {
+                    streams: batch.clone(),
+                })
+                .map_err(|e| {
+                    BinanceWsError::ClientError(format!(
+                        "Handler not available for pool slot {slot_idx}: {e}"
+                    ))
+                })?;
+            slots[*slot_idx].streams.extend(batch.iter().cloned());
+        }
+
+        Ok(())
+    }
+
+    /// Unsubscribes from the specified streams.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if command delivery fails.
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+    pub async fn unsubscribe(&self, streams: Vec<String>) -> BinanceWsResult<()> {
+        let mut slots = self.slots.lock().expect("slots lock poisoned");
+        let mut slot_batches: Vec<(usize, Vec<String>)> = Vec::new();
+
+        for stream in &streams {
+            if let Some(slot_idx) = slots.iter().position(|s| s.streams.contains(stream)) {
+                if let Some(batch) = slot_batches.iter_mut().find(|(i, _)| *i == slot_idx) {
+                    batch.1.push(stream.clone());
+                } else {
+                    slot_batches.push((slot_idx, vec![stream.clone()]));
+                }
+            }
+        }
+
+        // Send commands first; only update slot state on success
+        for (slot_idx, batch) in &slot_batches {
+            slots[*slot_idx]
+                .cmd_tx
+                .send(BinanceFuturesWsStreamsCommand::Unsubscribe {
+                    streams: batch.clone(),
+                })
+                .map_err(|e| {
+                    BinanceWsError::ClientError(format!(
+                        "Handler not available for pool slot {slot_idx}: {e}"
+                    ))
+                })?;
+            for stream in batch {
+                slots[*slot_idx].streams.retain(|s| s != stream);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Returns a stream of messages from all WebSocket connections.
+    ///
+    /// This method can only be called once per connection lifecycle. Subsequent calls
+    /// return an empty stream.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal output receiver mutex is poisoned.
+    pub fn stream(&self) -> impl Stream<Item = BinanceFuturesWsStreamsMessage> + 'static {
+        let out_rx = self.out_rx.lock().expect("out_rx lock poisoned").take();
+        async_stream::stream! {
+            if let Some(mut rx) = out_rx {
+                while let Some(msg) = rx.recv().await {
+                    yield msg;
+                }
+            }
+        }
+    }
+
+    /// Bulk initialize the instrument cache.
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        for inst in instruments {
+            self.instruments_cache
+                .insert(inst.raw_symbol().inner(), inst.clone());
+        }
+    }
+
+    /// Update a single instrument in the cache.
+    pub fn cache_instrument(&self, instrument: InstrumentAny) {
+        self.instruments_cache
+            .insert(instrument.raw_symbol().inner(), instrument);
+    }
+
+    /// Returns a shared reference to the instruments cache.
+    #[must_use]
+    pub fn instruments_cache(&self) -> Arc<DashMap<Ustr, InstrumentAny>> {
+        self.instruments_cache.clone()
+    }
+
+    /// Returns an instrument from the cache by raw symbol.
+    #[must_use]
+    pub fn get_instrument(&self, symbol: &str) -> Option<InstrumentAny> {
+        self.instruments_cache
+            .get(&Ustr::from(symbol))
+            .map(|entry| entry.value().clone())
+    }
+
+    async fn create_connection(&self) -> BinanceWsResult<ConnectionSlot> {
+        let out_tx = self
+            .out_tx
+            .lock()
+            .expect("out_tx lock poisoned")
+            .clone()
+            .ok_or_else(|| {
+                BinanceWsError::ClientError("Output channel not initialized".to_string())
+            })?;
 
         let (raw_handler, raw_rx) = channel_message_handler();
         let ping_handler: PingHandler = Arc::new(move |_| {});
 
-        // Build headers for HMAC authentication (if needed for user data streams)
         let headers = if let Some(ref cred) = self.credential {
             vec![("X-MBX-APIKEY".to_string(), cred.api_key().to_string())]
         } else {
@@ -215,7 +463,6 @@ impl BinanceFuturesWebSocketClient {
             idle_timeout_ms: None,
         };
 
-        // Configure rate limits for subscription operations
         let keyed_quotas = vec![(
             BINANCE_RATE_LIMIT_KEY_SUBSCRIPTION[0].as_str().to_string(),
             *BINANCE_WS_SUBSCRIPTION_QUOTA,
@@ -232,15 +479,14 @@ impl BinanceFuturesWebSocketClient {
         .await
         .map_err(|e| BinanceWsError::NetworkError(e.to_string()))?;
 
-        self.connection_mode.store(client.connection_mode_atomic());
+        let connection_mode = client.connection_mode_atomic();
+        let subscriptions_state = SubscriptionState::new('@');
+        let cancellation_token = CancellationToken::new();
 
         let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel();
-        let (out_tx, out_rx) = tokio::sync::mpsc::unbounded_channel();
-        *self.cmd_tx.write().await = cmd_tx;
-        *self.out_rx.lock().expect("out_rx lock poisoned") = Some(out_rx);
 
+        // Convert raw Message frames to Vec<u8> for the JSON handler
         let (bytes_tx, bytes_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
-
         let bytes_task = get_runtime().spawn(async move {
             let mut raw_rx = raw_rx;
             while let Some(msg) = raw_rx.recv().await {
@@ -262,25 +508,23 @@ impl BinanceFuturesWebSocketClient {
             cmd_rx,
             bytes_rx,
             out_tx.clone(),
-            self.subscriptions_state.clone(),
+            subscriptions_state.clone(),
             self.request_id_counter.clone(),
         );
 
-        self.cmd_tx
-            .read()
-            .await
+        cmd_tx
             .send(BinanceFuturesWsStreamsCommand::SetClient(client))
             .map_err(|e| BinanceWsError::ClientError(format!("Failed to set client: {e}")))?;
 
         let signal = self.signal.clone();
-        let cancellation_token = self.cancellation_token.clone();
-        let subscriptions_state = self.subscriptions_state.clone();
-        let cmd_tx = self.cmd_tx.clone();
+        let token = cancellation_token.clone();
+        let subs = subscriptions_state.clone();
+        let resubscribe_tx = cmd_tx.clone();
 
-        let task_handle = get_runtime().spawn(async move {
+        let handler_task = get_runtime().spawn(async move {
             loop {
                 tokio::select! {
-                    () = cancellation_token.cancelled() => {
+                    () = token.cancelled() => {
                         log::debug!("Handler task cancelled");
                         break;
                     }
@@ -288,16 +532,14 @@ impl BinanceFuturesWebSocketClient {
                         match result {
                             Some(BinanceFuturesWsStreamsMessage::Reconnected) => {
                                 log::info!("WebSocket reconnected, restoring subscriptions");
-                                // Mark all confirmed subscriptions as pending
-                                let all_topics = subscriptions_state.all_topics();
+                                let all_topics = subs.all_topics();
                                 for topic in &all_topics {
-                                    subscriptions_state.mark_failure(topic);
+                                    subs.mark_failure(topic);
                                 }
 
-                                // Resubscribe using tracked subscription state
-                                let streams = subscriptions_state.all_topics();
+                                let streams = subs.all_topics();
                                 if !streams.is_empty()
-                                    && let Err(e) = cmd_tx.read().await.send(BinanceFuturesWsStreamsCommand::Subscribe { streams }) {
+                                    && let Err(e) = resubscribe_tx.send(BinanceFuturesWsStreamsCommand::Subscribe { streams }) {
                                         log::error!("Failed to resubscribe after reconnect: {e}");
                                     }
 
@@ -324,141 +566,16 @@ impl BinanceFuturesWebSocketClient {
                     }
                 }
             }
-            bytes_task.abort();
         });
 
-        self.task_handle = Some(Arc::new(task_handle));
-
-        log::info!(
-            "Connected to Binance Futures stream: url={}, product_type={:?}",
-            self.url,
-            self.product_type
-        );
-        Ok(())
-    }
-
-    /// Closes the WebSocket connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if disconnect fails.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal output receiver mutex is poisoned.
-    pub async fn close(&mut self) -> BinanceWsResult<()> {
-        self.signal.store(true, Ordering::Relaxed);
-        self.cancellation_token.cancel();
-
-        let _ = self
-            .cmd_tx
-            .read()
-            .await
-            .send(BinanceFuturesWsStreamsCommand::Disconnect);
-
-        if let Some(handle) = self.task_handle.take()
-            && let Ok(handle) = Arc::try_unwrap(handle)
-        {
-            let _ = handle.await;
-        }
-
-        *self.out_rx.lock().expect("out_rx lock poisoned") = None;
-
-        log::info!("Disconnected from Binance Futures stream");
-        Ok(())
-    }
-
-    /// Subscribes to the specified streams.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if subscription fails or would exceed stream limit.
-    pub async fn subscribe(&self, streams: Vec<String>) -> BinanceWsResult<()> {
-        let current_count = self.subscriptions_state.len();
-        if current_count + streams.len() > MAX_STREAMS_PER_CONNECTION {
-            return Err(BinanceWsError::ClientError(format!(
-                "Would exceed max streams: {} + {} > {}",
-                current_count,
-                streams.len(),
-                MAX_STREAMS_PER_CONNECTION
-            )));
-        }
-
-        self.cmd_tx
-            .read()
-            .await
-            .send(BinanceFuturesWsStreamsCommand::Subscribe { streams })
-            .map_err(|e| BinanceWsError::ClientError(format!("Handler not available: {e}")))?;
-
-        Ok(())
-    }
-
-    /// Unsubscribes from the specified streams.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if unsubscription fails.
-    pub async fn unsubscribe(&self, streams: Vec<String>) -> BinanceWsResult<()> {
-        self.cmd_tx
-            .read()
-            .await
-            .send(BinanceFuturesWsStreamsCommand::Unsubscribe { streams })
-            .map_err(|e| BinanceWsError::ClientError(format!("Handler not available: {e}")))?;
-
-        Ok(())
-    }
-
-    /// Returns a stream of messages from the WebSocket.
-    ///
-    /// This method can only be called once per connection. Subsequent calls
-    /// will return an empty stream. If you need to consume messages from
-    /// multiple tasks, clone the client before connecting.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal output receiver mutex is poisoned.
-    pub fn stream(&self) -> impl Stream<Item = BinanceFuturesWsStreamsMessage> + 'static {
-        let out_rx = self.out_rx.lock().expect("out_rx lock poisoned").take();
-        async_stream::stream! {
-            if let Some(mut rx) = out_rx {
-                while let Some(msg) = rx.recv().await {
-                    yield msg;
-                }
-            }
-        }
-    }
-
-    /// Bulk initialize the instrument cache.
-    ///
-    /// Instruments are cached by their raw symbol (e.g., "BTCUSDT") to match
-    /// the symbol format sent in WebSocket messages.
-    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
-        for inst in instruments {
-            self.instruments_cache
-                .insert(inst.raw_symbol().inner(), inst.clone());
-        }
-    }
-
-    /// Update a single instrument in the cache.
-    ///
-    /// Instruments are cached by their raw symbol (e.g., "BTCUSDT") to match
-    /// the symbol format sent in WebSocket messages.
-    pub fn cache_instrument(&self, instrument: InstrumentAny) {
-        self.instruments_cache
-            .insert(instrument.raw_symbol().inner(), instrument);
-    }
-
-    /// Returns a shared reference to the instruments cache.
-    #[must_use]
-    pub fn instruments_cache(&self) -> Arc<DashMap<Ustr, InstrumentAny>> {
-        self.instruments_cache.clone()
-    }
-
-    /// Returns an instrument from the cache by raw symbol.
-    #[must_use]
-    pub fn get_instrument(&self, symbol: &str) -> Option<InstrumentAny> {
-        self.instruments_cache
-            .get(&Ustr::from(symbol))
-            .map(|entry| entry.value().clone())
+        Ok(ConnectionSlot {
+            cmd_tx,
+            streams: Vec::new(),
+            subscriptions_state,
+            handler_task,
+            bytes_task,
+            cancellation_token,
+            connection_mode,
+        })
     }
 }
