@@ -981,4 +981,38 @@ mod tests {
         assert_eq!(instrument.maker_fee(), dec!(0.0003));
         assert_eq!(instrument.taker_fee(), dec!(0.0003));
     }
+
+    #[rstest]
+    fn test_parse_instrument_info_populated() {
+        let json_data = load_test_json("instrument_perpetual.json");
+        let info: TardisInstrumentInfo = serde_json::from_str(&json_data).unwrap();
+
+        let instrument = parse_instrument_any(&info, None, Some(UnixNanos::default()), false)
+            .last()
+            .unwrap()
+            .clone();
+
+        let InstrumentAny::CryptoPerpetual(perp) = instrument else {
+            panic!("Expected CryptoPerpetual variant");
+        };
+
+        let info_params = perp.info.expect("info should be populated");
+
+        // Modeled fields present
+        assert!(info_params.get("exchange").is_some());
+        assert!(info_params.get("baseCurrency").is_some());
+        assert!(info_params.get("quoteCurrency").is_some());
+
+        // Extra (unmodeled) fields preserved via #[serde(flatten)]
+        assert_eq!(info_params.get_str("datasetId"), Some("XBTUSD"),);
+        assert_eq!(
+            info_params.get_str("contractType"),
+            Some("inverse_perpetual"),
+        );
+        assert_eq!(info_params.get_str("underlyingIndex"), Some(".BXBT"),);
+
+        // Absent optional fields omitted (not null)
+        assert!(info_params.get("listing").is_none());
+        assert!(info_params.get("expiry").is_none());
+    }
 }

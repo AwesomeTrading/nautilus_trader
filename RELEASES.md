@@ -16,6 +16,7 @@ Released on TBD (UTC).
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
 - Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
+- Added Tardis raw provider metadata to `Instrument.info` (#3730), thanks for reporting @volemont
 - Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
 
 ### Breaking Changes
