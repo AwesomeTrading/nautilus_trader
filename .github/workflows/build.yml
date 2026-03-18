@@ -36,6 +36,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         env:
@@ -127,6 +131,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-x86-py${{ matrix.python-version }}
       RUST_BACKTRACE: 1
     # yamllint disable rule:line-length
     services:
@@ -164,11 +169,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
+          rust-cache-key: build-linux-x86-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target/build-linux-x86-py${{ matrix.python-version }}
 
       - name: Install Nautilus CLI
         env:
@@ -189,6 +200,10 @@ jobs:
 
       - name: Run Rust tests
         run: make cargo-test EXTRA_FEATURES="capnp,hypersync"
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
 
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build
@@ -232,6 +247,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-arm-py${{ matrix.python-version }}
       RUST_BACKTRACE: 1
       CARGO_BUILD_JOBS: 1
     # yamllint disable rule:line-length
@@ -270,11 +286,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
+          rust-cache-key: build-linux-arm-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target/build-linux-arm-py${{ matrix.python-version }}
 
       - name: Install Nautilus CLI
         env:
@@ -295,6 +317,10 @@ jobs:
 
       - name: Run Rust tests
         run: make cargo-test EXTRA_FEATURES="capnp"
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
 
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build
@@ -329,6 +355,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-py${{ matrix.python-version }}
       RUST_BACKTRACE: 1
     steps:
       # https://github.com/step-security/harden-runner
@@ -345,17 +372,27 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
+          rust-cache-key: build-macos-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target/build-macos-py${{ matrix.python-version }}
 
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
       - name: Run Rust tests
         run: make cargo-test EXTRA_FEATURES="capnp,hypersync"
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
 
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build
@@ -390,6 +427,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-windows-py${{ matrix.python-version }}
       HIGH_PRECISION: false
       PARALLEL_BUILD: false
       RUST_BACKTRACE: 1
@@ -408,11 +446,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
+          rust-cache-key: build-windows-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target/build-windows-py${{ matrix.python-version }}
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
 
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build

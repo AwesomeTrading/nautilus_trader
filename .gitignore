@@ -76,6 +76,7 @@ env/
 .tmp-pre-commit/
 *.bak
 *.sh
+!scripts/ci/verify-ci-inputs.sh
 *tmp/
 *temp/
 

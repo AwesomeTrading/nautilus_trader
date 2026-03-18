@@ -166,22 +166,29 @@ runs:
       run: |
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-    - name: Get Python version
-      shell: bash
-      run: |
-        echo "PYTHON_VERSION=$(bash scripts/python-version.sh)" >> $GITHUB_ENV
-
     - name: Get pre-commit version
+      if: inputs.build-type == 'pre-commit'
       shell: bash
       run: |
         echo "PRE_COMMIT_VERSION=$(bash scripts/pre-commit-version.sh)" >> $GITHUB_ENV
 
-    - name: Get cache fingerprints
+    - name: Get cache scope and uv lock hash
       shell: bash
       env:
-        CACHE_SCOPE: ${{ runner.os }}-${{ runner.arch }}-${{ env.PYTHON_VERSION }}
+        CACHE_SCOPE: ${{ runner.os }}-${{ runner.arch }}-py${{ inputs.python-version }}
       run: |
         echo "CACHE_SCOPE=$CACHE_SCOPE" >> "$GITHUB_ENV"
+        python - <<'PY' >> "$GITHUB_ENV"
+        import hashlib
+        from pathlib import Path
+
+        print(f"UV_LOCK_HASH={hashlib.sha256(Path('uv.lock').read_bytes()).hexdigest()}")
+        PY
+
+    - name: Get pre-commit config hash
+      if: inputs.build-type == 'pre-commit'
+      shell: bash
+      run: |
         python - <<'PY' >> "$GITHUB_ENV"
         import hashlib
         from pathlib import Path
@@ -189,21 +196,20 @@ runs:
         print(
             f"PRE_COMMIT_CONFIG_HASH={hashlib.sha256(Path('.pre-commit-config.yaml').read_bytes()).hexdigest()}"
         )
-        print(f"UV_LOCK_HASH={hashlib.sha256(Path('uv.lock').read_bytes()).hexdigest()}")
         PY
 
+    # Keep this exact-keyed since site-packages is an installed environment, not a download cache
     - name: Cache Python site-packages
+      if: inputs.build-type == 'pre-commit'
       id: cached-site-packages
       # https://github.com/actions/cache
       uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       with:
         path: ~/.local/lib/python${{ inputs.python-version }}/site-packages
-        key: ${{ env.CACHE_SCOPE }}-site-packages-${{ env.PRE_COMMIT_VERSION }}-${{ env.PRE_COMMIT_CONFIG_HASH }}
-        restore-keys: |
-          ${{ env.CACHE_SCOPE }}-site-packages-${{ env.PRE_COMMIT_VERSION }}-
-          ${{ env.CACHE_SCOPE }}-site-packages-
+        key: ${{ env.CACHE_SCOPE }}-site-packages-pre-commit-${{ env.PRE_COMMIT_VERSION }}
 
     - name: Install pre-commit
+      if: inputs.build-type == 'pre-commit'
       shell: bash
       run: pip install pre-commit==${{ env.PRE_COMMIT_VERSION }}
 
@@ -241,9 +247,9 @@ runs:
     # > --------------------------------------------------
     # > pre-commit
     - name: Cached pre-commit
+      if: inputs.build-type == 'pre-commit' && runner.os != 'macOS'
       # Skip on macOS: hashFiles() broken in composite actions after Nov 20 runner update
       # See: https://github.com/actions/runner/issues/3765
-      if: runner.os != 'macOS'
       id: cached-pre-commit
       # https://github.com/actions/cache
       uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3

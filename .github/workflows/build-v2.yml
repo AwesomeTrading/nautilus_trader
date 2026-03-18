@@ -35,6 +35,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
@@ -104,6 +108,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
@@ -139,12 +147,40 @@ jobs:
         run: |
           bash ../scripts/ci/update-pyproject-version.sh
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
+
       # Build the wheel for v2 under python/ using maturin
       - name: Build wheel (v2)
         working-directory: ${{ env.PACKAGE_DIR }}
         run: |
           pip install --upgrade maturin
           maturin build --release --out ../dist
+
+      # Temporary: show whether v2 stub or docstring generation dirtied tracked files while we isolate CI drift
+      - name: Report generated v2 file drift
+        if: always()
+        run: |
+          targets=(
+            python/generate_docstrings.py
+            python/generate_stubs.py
+            crates/pyo3
+            ':(glob)python/nautilus_trader/**/*.pyi'
+            ':(glob)crates/**/src/python/**/*.rs'
+          )
+
+          changes="$(git status --short --untracked-files=all -- "${targets[@]}")"
+
+          if [ -z "$changes" ]; then
+            echo "No generated v2 file drift detected"
+            exit 0
+          fi
+
+          echo "::warning::Tracked or untracked v2 build files changed during the job"
+          printf '%s\n' "$changes"
+          echo
+          git diff --stat HEAD -- "${targets[@]}" || true
 
       - name: Upload wheel artifact
         uses: ./.github/actions/upload-artifact-wheel

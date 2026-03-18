@@ -14,6 +14,7 @@ jobs:
     env:
       BUILD_MODE: release
       RUST_BACKTRACE: 1
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/performance-py3.12
       SCCACHE_CACHE_SIZE: 1G
     # yamllint disable rule:line-length
     services:
@@ -41,9 +42,12 @@ jobs:
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
         with:
           egress-policy: ${{ vars.STEP_SECURITY_EGRESS_POLICY || 'block' }}
+          # Required for CodSpeed results upload
           allowed-endpoints: >-
             ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
             ${{ vars.CI_ALLOWED_ENDPOINTS }}
+            api.codspeed.io:443
+            *.s3.eu-west-1.amazonaws.com:443
 
       - name: Checkout repository
         # https://github.com/actions/checkout
@@ -51,6 +55,10 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
 
       - name: Aggressive disk cleanup (pre-setup)
         if: runner.os == 'Linux'
@@ -82,6 +90,8 @@ jobs:
         with:
           python-version: "3.12"
           free-disk-space: "true"
+          rust-cache-key: performance-3.12
+          rust-cache-workspaces: . -> target/performance-py3.12
 
       - name: Prune unused Docker images
         if: runner.os == 'Linux'
@@ -114,6 +124,10 @@ jobs:
           CARGO_PROFILE_BENCH_INCREMENTAL: false
         run: make cargo-ci-benches
 
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
+
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build
         with:
@@ -124,7 +138,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -euxo pipefail
-          rm -rf target || true
+          rm -rf "$CARGO_TARGET_DIR" target || true
           rm -rf ~/.cargo/registry ~/.cargo/git || true
           uv cache prune || true
           rm -rf dist build || true
