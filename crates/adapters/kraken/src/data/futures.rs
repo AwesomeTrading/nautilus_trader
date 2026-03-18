@@ -325,8 +325,7 @@ impl KrakenFuturesDataClient {
 
                         let has_quote_sub = quote_instruments
                             .read()
-                            .map(|guard| guard.contains(&instrument_id))
-                            .unwrap_or(false);
+                            .is_ok_and(|guard| guard.contains(&instrument_id));
 
                         if has_quote_sub {
                             let book = order_books
@@ -348,8 +347,7 @@ impl KrakenFuturesDataClient {
 
                         let has_book_sub = book_instruments
                             .read()
-                            .map(|guard| guard.contains(&instrument_id))
-                            .unwrap_or(false);
+                            .is_ok_and(|guard| guard.contains(&instrument_id));
 
                         if has_book_sub {
                             let api_deltas = OrderBookDeltas_API::new(deltas);
@@ -376,8 +374,7 @@ impl KrakenFuturesDataClient {
 
                         let has_quote_sub = quote_instruments
                             .read()
-                            .map(|guard| guard.contains(&instrument_id))
-                            .unwrap_or(false);
+                            .is_ok_and(|guard| guard.contains(&instrument_id));
 
                         if has_quote_sub && let Some(book) = order_books.get_mut(&instrument_id) {
                             if let Err(e) = book.apply_deltas(&deltas) {
@@ -395,8 +392,7 @@ impl KrakenFuturesDataClient {
 
                         let has_book_sub = book_instruments
                             .read()
-                            .map(|guard| guard.contains(&instrument_id))
-                            .unwrap_or(false);
+                            .is_ok_and(|guard| guard.contains(&instrument_id));
 
                         if has_book_sub {
                             let api_deltas = OrderBookDeltas_API::new(deltas);
