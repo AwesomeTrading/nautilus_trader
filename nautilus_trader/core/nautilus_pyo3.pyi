@@ -9046,6 +9046,23 @@ class KrakenFuturesHttpClient:
         reduce_only: bool = False,
         post_only: bool = False,
     ) -> OrderStatusReport: ...
+    async def submit_orders_batch(
+        self,
+        orders: list[
+            tuple[
+                InstrumentId,
+                ClientOrderId,
+                OrderSide,
+                OrderType,
+                Quantity,
+                TimeInForce,
+                Price | None,
+                Price | None,
+                bool,
+                bool,
+            ]
+        ],
+    ) -> list[str]: ...
     async def modify_order(
         self,
         instrument_id: InstrumentId,

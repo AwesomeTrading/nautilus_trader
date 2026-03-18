@@ -77,6 +77,9 @@ const KRAKEN_GLOBAL_RATE_KEY: &str = "kraken:futures:global";
 /// Maximum orders per batch cancel request for Kraken Futures API.
 const BATCH_CANCEL_LIMIT: usize = 50;
 
+/// Maximum operations per batch order request for Kraken Futures API.
+const BATCH_ORDER_LIMIT: usize = 10;
+
 /// Raw HTTP client for low-level Kraken Futures API operations.
 ///
 /// This client handles request/response operations with the Kraken Futures API,
@@ -876,6 +879,46 @@ impl KrakenFuturesRawHttpClient {
         self.send_authenticated_post(endpoint, post_data).await
     }
 
+    /// Submits multiple orders in a single batch request (requires authentication).
+    pub async fn submit_orders_batch(
+        &self,
+        items: Vec<KrakenFuturesBatchSendItem>,
+    ) -> anyhow::Result<FuturesBatchOrderResponse, KrakenHttpError> {
+        if self.credential.is_none() {
+            return Err(KrakenHttpError::AuthenticationError(
+                "API credentials required for batch orders".to_string(),
+            ));
+        }
+
+        let params = KrakenFuturesBatchOrderParams::new(items);
+        let post_data = params
+            .to_body()
+            .map_err(|e| KrakenHttpError::ParseError(format!("Failed to serialize batch: {e}")))?;
+
+        let endpoint = "/derivatives/api/v3/batchorder";
+        self.send_authenticated_post(endpoint, post_data).await
+    }
+
+    /// Edits multiple orders in a single batch request (requires authentication).
+    pub async fn edit_orders_batch(
+        &self,
+        items: Vec<KrakenFuturesBatchEditItem>,
+    ) -> anyhow::Result<FuturesBatchOrderResponse, KrakenHttpError> {
+        if self.credential.is_none() {
+            return Err(KrakenHttpError::AuthenticationError(
+                "API credentials required for batch orders".to_string(),
+            ));
+        }
+
+        let params = KrakenFuturesBatchOrderParams::new(items);
+        let post_data = params
+            .to_body()
+            .map_err(|e| KrakenHttpError::ParseError(format!("Failed to serialize batch: {e}")))?;
+
+        let endpoint = "/derivatives/api/v3/batchorder";
+        self.send_authenticated_post(endpoint, post_data).await
+    }
+
     /// Cancels all open orders, optionally filtered by symbol (requires authentication).
     pub async fn cancel_all_orders(
         &self,
@@ -1567,20 +1610,9 @@ impl KrakenFuturesHttpClient {
         Ok(all_reports)
     }
 
-    /// Submits a new order to the Kraken Futures exchange.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - Credentials are missing.
-    /// - The instrument is not found in cache.
-    /// - The order type or time in force is not supported.
-    /// - The request fails.
-    /// - The order is rejected.
     #[allow(clippy::too_many_arguments)]
-    pub async fn submit_order(
+    fn build_send_order_params(
         &self,
-        account_id: AccountId,
         instrument_id: InstrumentId,
         client_order_id: ClientOrderId,
         order_side: OrderSide,
@@ -1591,7 +1623,7 @@ impl KrakenFuturesHttpClient {
         trigger_price: Option<Price>,
         reduce_only: bool,
         post_only: bool,
-    ) -> anyhow::Result<OrderStatusReport> {
+    ) -> anyhow::Result<KrakenFuturesSendOrderParams> {
         let instrument = self
             .get_cached_instrument(&instrument_id.symbol.inner())
             .ok_or_else(|| anyhow::anyhow!("Instrument not found in cache: {instrument_id}"))?;
@@ -1623,7 +1655,9 @@ impl KrakenFuturesHttpClient {
                 }
             }
             OrderType::StopMarket | OrderType::StopLimit => KrakenFuturesOrderType::Stop,
-            OrderType::MarketIfTouched => KrakenFuturesOrderType::TakeProfit,
+            OrderType::MarketIfTouched | OrderType::LimitIfTouched => {
+                KrakenFuturesOrderType::TakeProfit
+            }
             _ => anyhow::bail!("Unsupported order type: {order_type:?}"),
         };
 
@@ -1640,16 +1674,13 @@ impl KrakenFuturesHttpClient {
             .size(quantity.to_string())
             .order_type(kraken_order_type);
 
-        // Handle prices based on order type
         match order_type {
             OrderType::StopMarket => {
-                // Stop market orders need stop_price (trigger price)
                 if let Some(trigger) = trigger_price {
                     builder.stop_price(trigger.to_string());
                 }
             }
             OrderType::StopLimit => {
-                // Stop limit orders need both stop_price and limit_price
                 if let Some(trigger) = trigger_price {
                     builder.stop_price(trigger.to_string());
                 }
@@ -1658,8 +1689,7 @@ impl KrakenFuturesHttpClient {
                     builder.limit_price(limit.to_string());
                 }
             }
-            OrderType::MarketIfTouched => {
-                // Take-profit orders need stop_price (trigger price) and optionally limit_price
+            OrderType::MarketIfTouched | OrderType::LimitIfTouched => {
                 if let Some(trigger) = trigger_price {
                     builder.stop_price(trigger.to_string());
                 }
@@ -1669,7 +1699,6 @@ impl KrakenFuturesHttpClient {
                 }
             }
             _ => {
-                // Regular orders just use limit_price
                 if let Some(limit) = price {
                     builder.limit_price(limit.to_string());
                 }
@@ -1680,9 +1709,52 @@ impl KrakenFuturesHttpClient {
             builder.reduce_only(true);
         }
 
-        let params = builder
+        builder
             .build()
-            .map_err(|e| anyhow::anyhow!("Failed to build order params: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Failed to build order params: {e}"))
+    }
+
+    /// Submits a new order to the Kraken Futures exchange.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Credentials are missing.
+    /// - The instrument is not found in cache.
+    /// - The order type or time in force is not supported.
+    /// - The request fails.
+    /// - The order is rejected.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn submit_order(
+        &self,
+        account_id: AccountId,
+        instrument_id: InstrumentId,
+        client_order_id: ClientOrderId,
+        order_side: OrderSide,
+        order_type: OrderType,
+        quantity: Quantity,
+        time_in_force: TimeInForce,
+        price: Option<Price>,
+        trigger_price: Option<Price>,
+        reduce_only: bool,
+        post_only: bool,
+    ) -> anyhow::Result<OrderStatusReport> {
+        let instrument = self
+            .get_cached_instrument(&instrument_id.symbol.inner())
+            .ok_or_else(|| anyhow::anyhow!("Instrument not found in cache: {instrument_id}"))?;
+
+        let params = self.build_send_order_params(
+            instrument_id,
+            client_order_id,
+            order_side,
+            order_type,
+            quantity,
+            time_in_force,
+            price,
+            trigger_price,
+            reduce_only,
+            post_only,
+        )?;
 
         let response = self.inner.send_order_params(&params).await?;
 
@@ -1960,6 +2032,142 @@ impl KrakenFuturesHttpClient {
         }
 
         Ok(total_cancelled)
+    }
+
+    /// Submits multiple orders in a single batch request.
+    ///
+    /// Builds batch send items from order parameters, chunks at the batch limit,
+    /// and returns per-item send statuses.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the batch request fails at the API level.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub async fn submit_orders_batch(
+        &self,
+        orders: Vec<(
+            InstrumentId,
+            ClientOrderId,
+            OrderSide,
+            OrderType,
+            Quantity,
+            TimeInForce,
+            Option<Price>,
+            Option<Price>,
+            bool,
+            bool,
+        )>,
+    ) -> anyhow::Result<Vec<FuturesSendStatus>> {
+        let count = orders.len();
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+
+        // Build params per-item, collecting validation errors individually
+        // so one invalid order does not block the valid ones
+        let mut all_statuses: Vec<Option<FuturesSendStatus>> = vec![None; count];
+        let mut valid_items = Vec::with_capacity(count);
+        let mut valid_indices = Vec::with_capacity(count);
+
+        for (
+            idx,
+            (
+                instrument_id,
+                client_order_id,
+                order_side,
+                order_type,
+                quantity,
+                time_in_force,
+                price,
+                trigger_price,
+                reduce_only,
+                post_only,
+            ),
+        ) in orders.into_iter().enumerate()
+        {
+            match self.build_send_order_params(
+                instrument_id,
+                client_order_id,
+                order_side,
+                order_type,
+                quantity,
+                time_in_force,
+                price,
+                trigger_price,
+                reduce_only,
+                post_only,
+            ) {
+                Ok(params) => {
+                    valid_items.push(KrakenFuturesBatchSendItem::from_params(
+                        params,
+                        idx.to_string(),
+                    ));
+                    valid_indices.push(idx);
+                }
+                Err(e) => {
+                    all_statuses[idx] = Some(FuturesSendStatus {
+                        order_id: None,
+                        status: format!("validation_error: {e}"),
+                        order_events: None,
+                        cli_ord_id: None,
+                        received_time: None,
+                    });
+                }
+            }
+        }
+
+        if valid_items.is_empty() {
+            return Ok(all_statuses.into_iter().flatten().collect());
+        }
+
+        let mut batch_statuses: Vec<FuturesSendStatus> = Vec::with_capacity(valid_items.len());
+
+        for chunk in valid_items.chunks(BATCH_ORDER_LIMIT) {
+            match self.inner.submit_orders_batch(chunk.to_vec()).await {
+                Ok(response) => {
+                    if response.result == KrakenApiResult::Success {
+                        batch_statuses.extend(response.batch_status);
+                    } else {
+                        let error_msg = response
+                            .batch_status
+                            .first()
+                            .map_or("Unknown error", |s| s.status.as_str());
+                        for _ in 0..chunk.len() {
+                            batch_statuses.push(FuturesSendStatus {
+                                order_id: None,
+                                status: format!("api_error: {error_msg}"),
+                                order_events: None,
+                                cli_ord_id: None,
+                                received_time: None,
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    // Fill remaining valid items with error statuses
+                    let remaining = valid_items.len() - batch_statuses.len();
+                    for _ in 0..remaining {
+                        batch_statuses.push(FuturesSendStatus {
+                            order_id: None,
+                            status: format!("batch_error: {e}"),
+                            order_events: None,
+                            cli_ord_id: None,
+                            received_time: None,
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Map batch statuses back to original order positions
+        for (batch_idx, &original_idx) in valid_indices.iter().enumerate() {
+            if let Some(status) = batch_statuses.get(batch_idx) {
+                all_statuses[original_idx] = Some(status.clone());
+            }
+        }
+
+        Ok(all_statuses.into_iter().flatten().collect())
     }
 }
 

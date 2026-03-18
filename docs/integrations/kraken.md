@@ -184,7 +184,7 @@ InstrumentId.from_str("PF_XBTUSD.KRAKEN")  # Perpetual fixed-margin BTC
 | `STOP_MARKET`          | ✓    | ✓       | Conditional market order (stop-loss).      |
 | `MARKET_IF_TOUCHED`    | ✓    | ✓       | Conditional market order (take-profit).    |
 | `STOP_LIMIT`           | ✓    | ✓       | Conditional limit order (stop-loss-limit). |
-| `LIMIT_IF_TOUCHED`     | ✓    | -       | *Futures: not yet implemented*.            |
+| `LIMIT_IF_TOUCHED`     | ✓    | ✓       | Maps to `take_profit` with `limit_price`.  |
 
 ### Time in force
 
@@ -193,7 +193,7 @@ InstrumentId.from_str("PF_XBTUSD.KRAKEN")  # Perpetual fixed-margin BTC
 | `GTC`         | ✓    | ✓       | Good Till Canceled.                                 |
 | `GTD`         | ✓    | -       | Good Till Date (Spot only, requires `expire_time`). |
 | `IOC`         | ✓    | ✓       | Immediate or Cancel.                                |
-| `FOK`         | -    | -       | *Not supported by Kraken*.                          |
+| `FOK`         | ✓    | -       | Spot limit orders only.                             |
 
 :::note
 **Market orders** are inherently immediate and do not support time-in-force.
@@ -211,7 +211,7 @@ InstrumentId.from_str("PF_XBTUSD.KRAKEN")  # Perpetual fixed-margin BTC
 
 | Operation          | Spot | Futures | Notes                                        |
 |--------------------|------|---------|----------------------------------------------|
-| Batch Submit       | -    | -       | *Not yet implemented*.                       |
+| Batch Submit       | -    | ✓       | Futures only, auto-chunks into batches of 10.|
 | Batch Modify       | -    | -       | *Not yet implemented* (Futures only).        |
 | Batch Cancel       | ✓    | ✓       | Auto-chunks into batches of 50.              |
 
@@ -364,6 +364,29 @@ Ledger/trade history calls add +2 to the counter; other calls add +1.
 Kraken may temporarily block IP addresses that exceed rate limits. The adapter
 automatically queues requests when limits are approached.
 :::
+
+### Reconciliation interval guidance
+
+The execution engine's `open_check_interval_secs` and
+`position_check_interval_secs` settings create sustained REST API load that
+can exhaust Kraken's counter-based rate limit, especially on the Starter tier
+where the counter decays at only 0.33/sec. Each open-order check generates
+1-3 REST calls (+1 or +2 counter each), and at short intervals the counter
+overflows before it can decay, causing `EAPI:Rate limit exceeded` errors.
+
+Recommended settings for Kraken:
+
+```python
+exec_engine=LiveExecEngineConfig(
+    reconciliation=True,
+    open_check_interval_secs=30.0,    # 30s minimum for Starter tier
+    position_check_interval_secs=120.0,  # 2 minutes
+)
+```
+
+Higher-tier accounts with faster counter decay can use shorter intervals.
+If you see `EAPI:Rate limit exceeded` errors in the logs, increase these
+intervals or reduce `max_requests_per_second` in the adapter config.
 
 ## Configuration
 

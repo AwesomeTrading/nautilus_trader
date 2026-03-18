@@ -55,6 +55,7 @@ from nautilus_trader.model.enums import AccountType
 from nautilus_trader.model.enums import OmsType
 from nautilus_trader.model.enums import OrderSide
 from nautilus_trader.model.enums import OrderStatus
+from nautilus_trader.model.enums import OrderType
 from nautilus_trader.model.enums import TimeInForce
 from nautilus_trader.model.enums import order_side_to_str
 from nautilus_trader.model.events import AccountState
@@ -656,7 +657,7 @@ class KrakenExecutionClient(LiveExecutionClient):
             )
             return
 
-        # Reject GTD orders for Futures (not supported by Kraken Futures API)
+        # Deny GTD orders for Futures (not supported by Kraken Futures API)
         if (
             product_type == nautilus_pyo3.KrakenProductType.FUTURES
             and order.time_in_force == TimeInForce.GTD
@@ -666,6 +667,21 @@ class KrakenExecutionClient(LiveExecutionClient):
                 instrument_id=order.instrument_id,
                 client_order_id=order.client_order_id,
                 reason="UNSUPPORTED_TIME_IN_FORCE: GTD not supported for Kraken Futures",
+                ts_event=self._clock.timestamp_ns(),
+            )
+            return
+
+        # Deny FOK for non-limit orders on Spot (Kraken only supports FOK on plain limits)
+        if (
+            product_type == nautilus_pyo3.KrakenProductType.SPOT
+            and order.time_in_force == TimeInForce.FOK
+            and order.order_type != OrderType.LIMIT
+        ):
+            self.generate_order_denied(
+                strategy_id=order.strategy_id,
+                instrument_id=order.instrument_id,
+                client_order_id=order.client_order_id,
+                reason="UNSUPPORTED_TIME_IN_FORCE: FOK only supported for LIMIT orders on Kraken Spot",
                 ts_event=self._clock.timestamp_ns(),
             )
             return
@@ -772,10 +788,22 @@ class KrakenExecutionClient(LiveExecutionClient):
             )
 
     async def _submit_order_list(self, command: SubmitOrderList) -> None:
-        self._log.warning(
-            "Kraken does not support batch order submission, submitting orders individually",
-        )
+        spot_orders: list[Order] = []
+        futures_orders: list[Order] = []
+
         for order in command.order_list.orders:
+            if order.is_closed:
+                self._log.warning(f"Cannot submit already closed order: {order}")
+                continue
+            symbol = order.instrument_id.symbol.value
+            product_type = nautilus_pyo3.kraken_product_type_from_symbol(symbol)
+            if product_type == KrakenProductType.FUTURES:
+                futures_orders.append(order)
+            else:
+                spot_orders.append(order)
+
+        # Spot: submit individually (no batch API)
+        for order in spot_orders:
             await self._submit_order(
                 SubmitOrder(
                     trader_id=command.trader_id,
@@ -785,6 +813,160 @@ class KrakenExecutionClient(LiveExecutionClient):
                     ts_init=command.ts_init,
                 ),
             )
+
+        # Futures: batch limit/stop orders, submit market orders individually
+        # (Kraken batch endpoint only supports limit and stop orders)
+        futures_batch_orders: list[Order] = []
+        for order in futures_orders:
+            if order.order_type == OrderType.MARKET:
+                await self._submit_order(
+                    SubmitOrder(
+                        trader_id=command.trader_id,
+                        strategy_id=command.strategy_id,
+                        order=order,
+                        command_id=command.id,
+                        ts_init=command.ts_init,
+                    ),
+                )
+            else:
+                futures_batch_orders.append(order)
+
+        if futures_batch_orders and self._http_client_futures is not None:
+            await self._submit_futures_order_list_batch(futures_batch_orders, command)
+        elif futures_batch_orders:
+            self._log.warning(
+                "No futures HTTP client, submitting futures orders individually",
+            )
+            for order in futures_orders:
+                await self._submit_order(
+                    SubmitOrder(
+                        trader_id=command.trader_id,
+                        strategy_id=command.strategy_id,
+                        order=order,
+                        command_id=command.id,
+                        ts_init=command.ts_init,
+                    ),
+                )
+
+    async def _submit_futures_order_list_batch(
+        self,
+        orders: list[Order],
+        command: SubmitOrderList,
+    ) -> None:
+        futures_client = cast(nautilus_pyo3.KrakenFuturesHttpClient, self._http_client_futures)
+        batch_params = []
+        valid_orders: list[Order] = []
+
+        for order in orders:
+            # Deny GTD before emitting submitted (matches the single-order path)
+            if order.time_in_force == TimeInForce.GTD:
+                self.generate_order_denied(
+                    strategy_id=order.strategy_id,
+                    instrument_id=order.instrument_id,
+                    client_order_id=order.client_order_id,
+                    reason="UNSUPPORTED_TIME_IN_FORCE: GTD not supported for Kraken Futures",
+                    ts_event=self._clock.timestamp_ns(),
+                )
+                continue
+
+            self.generate_order_submitted(
+                strategy_id=order.strategy_id,
+                instrument_id=order.instrument_id,
+                client_order_id=order.client_order_id,
+                ts_event=self._clock.timestamp_ns(),
+            )
+
+            try:
+                pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(
+                    order.instrument_id.value,
+                )
+                pyo3_client_order_id = nautilus_pyo3.ClientOrderId(order.client_order_id.value)
+                pyo3_trader_id = nautilus_pyo3.TraderId(command.trader_id.value)
+                pyo3_strategy_id = nautilus_pyo3.StrategyId(order.strategy_id.value)
+
+                if self._ws_client_futures is not None:
+                    self._ws_client_futures.cache_client_order(
+                        pyo3_client_order_id,
+                        None,
+                        pyo3_instrument_id,
+                        pyo3_trader_id,
+                        pyo3_strategy_id,
+                    )
+
+                pyo3_order_side = order_side_to_pyo3(order.side)
+                pyo3_order_type = order_type_to_pyo3(order.order_type)
+                pyo3_quantity = nautilus_pyo3.Quantity.from_str(str(order.quantity))
+                pyo3_time_in_force = (
+                    time_in_force_to_pyo3(order.time_in_force)
+                    if order.time_in_force
+                    else nautilus_pyo3.TimeInForce.GTC
+                )
+                pyo3_price = (
+                    nautilus_pyo3.Price.from_str(str(order.price)) if order.has_price else None
+                )
+                pyo3_trigger_price = (
+                    nautilus_pyo3.Price.from_str(str(order.trigger_price))
+                    if hasattr(order, "trigger_price") and order.trigger_price
+                    else None
+                )
+
+                batch_params.append(
+                    (
+                        pyo3_instrument_id,
+                        pyo3_client_order_id,
+                        pyo3_order_side,
+                        pyo3_order_type,
+                        pyo3_quantity,
+                        pyo3_time_in_force,
+                        pyo3_price,
+                        pyo3_trigger_price,
+                        order.is_reduce_only,
+                        order.is_post_only,
+                    ),
+                )
+                valid_orders.append(order)
+            except Exception as e:
+                self.generate_order_rejected(
+                    strategy_id=order.strategy_id,
+                    instrument_id=order.instrument_id,
+                    client_order_id=order.client_order_id,
+                    reason=str(e),
+                    ts_event=self._clock.timestamp_ns(),
+                )
+
+        if not batch_params:
+            return
+
+        try:
+            statuses = await futures_client.submit_orders_batch(batch_params)
+            placed = sum(1 for s in statuses if s in ("placed", "filled"))
+            self._log.debug(
+                f"Batch submitted {placed}/{len(valid_orders)} futures orders",
+            )
+
+            for i, status in enumerate(statuses):
+                if status not in ("placed", "filled"):
+                    order = valid_orders[i]
+                    due_post_only = status == "postWouldExecute"
+                    self.generate_order_rejected(
+                        strategy_id=order.strategy_id,
+                        instrument_id=order.instrument_id,
+                        client_order_id=order.client_order_id,
+                        reason=f"Batch item rejected: {status}",
+                        ts_event=self._clock.timestamp_ns(),
+                        due_post_only=due_post_only,
+                    )
+        except Exception as e:
+            error_str = str(e)
+            self._log.error(f"Batch order submission failed: {error_str}")
+            for order in valid_orders:
+                self.generate_order_rejected(
+                    strategy_id=order.strategy_id,
+                    instrument_id=order.instrument_id,
+                    client_order_id=order.client_order_id,
+                    reason=error_str,
+                    ts_event=self._clock.timestamp_ns(),
+                )
 
     async def _modify_order(self, command: ModifyOrder) -> None:
         order: Order | None = self._cache.order(command.client_order_id)

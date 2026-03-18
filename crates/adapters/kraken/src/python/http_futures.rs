@@ -495,3 +495,42 @@ impl KrakenFuturesHttpClient {
         })
     }
 }
+
+// Separate block to avoid pyo3_stub_gen trait bound issue with 10-element tuples.
+// Stub is maintained manually in nautilus_pyo3.pyi.
+#[pymethods]
+impl KrakenFuturesHttpClient {
+    /// Submits multiple orders in a single batch request.
+    ///
+    /// Returns a list of per-item status strings aligned with the input order.
+    #[pyo3(name = "submit_orders_batch")]
+    #[allow(clippy::type_complexity)]
+    fn py_submit_orders_batch<'py>(
+        &self,
+        py: Python<'py>,
+        orders: Vec<(
+            InstrumentId,
+            ClientOrderId,
+            OrderSide,
+            OrderType,
+            Quantity,
+            TimeInForce,
+            Option<Price>,
+            Option<Price>,
+            bool,
+            bool,
+        )>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let statuses = client
+                .submit_orders_batch(orders)
+                .await
+                .map_err(to_pyruntime_err)?;
+
+            let result: Vec<String> = statuses.into_iter().map(|s| s.status).collect();
+            Ok(result)
+        })
+    }
+}

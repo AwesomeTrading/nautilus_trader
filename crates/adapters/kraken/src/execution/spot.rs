@@ -42,7 +42,7 @@ use nautilus_core::{
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
-    enums::{AccountType, OmsType, OrderSide},
+    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce},
     identifiers::{AccountId, ClientId, ClientOrderId, InstrumentId, Symbol, Venue},
     instruments::{Instrument, InstrumentAny},
     orders::{Order, OrderAny},
@@ -184,14 +184,24 @@ impl KrakenSpotExecutionClient {
             return;
         }
 
+        let order_type = order.order_type();
+        let time_in_force = order.time_in_force();
+
+        // FOK only supported for plain limit orders on Kraken Spot
+        if time_in_force == TimeInForce::Fok && order_type != OrderType::Limit {
+            self.emitter.emit_order_denied(
+                order,
+                "FOK time in force only supported for LIMIT orders on Kraken Spot",
+            );
+            return;
+        }
+
         let account_id = self.core.account_id;
         let client_order_id = order.client_order_id();
         let strategy_id = order.strategy_id();
         let instrument_id = order.instrument_id();
         let order_side = order.order_side();
-        let order_type = order.order_type();
         let quantity = order.quantity();
-        let time_in_force = order.time_in_force();
         let expire_time = order.expire_time();
         let price = order.price();
         let trigger_price = order.trigger_price();

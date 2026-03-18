@@ -167,6 +167,122 @@ impl KrakenFuturesBatchCancelItem {
     }
 }
 
+/// A batch send item for `POST /derivatives/api/v3/batchorder`.
+///
+/// # References
+/// - <https://docs.kraken.com/api/docs/futures-api/trading/send-batch-order/>
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KrakenFuturesBatchSendItem {
+    /// The operation type, always "send" for this item.
+    pub order: String,
+
+    /// An order tag to correlate batch responses with requests.
+    pub order_tag: String,
+
+    /// The symbol of the futures contract.
+    pub symbol: Ustr,
+
+    /// The order side.
+    pub side: KrakenOrderSide,
+
+    /// The order type.
+    pub order_type: KrakenFuturesOrderType,
+
+    /// The order size in contracts.
+    pub size: String,
+
+    /// Optional client order ID for tracking.
+    #[serde(rename = "cliOrdId", skip_serializing_if = "Option::is_none")]
+    pub cli_ord_id: Option<String>,
+
+    /// Limit price (required for limit orders).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_price: Option<String>,
+
+    /// Stop/trigger price (required for stop orders).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_price: Option<String>,
+
+    /// If true, the order will only reduce an existing position.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reduce_only: Option<bool>,
+
+    /// Trigger signal for stop orders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trigger_signal: Option<KrakenTriggerSignal>,
+}
+
+impl KrakenFuturesBatchSendItem {
+    /// Creates a batch send item from send order params.
+    #[must_use]
+    pub fn from_params(params: KrakenFuturesSendOrderParams, order_tag: impl Into<String>) -> Self {
+        Self {
+            order: "send".to_string(),
+            order_tag: order_tag.into(),
+            symbol: params.symbol,
+            side: params.side,
+            order_type: params.order_type,
+            size: params.size,
+            cli_ord_id: params.cli_ord_id,
+            limit_price: params.limit_price,
+            stop_price: params.stop_price,
+            reduce_only: params.reduce_only,
+            trigger_signal: params.trigger_signal,
+        }
+    }
+}
+
+/// A batch edit item for `POST /derivatives/api/v3/batchorder`.
+///
+/// # References
+/// - <https://docs.kraken.com/api/docs/futures-api/trading/send-batch-order/>
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KrakenFuturesBatchEditItem {
+    /// The operation type, always "edit" for this item.
+    pub order: String,
+
+    /// An order tag to correlate batch responses with requests.
+    pub order_tag: String,
+
+    /// The venue order ID to edit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_id: Option<String>,
+
+    /// The client order ID to edit.
+    #[serde(rename = "cliOrdId", skip_serializing_if = "Option::is_none")]
+    pub cli_ord_id: Option<String>,
+
+    /// New order size.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<String>,
+
+    /// New limit price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit_price: Option<String>,
+
+    /// New stop price.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_price: Option<String>,
+}
+
+impl KrakenFuturesBatchEditItem {
+    /// Creates a batch edit item from edit order params.
+    #[must_use]
+    pub fn from_params(params: KrakenFuturesEditOrderParams, order_tag: impl Into<String>) -> Self {
+        Self {
+            order: "edit".to_string(),
+            order_tag: order_tag.into(),
+            order_id: params.order_id,
+            cli_ord_id: params.cli_ord_id,
+            size: params.size,
+            limit_price: params.limit_price,
+            stop_price: params.stop_price,
+        }
+    }
+}
+
 /// Parameters for batch order operations via `POST /derivatives/api/v3/batchorder`.
 ///
 /// The batchorder endpoint uses a special body format: `json={"batchOrder": [...]}`
@@ -355,5 +471,104 @@ mod tests {
         assert_eq!(params.order_id, Some("abc-123".to_string()));
         assert_eq!(params.size, Some("2000".to_string()));
         assert_eq!(params.limit_price, Some("51000.0".to_string()));
+    }
+
+    #[rstest]
+    fn test_batch_send_item_from_params() {
+        let params = KrakenFuturesSendOrderParamsBuilder::default()
+            .symbol("PI_XBTUSD")
+            .side(KrakenOrderSide::Buy)
+            .order_type(KrakenFuturesOrderType::Limit)
+            .size("1000")
+            .limit_price("50000.0")
+            .cli_ord_id("test-batch-1")
+            .build()
+            .unwrap();
+
+        let item = KrakenFuturesBatchSendItem::from_params(params, "0");
+
+        assert_eq!(item.order, "send");
+        assert_eq!(item.order_tag, "0");
+        assert_eq!(item.symbol, Ustr::from("PI_XBTUSD"));
+        assert_eq!(item.side, KrakenOrderSide::Buy);
+        assert_eq!(item.order_type, KrakenFuturesOrderType::Limit);
+        assert_eq!(item.size, "1000");
+        assert_eq!(item.limit_price, Some("50000.0".to_string()));
+        assert_eq!(item.cli_ord_id, Some("test-batch-1".to_string()));
+    }
+
+    #[rstest]
+    fn test_batch_send_item_serialization() {
+        let params = KrakenFuturesSendOrderParamsBuilder::default()
+            .symbol("PI_XBTUSD")
+            .side(KrakenOrderSide::Sell)
+            .order_type(KrakenFuturesOrderType::Market)
+            .size("500")
+            .reduce_only(true)
+            .build()
+            .unwrap();
+
+        let item = KrakenFuturesBatchSendItem::from_params(params, "1");
+        let json = serde_json::to_string(&item).unwrap();
+
+        assert!(json.contains("\"order\":\"send\""));
+        assert!(json.contains("\"orderTag\":\"1\""));
+        assert!(json.contains("\"orderType\":\"mkt\""));
+        assert!(json.contains("\"reduceOnly\":true"));
+    }
+
+    #[rstest]
+    fn test_batch_edit_item_from_params() {
+        let params = KrakenFuturesEditOrderParamsBuilder::default()
+            .order_id("order-123")
+            .size("2000")
+            .limit_price("51000.0")
+            .build()
+            .unwrap();
+
+        let item = KrakenFuturesBatchEditItem::from_params(params, "0");
+
+        assert_eq!(item.order, "edit");
+        assert_eq!(item.order_tag, "0");
+        assert_eq!(item.order_id, Some("order-123".to_string()));
+        assert_eq!(item.size, Some("2000".to_string()));
+        assert_eq!(item.limit_price, Some("51000.0".to_string()));
+    }
+
+    #[rstest]
+    fn test_batch_edit_item_serialization() {
+        let params = KrakenFuturesEditOrderParamsBuilder::default()
+            .cli_ord_id("my-order")
+            .limit_price("55000.0")
+            .build()
+            .unwrap();
+
+        let item = KrakenFuturesBatchEditItem::from_params(params, "2");
+        let json = serde_json::to_string(&item).unwrap();
+
+        assert!(json.contains("\"order\":\"edit\""));
+        assert!(json.contains("\"orderTag\":\"2\""));
+        assert!(json.contains("\"cliOrdId\":\"my-order\""));
+        assert!(json.contains("\"limitPrice\":\"55000.0\""));
+    }
+
+    #[rstest]
+    fn test_batch_order_params_to_body() {
+        let params = KrakenFuturesSendOrderParamsBuilder::default()
+            .symbol("PI_XBTUSD")
+            .side(KrakenOrderSide::Buy)
+            .order_type(KrakenFuturesOrderType::Limit)
+            .size("100")
+            .limit_price("50000.0")
+            .build()
+            .unwrap();
+
+        let item = KrakenFuturesBatchSendItem::from_params(params, "0");
+        let batch = KrakenFuturesBatchOrderParams::new(vec![item]);
+        let body = batch.to_body().unwrap();
+
+        assert!(body.starts_with("json="));
+        assert!(body.contains("\"batchOrder\""));
+        assert!(body.contains("\"order\":\"send\""));
     }
 }

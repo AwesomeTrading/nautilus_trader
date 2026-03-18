@@ -87,9 +87,7 @@ fn compute_time_in_force(
         match time_in_force {
             TimeInForce::Gtc => Ok((None, None)), // Default, no parameter needed
             TimeInForce::Ioc => Ok((Some("IOC".to_string()), None)),
-            TimeInForce::Fok => {
-                anyhow::bail!("FOK time in force not supported by Kraken Spot API")
-            }
+            TimeInForce::Fok => Ok((Some("FOK".to_string()), None)),
             TimeInForce::Gtd => {
                 let expire = expire_time.ok_or_else(|| {
                     anyhow::anyhow!("GTD time in force requires expire_time parameter")
@@ -1734,12 +1732,16 @@ impl KrakenSpotHttpClient {
             _ => anyhow::bail!("Unsupported order type: {order_type:?}"),
         };
 
-        // Note: timeinforce is only valid for limit-type orders, not market orders
         let mut oflags = Vec::new();
         let is_limit_order = matches!(
             order_type,
             OrderType::Limit | OrderType::StopLimit | OrderType::LimitIfTouched
         );
+
+        // FOK is only valid for plain limit orders, not conditional orders
+        if time_in_force == TimeInForce::Fok && order_type != OrderType::Limit {
+            anyhow::bail!("FOK time in force only supported for LIMIT orders on Kraken Spot");
+        }
 
         let (timeinforce, expiretm) =
             compute_time_in_force(is_limit_order, time_in_force, expire_time)?;
@@ -2034,6 +2036,7 @@ mod tests {
     #[rstest]
     #[case::gtc_limit(true, TimeInForce::Gtc, None, None, None)]
     #[case::ioc_limit(true, TimeInForce::Ioc, None, Some("IOC"), None)]
+    #[case::fok_limit(true, TimeInForce::Fok, None, Some("FOK"), None)]
     #[case::gtd_limit_with_expire(
         true,
         TimeInForce::Gtd,
@@ -2057,7 +2060,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::fok_not_supported(TimeInForce::Fok, None, "FOK")]
     #[case::gtd_missing_expire(TimeInForce::Gtd, None, "expire_time")]
     fn test_compute_time_in_force_errors(
         #[case] tif: TimeInForce,

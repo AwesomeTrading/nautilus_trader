@@ -939,9 +939,103 @@ impl ExecutionClient for KrakenFuturesExecutionClient {
             orders.len()
         );
 
+        let mut order_tuples = Vec::with_capacity(orders.len());
+        let mut order_meta = Vec::with_capacity(orders.len());
+
         for order in &orders {
-            self.submit_single_order(order, "submit_order_list");
+            if order.is_closed() {
+                log::warn!(
+                    "Cannot submit closed order: client_order_id={}",
+                    order.client_order_id()
+                );
+                continue;
+            }
+
+            // Kraken batch endpoint only supports limit and stop orders,
+            // submit market orders individually
+            if order.order_type() == OrderType::Market {
+                self.submit_single_order(order, "submit_order_list");
+                continue;
+            }
+
+            let client_order_id = order.client_order_id();
+            let kraken_cl_ord_id = truncate_cl_ord_id(&client_order_id);
+
+            if kraken_cl_ord_id != client_order_id.as_str()
+                && let Ok(mut map) = self.truncated_id_map.write()
+            {
+                map.insert(kraken_cl_ord_id, client_order_id);
+            }
+
+            self.emitter.emit_order_submitted(order);
+
+            order_tuples.push((
+                order.instrument_id(),
+                client_order_id,
+                order.order_side(),
+                order.order_type(),
+                order.quantity(),
+                order.time_in_force(),
+                order.price(),
+                order.trigger_price(),
+                order.is_reduce_only(),
+                order.is_post_only(),
+            ));
+
+            order_meta.push((order.strategy_id(), order.instrument_id(), client_order_id));
         }
+
+        if order_tuples.is_empty() {
+            return Ok(());
+        }
+
+        let http = self.http.clone();
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
+
+        self.spawn_task("submit_order_list", async move {
+            match http.submit_orders_batch(order_tuples).await {
+                Ok(statuses) => {
+                    for (i, status) in statuses.iter().enumerate() {
+                        if status.status != "placed"
+                            && status.status != "filled"
+                            && let Some((strategy_id, instrument_id, client_order_id)) =
+                                order_meta.get(i)
+                        {
+                            let ts_event = clock.get_time_ns();
+                            let error_msg = format!(
+                                "submit_order_list batch item rejected: {}",
+                                status.status,
+                            );
+                            emitter.emit_order_rejected_event(
+                                *strategy_id,
+                                *instrument_id,
+                                *client_order_id,
+                                &error_msg,
+                                ts_event,
+                                status.status == "postWouldExecute",
+                            );
+                        }
+                    }
+                    Ok(())
+                }
+                Err(e) => {
+                    let ts_event = clock.get_time_ns();
+                    for (strategy_id, instrument_id, client_order_id) in &order_meta {
+                        let error_msg = format!("submit_order_list batch error: {e}");
+                        emitter.emit_order_rejected_event(
+                            *strategy_id,
+                            *instrument_id,
+                            *client_order_id,
+                            &error_msg,
+                            ts_event,
+                            false,
+                        );
+                    }
+                    Ok(())
+                }
+            }
+        });
 
         Ok(())
     }

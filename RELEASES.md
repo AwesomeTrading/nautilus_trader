@@ -11,6 +11,7 @@ Released on TBD (UTC).
 - Added Binance instrument status polling in Rust
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
+- Added Kraken FOK, `LimitIfTouched` orders, and batch submit
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
 - Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek

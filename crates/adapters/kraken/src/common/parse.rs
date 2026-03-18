@@ -761,7 +761,12 @@ pub fn parse_futures_order_status_report(
     let venue_order_id = VenueOrderId::new(&order.order_id);
 
     let order_side = order.side.into();
-    let order_type = order.order_type.into();
+    let order_type: OrderType = order.order_type.into();
+    let order_type = if order_type == OrderType::MarketIfTouched && order.limit_price.is_some() {
+        OrderType::LimitIfTouched
+    } else {
+        order_type
+    };
     let order_status = order.status.into();
 
     let quantity = Quantity::new(
@@ -835,7 +840,12 @@ pub fn parse_futures_order_event_status_report(
     let venue_order_id = VenueOrderId::new(&event.order_id);
 
     let order_side = event.side.into();
-    let order_type = event.order_type.into();
+    let order_type: OrderType = event.order_type.into();
+    let order_type = if order_type == OrderType::MarketIfTouched && event.limit_price.is_some() {
+        OrderType::LimitIfTouched
+    } else {
+        order_type
+    };
 
     // Infer status from filled quantity since historical events don't include explicit status
     let order_status = if event.filled >= event.quantity {
@@ -1094,12 +1104,19 @@ mod tests {
     use indexmap::IndexMap;
     use nautilus_model::{
         data::BarSpecification,
-        enums::{AggregationSource, BarAggregation, OrderStatus, PriceType},
+        enums::{AggregationSource, BarAggregation, OrderSide, OrderStatus, PriceType},
+        instruments::crypto_perpetual::CryptoPerpetual,
     };
     use rstest::rstest;
 
     use super::*;
-    use crate::http::models::AssetPairsResponse;
+    use crate::{
+        common::enums::{KrakenFuturesOrderStatus, KrakenFuturesOrderType, KrakenOrderSide},
+        http::{
+            futures::models::{FuturesOpenOrder, FuturesOrderEvent},
+            models::AssetPairsResponse,
+        },
+    };
 
     const TS: UnixNanos = UnixNanos::new(1_700_000_000_000_000_000);
 
@@ -1489,6 +1506,157 @@ mod tests {
         assert_eq!(report.venue_order_id.as_str(), order_id);
         assert_eq!(report.order_status, OrderStatus::Accepted);
         assert!(report.quantity.as_f64() > 0.0);
+    }
+
+    fn create_mock_perp() -> InstrumentAny {
+        let instrument_id = InstrumentId::new(Symbol::new("PI_XBTUSD"), *KRAKEN_VENUE);
+        InstrumentAny::CryptoPerpetual(CryptoPerpetual::new(
+            instrument_id,
+            Symbol::new("PI_XBTUSD"),
+            Currency::BTC(),
+            Currency::USD(),
+            Currency::USD(),
+            false,
+            1,
+            0,
+            Price::from("0.5"),
+            Quantity::from("1"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            TS,
+            TS,
+        ))
+    }
+
+    #[rstest]
+    fn test_parse_futures_order_status_report_market_if_touched() {
+        let order = FuturesOpenOrder {
+            order_id: "tp-001".to_string(),
+            symbol: "PI_XBTUSD".to_string(),
+            side: KrakenOrderSide::Buy,
+            order_type: KrakenFuturesOrderType::TakeProfit,
+            limit_price: None,
+            stop_price: Some(36000.0),
+            unfilled_size: 500.0,
+            received_time: "2023-11-14T22:13:20.000Z".to_string(),
+            status: KrakenFuturesOrderStatus::Untouched,
+            filled_size: 0.0,
+            reduce_only: Some(true),
+            last_update_time: "2023-11-14T22:13:20.000Z".to_string(),
+            trigger_signal: None,
+            cli_ord_id: Some("my-tp-1".to_string()),
+        };
+        let instrument = create_mock_perp();
+        let account_id = AccountId::new("KRAKEN-001");
+
+        let report =
+            parse_futures_order_status_report(&order, &instrument, account_id, TS).unwrap();
+
+        assert_eq!(report.order_type, OrderType::MarketIfTouched);
+        assert_eq!(report.trigger_price.unwrap().as_f64(), 36000.0);
+        assert!(report.price.is_none());
+        assert!(report.reduce_only);
+        assert_eq!(report.order_status, OrderStatus::Accepted);
+    }
+
+    #[rstest]
+    fn test_parse_futures_order_status_report_limit_if_touched() {
+        let order = FuturesOpenOrder {
+            order_id: "tpl-001".to_string(),
+            symbol: "PI_XBTUSD".to_string(),
+            side: KrakenOrderSide::Sell,
+            order_type: KrakenFuturesOrderType::TakeProfit,
+            limit_price: Some(35500.0),
+            stop_price: Some(36000.0),
+            unfilled_size: 500.0,
+            received_time: "2023-11-14T22:13:20.000Z".to_string(),
+            status: KrakenFuturesOrderStatus::Untouched,
+            filled_size: 0.0,
+            reduce_only: None,
+            last_update_time: "2023-11-14T22:13:20.000Z".to_string(),
+            trigger_signal: None,
+            cli_ord_id: Some("my-tpl-1".to_string()),
+        };
+        let instrument = create_mock_perp();
+        let account_id = AccountId::new("KRAKEN-001");
+
+        let report =
+            parse_futures_order_status_report(&order, &instrument, account_id, TS).unwrap();
+
+        assert_eq!(report.order_type, OrderType::LimitIfTouched);
+        assert_eq!(report.trigger_price.unwrap().as_f64(), 36000.0);
+        assert_eq!(report.price.unwrap().as_f64(), 35500.0);
+        assert_eq!(report.order_side, OrderSide::Sell);
+        assert!(!report.reduce_only);
+    }
+
+    #[rstest]
+    fn test_parse_futures_order_event_market_if_touched() {
+        let event = FuturesOrderEvent {
+            order_id: "tp-evt-001".to_string(),
+            cli_ord_id: None,
+            order_type: KrakenFuturesOrderType::TakeProfit,
+            symbol: "PI_XBTUSD".to_string(),
+            side: KrakenOrderSide::Buy,
+            quantity: 100.0,
+            filled: 100.0,
+            limit_price: None,
+            stop_price: Some(40000.0),
+            timestamp: "2023-11-14T22:13:20.000Z".to_string(),
+            last_update_timestamp: "2023-11-14T22:13:21.000Z".to_string(),
+            reduce_only: false,
+        };
+        let instrument = create_mock_perp();
+        let account_id = AccountId::new("KRAKEN-001");
+
+        let report =
+            parse_futures_order_event_status_report(&event, &instrument, account_id, TS).unwrap();
+
+        assert_eq!(report.order_type, OrderType::MarketIfTouched);
+        assert_eq!(report.trigger_price.unwrap().as_f64(), 40000.0);
+        assert!(report.price.is_none());
+        assert_eq!(report.order_status, OrderStatus::Filled);
+    }
+
+    #[rstest]
+    fn test_parse_futures_order_event_limit_if_touched() {
+        let event = FuturesOrderEvent {
+            order_id: "tpl-evt-001".to_string(),
+            cli_ord_id: Some("my-tpl-evt".to_string()),
+            order_type: KrakenFuturesOrderType::TakeProfit,
+            symbol: "PI_XBTUSD".to_string(),
+            side: KrakenOrderSide::Sell,
+            quantity: 200.0,
+            filled: 0.0,
+            limit_price: Some(39500.0),
+            stop_price: Some(40000.0),
+            timestamp: "2023-11-14T22:13:20.000Z".to_string(),
+            last_update_timestamp: "2023-11-14T22:13:21.000Z".to_string(),
+            reduce_only: true,
+        };
+        let instrument = create_mock_perp();
+        let account_id = AccountId::new("KRAKEN-001");
+
+        let report =
+            parse_futures_order_event_status_report(&event, &instrument, account_id, TS).unwrap();
+
+        assert_eq!(report.order_type, OrderType::LimitIfTouched);
+        assert_eq!(report.trigger_price.unwrap().as_f64(), 40000.0);
+        assert_eq!(report.price.unwrap().as_f64(), 39500.0);
+        assert_eq!(report.order_side, OrderSide::Sell);
+        assert_eq!(report.order_status, OrderStatus::Canceled);
+        assert!(report.reduce_only);
     }
 
     #[rstest]
