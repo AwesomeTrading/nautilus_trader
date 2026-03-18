@@ -1554,6 +1554,7 @@ class InteractiveBrokersExecutionClient(LiveExecutionClient):
                 )
                 return
             status = OrderStatus.REJECTED
+
             if not reason:
                 reason = "Order inactive (IB)"
         elif order_status in ["PendingSubmit", "PreSubmitted", "Submitted"]:

@@ -28,11 +28,35 @@ criteria = "safe-to-deploy"
 delta = "1.18.0 -> 1.18.1"
 notes = "SIMD decode optimizations, serde alloc gate removal. No new deps, no build script changes."
 
+[[audits.databento]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.43.0 -> 0.44.0"
+notes = "Adds optional progress field (Option<u8>) to BatchJob response struct"
+
+[[audits.hypersync-client]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.1 -> 1.0.2"
+notes = "Version bump only, re-exports EventResponse from types module root"
+
 [[audits.lz4_flex]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "0.12.0 -> 0.12.1"
 notes = "Decompressor safety: adds offset-zero and offset-OOB checks, removes uninitialized data workaround. No new unsafe."
+
+[[audits.num_enum]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.7.5 -> 0.7.6"
+notes = "Test-only changes: adds beta/nightly stderr files, byte literal discriminant tests"
+
+[[audits.num_enum_derive]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.7.5 -> 0.7.6"
+notes = "Adds byte literal (Lit::Byte) support for enum discriminants"
 
 [[audits.portable-atomic-util]]
 who = "Nautech Systems <info@nautechsystems.io>"
@@ -69,6 +93,18 @@ criteria = "safe-to-deploy"
 delta = "2.6.0 -> 2.6.1"
 notes = "Better error messages for return-type mismatches, lint hygiene fix. Compile-time only."
 
+[[audits.tokio-tungstenite]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.28.0 -> 0.29.0"
+notes = "Bumps tungstenite dep to 0.29.0, README updates only"
+
+[[audits.tungstenite]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.28.0 -> 0.29.0"
+notes = "Inlines utf-8 crate, supports non-ASCII HTTP headers per RFC 7230, MSRV bump to 1.71"
+
 [[audits.uuid]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
@@ -92,3 +128,99 @@ who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "0.6.2 -> 0.6.3"
 notes = "Off-by-one fix in longest_match, integer overflow fixes. Improves correctness and safety."
+
+[[trusted.anstream]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-03-16"
+end = "2027-03-17"
+
+[[trusted.anstyle]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2022-05-18"
+end = "2027-03-17"
+
+[[trusted.anstyle-parse]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-03-08"
+end = "2027-03-17"
+
+[[trusted.anstyle-query]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-04-13"
+end = "2027-03-17"
+
+[[trusted.anstyle-wincon]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-03-08"
+end = "2027-03-17"
+
+[[trusted.clap_builder]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-03-28"
+end = "2027-03-17"
+
+[[trusted.clap_lex]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2022-04-15"
+end = "2027-03-17"
+
+[[trusted.colorchoice]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-04-13"
+end = "2027-03-17"
+
+[[trusted.is_terminal_polyfill]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2024-05-02"
+end = "2027-03-17"
+
+[[trusted.once_cell_polyfill]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2025-05-22"
+end = "2027-03-17"
+
+[[trusted.toml]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2022-12-14"
+end = "2027-03-17"
+
+[[trusted.toml_datetime]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2022-10-21"
+end = "2027-03-17"
+
+[[trusted.toml_edit]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2021-09-13"
+end = "2027-03-17"
+
+[[trusted.toml_parser]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2025-07-08"
+end = "2027-03-17"
+
+[[trusted.toml_writer]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2025-07-08"
+end = "2027-03-17"
+
+[[trusted.winnow]]
+criteria = "safe-to-deploy"
+user-id = 6743 # Ed Page (epage)
+start = "2023-02-22"
+end = "2027-03-17"

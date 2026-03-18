@@ -92,6 +92,7 @@ output.json
 mcp/*.json
 .claude/
 claude.config.json
+.codex/
 .cursor/
 .aider*
 .continue/

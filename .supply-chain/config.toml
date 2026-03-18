@@ -294,26 +294,6 @@ criteria = "safe-to-deploy"
 version = "1.7.3"
 criteria = "safe-to-deploy"
 
-[[exemptions.anstream]]
-version = "1.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.anstyle]]
-version = "1.0.14"
-criteria = "safe-to-deploy"
-
-[[exemptions.anstyle-parse]]
-version = "1.0.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.anstyle-query]]
-version = "1.1.5"
-criteria = "safe-to-deploy"
-
-[[exemptions.anstyle-wincon]]
-version = "3.0.11"
-criteria = "safe-to-deploy"
-
 [[exemptions.anyhow]]
 version = "1.0.102"
 criteria = "safe-to-deploy"
@@ -626,16 +606,8 @@ criteria = "safe-to-deploy"
 version = "4.6.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.clap_builder]]
-version = "4.6.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.clap_derive]]
 version = "4.6.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.clap_lex]]
-version = "1.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.cmake]]
@@ -652,10 +624,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.coins-core]]
 version = "0.12.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.colorchoice]]
-version = "1.0.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.combine]]
@@ -1350,10 +1318,6 @@ criteria = "safe-to-deploy"
 version = "0.3.7"
 criteria = "safe-to-deploy"
 
-[[exemptions.is_terminal_polyfill]]
-version = "1.70.2"
-criteria = "safe-to-deploy"
-
 [[exemptions.itchy]]
 version = "0.3.4"
 criteria = "safe-to-deploy"
@@ -1392,10 +1356,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.k256]]
 version = "0.13.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.keccak]]
-version = "0.1.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.keccak-asm]]
@@ -1700,10 +1660,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.once_cell]]
 version = "1.21.3"
-criteria = "safe-to-deploy"
-
-[[exemptions.once_cell_polyfill]]
-version = "1.70.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.oorandom]]
@@ -2458,26 +2414,6 @@ criteria = "safe-to-deploy"
 version = "0.7.18"
 criteria = "safe-to-deploy"
 
-[[exemptions.toml]]
-version = "0.9.12+spec-1.1.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.toml]]
-version = "1.0.6+spec-1.1.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.toml_datetime]]
-version = "1.0.0+spec-1.1.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.toml_edit]]
-version = "0.25.4+spec-1.1.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.toml_parser]]
-version = "1.0.9+spec-1.1.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.tonic]]
 version = "0.13.1"
 criteria = "safe-to-deploy"
@@ -2896,10 +2832,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.windows_x86_64_msvc]]
 version = "0.53.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.winnow]]
-version = "0.7.14"
 criteria = "safe-to-deploy"
 
 [[exemptions.wyz]]

@@ -6,6 +6,7 @@ Released on TBD (UTC).
 - Added option chains and greeks in Rust (#3637), thanks @filipmacek
 - Added option chains and greeks in Python (#3677), thanks @filipmacek
 - Added custom data registration, persistence, and routing in Rust (#3542), thanks @faysou
+- Added `cache.orders_active_local(...)` function in Rust (#3716), thanks @Javdu10
 - Added `interval` field to `FundingRateUpdate` (#3694), thanks @dxwil
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
@@ -43,6 +44,7 @@ Released on TBD (UTC).
 - Fixed Interactive Brokers docs `request_ticks` API and add contract example (#3699), thanks @faysou
 - Fixed Interactive Brokers live-session synchronization and reconciliation (#3715), thanks @faysou
 - Fixed Interactive Brokers shared historical request dedup for concurrent warmup (#3719), thanks @Johnkhk
+- Fixed Interactive Brokers inactive order status handling to prevent silent dropping (#3723), thanks @pandashark
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
 - Fixed OKX `base_url_ws` ignored for private and business WebSocket channels (#3727), thanks for reporting @Stamppot82
 - Fixed Polymarket WebSocket initial vs incremental subscribe (#3717), thanks @Javdu10
@@ -60,9 +62,10 @@ Released on TBD (UTC).
 - Standardized `type_name()` across order events and instruments
 - Optimized network client performance and add benchmarks
 - Upgraded Rust (MSRV) to 1.94.0
-- Upgraded `databento` crate to v0.43.0
+- Upgraded `databento` crate to v0.44.0
 - Upgraded `redis` crate to v1.0.5
 - Upgraded `tokio` crate to v1.50.0
+- Upgraded `tokio-tungstenite` crate to v0.29.0
 
 ### Documentation
 - Added Options concept guide with chain architecture, subscription API, strike filtering, and snapshot modes
