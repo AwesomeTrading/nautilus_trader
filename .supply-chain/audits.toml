@@ -1,11 +1,29 @@
 
 # cargo-vet audits file
 
+[[audits.alloy-chains]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.2.31 -> 0.2.32"
+notes = "Tempo mainnet explorer URL update. Data-only change in chains.json and named.rs."
+
 [[audits.base32]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 version = "0.5.1"
 notes = "Pure base32 encode/decode library. No unsafe code, no_std, no file/network access."
+
+[[audits.borsh]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.6.0 -> 1.6.1"
+notes = "no_std fix for bytes dependency (default-features = false, std feature gates bytes/std). Doc update only."
+
+[[audits.borsh-derive]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.6.0 -> 1.6.1"
+notes = "Version bump only. Single line change in Cargo.toml."
 
 [[audits.c-kzg]]
 who = "Chris Sellers <chris@cjdsellers.io>"

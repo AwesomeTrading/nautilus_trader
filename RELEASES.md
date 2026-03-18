@@ -63,8 +63,10 @@ Released on TBD (UTC).
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Improved socket clients reconnect and shutdown reliability
 - Improved Databento live price precision handling with maps populated from instrument definitions
+- Improved Polymarket Rust adapter (#3726), thanks @filipmacek
 - Refined `AtomicTime` mode switching and datetime panics
 - Refined base catalog interface (#3703), thanks @faysou
+- Refined IB option symbols to be OCC compliant (#3731), thanks @faysou
 - Standardized `type_name()` across order events and instruments
 - Optimized network client performance and add benchmarks
 - Upgraded Rust (MSRV) to 1.94.0
