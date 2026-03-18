@@ -13,6 +13,7 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+import inspect
 from collections.abc import Callable
 from io import BytesIO
 from typing import Any
@@ -338,7 +339,14 @@ def make_dict_serializer(schema: pa.Schema) -> Callable[[list[Data | Event]], pa
         if not isinstance(data, list):
             data = [data]
 
-        dicts = [d.to_dict(d) for d in data]
+        if not data:
+            return dicts_to_record_batch([], schema=schema)
+
+        raw = inspect.getattr_static(type(data[0]), "to_dict")
+        if isinstance(raw, staticmethod):
+            dicts = [d.to_dict(d) for d in data]
+        else:
+            dicts = [d.to_dict() for d in data]
 
         return dicts_to_record_batch(dicts, schema=schema)
 

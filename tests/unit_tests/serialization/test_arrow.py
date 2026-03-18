@@ -17,6 +17,7 @@ import copy
 import sys
 from typing import Any
 
+import pyarrow as pa
 import pytest
 
 from nautilus_trader.common.component import TestClock
@@ -24,9 +25,11 @@ from nautilus_trader.common.factories import OrderFactory
 from nautilus_trader.common.messages import ComponentStateChanged
 from nautilus_trader.common.messages import ShutdownSystem
 from nautilus_trader.common.messages import TradingStateChanged
+from nautilus_trader.core.data import Data
 from nautilus_trader.core.uuid import UUID4
 from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.currencies import USDT
+from nautilus_trader.model.custom import customdataclass
 from nautilus_trader.model.data import OrderBookDelta
 from nautilus_trader.model.data import OrderBookDeltas
 from nautilus_trader.model.enums import AccountType
@@ -58,6 +61,7 @@ from nautilus_trader.model.identifiers import AccountId
 from nautilus_trader.model.identifiers import ClientOrderId
 from nautilus_trader.model.identifiers import ComponentId
 from nautilus_trader.model.identifiers import ExecAlgorithmId
+from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.identifiers import OrderListId
 from nautilus_trader.model.identifiers import PositionId
 from nautilus_trader.model.identifiers import StrategyId
@@ -73,6 +77,7 @@ from nautilus_trader.model.objects import Quantity
 from nautilus_trader.model.position import Position
 from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
 from nautilus_trader.serialization.arrow.serializer import ArrowSerializer
+from nautilus_trader.serialization.arrow.serializer import make_dict_serializer
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 from nautilus_trader.test_kit.stubs.data import TestDataStubs
 from nautilus_trader.test_kit.stubs.events import TestEventStubs
@@ -1181,3 +1186,36 @@ class TestArrowSerializer:
             assert self._test_serialization(obj)
         except NotImplementedError as e:
             print(e)
+
+    def test_make_dict_serializer_with_instance_method_to_dict(self):
+        # Arrange
+        @customdataclass
+        class _InstanceMethodData(Data):
+            instrument_id: InstrumentId
+            value: float
+
+        schema = pa.schema(
+            [
+                pa.field("instrument_id", pa.string()),
+                pa.field("value", pa.float64()),
+                pa.field("type", pa.string()),
+                pa.field("ts_event", pa.uint64()),
+                pa.field("ts_init", pa.uint64()),
+            ],
+        )
+        encoder = make_dict_serializer(schema)
+        obj = _InstanceMethodData(
+            instrument_id=InstrumentId.from_str("TEST.VENUE"),
+            value=1.5,
+            ts_event=0,
+            ts_init=0,
+        )
+
+        # Act
+        batch = encoder([obj])
+
+        # Assert
+        assert isinstance(batch, pa.RecordBatch)
+        assert batch.num_rows == 1
+        assert batch.column("value")[0].as_py() == 1.5
+        assert batch.column("instrument_id")[0].as_py() == "TEST.VENUE"
