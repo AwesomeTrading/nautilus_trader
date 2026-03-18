@@ -48,10 +48,7 @@ pub mod typed_endpoints;
 pub mod typed_handler;
 pub mod typed_router;
 
-use std::{
-    cell::{OnceCell, RefCell},
-    rc::Rc,
-};
+use std::{cell::RefCell, rc::Rc};
 
 #[cfg(feature = "defi")]
 use nautilus_model::defi::{Block, Pool, PoolFeeCollect, PoolFlash, PoolLiquidityUpdate, PoolSwap};
@@ -92,7 +89,7 @@ pub(super) const HANDLER_BUFFER_CAP: usize = 64;
 // Publish functions use move-out/move-back to avoid holding RefCell borrows
 // during handler calls (enabling re-entrant publishes).
 thread_local! {
-    pub(super) static MESSAGE_BUS: OnceCell<Rc<RefCell<MessageBus>>> = const { OnceCell::new() };
+    pub(super) static MESSAGE_BUS: RefCell<Option<Rc<RefCell<MessageBus>>>> = const { RefCell::new(None) };
 
     pub(super) static ANY_HANDLERS: RefCell<SmallVec<[ShareableMessageHandler; HANDLER_BUFFER_CAP]>> =
         RefCell::new(SmallVec::new());
@@ -148,17 +145,10 @@ thread_local! {
         RefCell::new(SmallVec::new());
 }
 
-/// Sets the thread-local message bus.
-///
-/// # Panics
-///
-/// Panics if a message bus has already been set for this thread.
+/// Sets the thread-local message bus, replacing any existing one.
 pub fn set_message_bus(msgbus: Rc<RefCell<MessageBus>>) {
     MESSAGE_BUS.with(|bus| {
-        assert!(
-            bus.set(msgbus).is_ok(),
-            "Failed to set MessageBus: already initialized for this thread"
-        );
+        *bus.borrow_mut() = Some(msgbus);
     });
 }
 
@@ -167,10 +157,8 @@ pub fn set_message_bus(msgbus: Rc<RefCell<MessageBus>>) {
 /// If no message bus has been set for this thread, a default one is created and initialized.
 pub fn get_message_bus() -> Rc<RefCell<MessageBus>> {
     MESSAGE_BUS.with(|bus| {
-        bus.get_or_init(|| {
-            let msgbus = MessageBus::default();
-            Rc::new(RefCell::new(msgbus))
-        })
-        .clone()
+        let mut slot = bus.borrow_mut();
+        let rc = slot.get_or_insert_with(|| Rc::new(RefCell::new(MessageBus::default())));
+        rc.clone()
     })
 }

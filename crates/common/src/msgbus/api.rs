@@ -23,7 +23,7 @@
 //! - Publishing messages to subscribers.
 //! - Sending messages to endpoints.
 
-use std::{any::Any, cell::RefCell, rc::Rc, thread::LocalKey};
+use std::{any::Any, cell::RefCell, thread::LocalKey};
 
 use nautilus_core::UUID4;
 #[cfg(feature = "defi")]
@@ -47,9 +47,8 @@ use ustr::Ustr;
 use super::{
     ACCOUNT_STATE_HANDLERS, ANY_HANDLERS, BAR_HANDLERS, BOOK_HANDLERS, DELTAS_HANDLERS,
     DEPTH10_HANDLERS, FUNDING_RATE_HANDLERS, GREEKS_HANDLERS, HANDLER_BUFFER_CAP,
-    INDEX_PRICE_HANDLERS, MARK_PRICE_HANDLERS, MESSAGE_BUS, OPTION_CHAIN_HANDLERS,
-    OPTION_GREEKS_HANDLERS, ORDER_EVENT_HANDLERS, POSITION_EVENT_HANDLERS, QUOTE_HANDLERS,
-    TRADE_HANDLERS,
+    INDEX_PRICE_HANDLERS, MARK_PRICE_HANDLERS, OPTION_CHAIN_HANDLERS, OPTION_GREEKS_HANDLERS,
+    ORDER_EVENT_HANDLERS, POSITION_EVENT_HANDLERS, QUOTE_HANDLERS, TRADE_HANDLERS,
     core::{MessageBus, Subscription},
     get_message_bus,
     matching::is_matching_backtracking,
@@ -1060,10 +1059,8 @@ fn publish_typed<T: 'static>(
     let mut handlers = tls.with_borrow_mut(std::mem::take);
 
     // Borrow scope ends before dispatch to support re-entrant publishes
-    MESSAGE_BUS.with(|cell| {
-        let rc = cell.get_or_init(|| Rc::new(RefCell::new(MessageBus::default())));
-        fill_fn(&mut rc.borrow_mut(), &mut handlers);
-    });
+    let bus_rc = get_message_bus();
+    fill_fn(&mut bus_rc.borrow_mut(), &mut handlers);
 
     for handler in &handlers {
         handler.handle(message);
