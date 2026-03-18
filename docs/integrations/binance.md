@@ -382,6 +382,73 @@ does not include a funding interval field. Binance exposes `fundingIntervalHours
 [Get Funding Rate Info](https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-Info)
 REST endpoint, but this is not currently consumed by the adapter.
 
+## Instrument status polling
+
+:::info[Rust adapter only]
+This feature is available in the Rust data clients (`LiveNode`). The Python
+data clients do not poll for status changes.
+:::
+
+The adapter periodically polls Binance `exchangeInfo` to detect changes in
+instrument trading status. When a symbol transitions between states (e.g.
+Trading to Halt, or Trading to Delivering for a futures contract approaching
+expiry), the adapter emits an `InstrumentStatus` event.
+
+The polling interval defaults to 3600 seconds (60 minutes) and is configurable
+via `instrument_status_poll_secs` in the data client config. Set to `0` to
+disable polling entirely.
+
+On initial connect, the adapter seeds its status cache from the exchange info
+response without emitting events. Only subsequent polls that detect a status
+change emit `InstrumentStatus` events. If a symbol disappears from exchange
+info (e.g. after delisting or contract expiry), the adapter emits
+`NotAvailableForTrading`.
+
+### Status mapping
+
+#### Spot
+
+| Binance status     | MarketStatusAction         |
+|--------------------|----------------------------|
+| Trading            | Trading                    |
+| EndOfDay           | Close                      |
+| Halt               | Halt                       |
+| Break              | Pause                      |
+| NonRepresentable   | NotAvailableForTrading     |
+
+#### Futures (USD-M)
+
+| Binance status     | MarketStatusAction         |
+|--------------------|----------------------------|
+| Trading            | Trading                    |
+| PendingTrading     | PreOpen                    |
+| PreTrading         | PreOpen                    |
+| PostTrading        | PostClose                  |
+| EndOfDay           | Close                      |
+| Halt               | Halt                       |
+| AuctionMatch       | Cross                      |
+| Break              | Pause                      |
+
+#### Futures (COIN-M)
+
+| Binance status     | MarketStatusAction         |
+|--------------------|----------------------------|
+| Trading            | Trading                    |
+| PendingTrading     | PreOpen                    |
+| PreDelivering      | PreClose                   |
+| Delivering         | Close                      |
+| Delivered          | Close                      |
+| PreDelisting       | PreClose                   |
+| Delisting          | Suspend                    |
+| Down               | NotAvailableForTrading     |
+
+:::note
+Only instruments that are in a tradable state at connect time are tracked.
+Symbols that start in a non-trading state (e.g. halted at connect) do not
+appear in the instruments cache, so status transitions for them are not
+monitored.
+:::
+
 ## Rate limiting
 
 Binance uses an interval-based rate limiting system where request weight is tracked per fixed time window (every minute, resetting at :00 seconds). Each API endpoint has an assigned weight cost, and your total weight usage is tracked per IP address.
@@ -456,6 +523,7 @@ For the latest rate limits, query `/api/v3/exchangeInfo` (Spot) or `/fapi/v1/exc
 | `testnet`                          | `False`   | **Deprecated**: use `environment=BinanceEnvironment.TESTNET` instead. |
 | `update_instruments_interval_mins` | `60`      | Interval (minutes) between instrument catalogue refreshes. |
 | `use_agg_trade_ticks`              | `False`   | When `True`, subscribe to aggregated trade ticks instead of raw trades. |
+| `instrument_status_poll_secs`      | `3600`    | *Rust only.* Interval (seconds) between exchange info polls to detect instrument status changes. Set to `0` to disable. |
 
 ### Execution client configuration options
 

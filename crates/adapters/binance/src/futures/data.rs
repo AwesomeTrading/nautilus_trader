@@ -36,6 +36,7 @@ use nautilus_common::{
             SubscribeInstruments, SubscribeMarkPrices, SubscribeQuotes, SubscribeTrades,
             TradesResponse, UnsubscribeBars, UnsubscribeBookDeltas, UnsubscribeFundingRates,
             UnsubscribeIndexPrices, UnsubscribeMarkPrices, UnsubscribeQuotes, UnsubscribeTrades,
+            subscribe::SubscribeInstrumentStatus, unsubscribe::UnsubscribeInstrumentStatus,
         },
     },
 };
@@ -47,7 +48,7 @@ use nautilus_core::{
 };
 use nautilus_model::{
     data::{BookOrder, Data, OrderBookDelta, OrderBookDeltas, OrderBookDeltas_API},
-    enums::{BookAction, BookType, OrderSide, RecordFlag},
+    enums::{BookAction, BookType, MarketStatusAction, OrderSide, RecordFlag},
     identifiers::{ClientId, InstrumentId, Venue},
     instruments::{Instrument, InstrumentAny},
     types::{Price, Quantity},
@@ -61,6 +62,7 @@ use crate::{
         consts::{BINANCE_BOOK_DEPTHS, BINANCE_VENUE},
         enums::BinanceProductType,
         parse::bar_spec_to_binance_interval,
+        status::diff_and_emit_statuses,
         symbol::format_binance_stream_symbol,
     },
     config::BinanceDataClientConfig,
@@ -116,6 +118,7 @@ pub struct BinanceFuturesDataClient {
     cancellation_token: CancellationToken,
     tasks: Vec<JoinHandle<()>>,
     instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    status_cache: Arc<RwLock<AHashMap<InstrumentId, MarketStatusAction>>>,
     book_buffers: Arc<RwLock<AHashMap<InstrumentId, BookBuffer>>>,
     book_subscriptions: Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     mark_price_refs: Arc<RwLock<AHashMap<InstrumentId, u32>>>,
@@ -179,6 +182,7 @@ impl BinanceFuturesDataClient {
             cancellation_token: CancellationToken::new(),
             tasks: Vec::new(),
             instruments: Arc::new(RwLock::new(AHashMap::new())),
+            status_cache: Arc::new(RwLock::new(AHashMap::new())),
             book_buffers: Arc::new(RwLock::new(AHashMap::new())),
             book_subscriptions: Arc::new(RwLock::new(AHashMap::new())),
             mark_price_refs: Arc::new(RwLock::new(AHashMap::new())),
@@ -855,10 +859,33 @@ impl DataClient for BinanceFuturesDataClient {
             .await
             .context("failed to request Binance Futures instruments")?;
 
+        // Seed the status cache from the HTTP client's instruments cache
         {
-            let mut guard = self.instruments.write().expect(MUTEX_POISONED);
+            let mut inst_guard = self.instruments.write().expect(MUTEX_POISONED);
+            let mut status_guard = self.status_cache.write().expect(MUTEX_POISONED);
+
             for instrument in &instruments {
-                guard.insert(instrument.id(), instrument.clone());
+                inst_guard.insert(instrument.id(), instrument.clone());
+            }
+
+            let http_instruments = self.http_client.instruments_cache();
+            for entry in http_instruments.iter() {
+                let raw_symbol = entry.key();
+                let action = match entry.value() {
+                    crate::futures::http::client::BinanceFuturesInstrument::UsdM(s) => {
+                        MarketStatusAction::from(s.status)
+                    }
+                    crate::futures::http::client::BinanceFuturesInstrument::CoinM(s) => s
+                        .contract_status
+                        .map_or(MarketStatusAction::NotAvailableForTrading, Into::into),
+                };
+
+                for instrument in &instruments {
+                    if instrument.raw_symbol().as_str() == raw_symbol.as_str() {
+                        status_guard.insert(instrument.id(), action);
+                        break;
+                    }
+                }
             }
         }
 
@@ -913,6 +940,66 @@ impl DataClient for BinanceFuturesDataClient {
             }
         });
         self.tasks.push(handle);
+
+        // Spawn instrument status polling task
+        let poll_secs = self.config.instrument_status_poll_secs;
+        if poll_secs > 0 {
+            let poll_http = self.http_client.clone();
+            let poll_sender = self.data_sender.clone();
+            let poll_instruments = self.instruments.clone();
+            let poll_status_cache = self.status_cache.clone();
+            let poll_cancel = self.cancellation_token.clone();
+            let poll_clock = self.clock;
+
+            let poll_handle = get_runtime().spawn(async move {
+                let mut interval =
+                    tokio::time::interval(tokio::time::Duration::from_secs(poll_secs));
+                interval.tick().await; // Skip first immediate tick
+
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            match poll_http.request_symbol_statuses().await {
+                                Ok(symbol_statuses) => {
+                                    let ts = poll_clock.get_time_ns();
+                                    let inst_guard = poll_instruments.read()
+                                        .expect(MUTEX_POISONED);
+
+                                    // Build raw_symbol -> InstrumentId lookup
+                                    let raw_to_id: AHashMap<Ustr, InstrumentId> = inst_guard
+                                        .values()
+                                        .map(|inst| (inst.raw_symbol().inner(), inst.id()))
+                                        .collect();
+
+                                    let mut new_statuses = AHashMap::new();
+                                    for (raw_symbol, action) in &symbol_statuses {
+                                        if let Some(&id) = raw_to_id.get(raw_symbol) {
+                                            new_statuses.insert(id, *action);
+                                        }
+                                    }
+                                    drop(inst_guard);
+
+                                    let mut cache = poll_status_cache.write()
+                                        .expect(MUTEX_POISONED);
+                                    diff_and_emit_statuses(
+                                        &new_statuses, &mut cache, &poll_sender, ts, ts,
+                                    );
+                                }
+                                Err(e) => {
+                                    log::warn!("Futures instrument status poll failed: {e}");
+                                }
+                            }
+                        }
+                        () = poll_cancel.cancelled() => {
+                            log::debug!("Futures instrument status polling task cancelled");
+                            break;
+                        }
+                    }
+                }
+            });
+            self.tasks.push(poll_handle);
+            log::info!("Futures instrument status polling started: interval={poll_secs}s");
+        }
 
         self.is_connected.store(true, Ordering::Release);
         log::info!("Connected: client_id={}", self.client_id);
@@ -1179,6 +1266,17 @@ impl DataClient for BinanceFuturesDataClient {
         )
     }
 
+    fn subscribe_instrument_status(
+        &mut self,
+        cmd: &SubscribeInstrumentStatus,
+    ) -> anyhow::Result<()> {
+        log::debug!(
+            "subscribe_instrument_status: {id} (status changes detected via periodic exchange info polling)",
+            id = cmd.instrument_id,
+        );
+        Ok(())
+    }
+
     fn unsubscribe_book_deltas(&mut self, cmd: &UnsubscribeBookDeltas) -> anyhow::Result<()> {
         let instrument_id = cmd.instrument_id;
         let ws = self.ws_client.clone();
@@ -1356,6 +1454,17 @@ impl DataClient for BinanceFuturesDataClient {
 
     fn unsubscribe_funding_rates(&mut self, _cmd: &UnsubscribeFundingRates) -> anyhow::Result<()> {
         // Funding rate subscriptions are not supported (see subscribe_funding_rates)
+        Ok(())
+    }
+
+    fn unsubscribe_instrument_status(
+        &mut self,
+        cmd: &UnsubscribeInstrumentStatus,
+    ) -> anyhow::Result<()> {
+        log::debug!(
+            "unsubscribe_instrument_status: {id}",
+            id = cmd.instrument_id,
+        );
         Ok(())
     }
 

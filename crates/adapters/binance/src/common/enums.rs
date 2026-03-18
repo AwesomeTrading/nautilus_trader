@@ -17,7 +17,7 @@
 
 use std::fmt::Display;
 
-use nautilus_model::enums::{OrderSide, OrderType, TimeInForce};
+use nautilus_model::enums::{MarketStatusAction, OrderSide, OrderType, TimeInForce};
 use serde::{Deserialize, Serialize};
 
 /// Binance product type identifier.
@@ -469,6 +469,23 @@ pub enum BinanceTradingStatus {
     Unknown,
 }
 
+impl From<BinanceTradingStatus> for MarketStatusAction {
+    fn from(status: BinanceTradingStatus) -> Self {
+        match status {
+            BinanceTradingStatus::Trading => Self::Trading,
+            BinanceTradingStatus::PendingTrading | BinanceTradingStatus::PreTrading => {
+                Self::PreOpen
+            }
+            BinanceTradingStatus::PostTrading => Self::PostClose,
+            BinanceTradingStatus::EndOfDay => Self::Close,
+            BinanceTradingStatus::Halt => Self::Halt,
+            BinanceTradingStatus::AuctionMatch => Self::Cross,
+            BinanceTradingStatus::Break => Self::Pause,
+            BinanceTradingStatus::Unknown => Self::NotAvailableForTrading,
+        }
+    }
+}
+
 /// Contract status for coin-margined futures.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -492,6 +509,23 @@ pub enum BinanceContractStatus {
     /// Unknown or undocumented value.
     #[serde(other)]
     Unknown,
+}
+
+impl From<BinanceContractStatus> for MarketStatusAction {
+    fn from(status: BinanceContractStatus) -> Self {
+        match status {
+            BinanceContractStatus::Trading => Self::Trading,
+            BinanceContractStatus::PendingTrading => Self::PreOpen,
+            BinanceContractStatus::PreDelivering | BinanceContractStatus::PreDelisting => {
+                Self::PreClose
+            }
+            BinanceContractStatus::Delivering | BinanceContractStatus::Delivered => Self::Close,
+            BinanceContractStatus::Delisting => Self::Suspend,
+            BinanceContractStatus::Down | BinanceContractStatus::Unknown => {
+                Self::NotAvailableForTrading
+            }
+        }
+    }
 }
 
 /// WebSocket stream event types.

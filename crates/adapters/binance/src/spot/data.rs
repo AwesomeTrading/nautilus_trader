@@ -34,7 +34,8 @@ use nautilus_common::{
             RequestInstrument, RequestInstruments, RequestTrades, SubscribeBars,
             SubscribeBookDeltas, SubscribeInstrument, SubscribeInstruments, SubscribeQuotes,
             SubscribeTrades, TradesResponse, UnsubscribeBars, UnsubscribeBookDeltas,
-            UnsubscribeQuotes, UnsubscribeTrades,
+            UnsubscribeQuotes, UnsubscribeTrades, subscribe::SubscribeInstrumentStatus,
+            unsubscribe::UnsubscribeInstrumentStatus,
         },
     },
 };
@@ -45,8 +46,8 @@ use nautilus_core::{
 };
 use nautilus_model::{
     data::{Data, OrderBookDeltas_API},
-    enums::BookType,
-    identifiers::{ClientId, InstrumentId, Venue},
+    enums::{BookType, MarketStatusAction},
+    identifiers::{ClientId, InstrumentId, Symbol, Venue},
     instruments::{Instrument, InstrumentAny},
 };
 use tokio::task::JoinHandle;
@@ -56,11 +57,12 @@ use ustr::Ustr;
 use crate::{
     common::{
         consts::BINANCE_VENUE, credential::resolve_credentials, enums::BinanceProductType,
-        parse::bar_spec_to_binance_interval,
+        parse::bar_spec_to_binance_interval, status::diff_and_emit_statuses,
     },
     config::BinanceDataClientConfig,
     spot::{
         http::client::BinanceSpotHttpClient,
+        sbe::generated::symbol_status::SymbolStatus,
         websocket::streams::{
             client::BinanceSpotWebSocketClient,
             messages::BinanceSpotWsMessage,
@@ -82,6 +84,7 @@ pub struct BinanceSpotDataClient {
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
     instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    status_cache: Arc<RwLock<AHashMap<InstrumentId, MarketStatusAction>>>,
 }
 
 impl BinanceSpotDataClient {
@@ -138,6 +141,7 @@ impl BinanceSpotDataClient {
             tasks: Vec::new(),
             data_sender,
             instruments: Arc::new(RwLock::new(AHashMap::new())),
+            status_cache: Arc::new(RwLock::new(AHashMap::new())),
         })
     }
 
@@ -283,6 +287,13 @@ impl DataClient for BinanceSpotDataClient {
         // Reinitialize token in case of reconnection after disconnect
         self.cancellation_token = CancellationToken::new();
 
+        // Fetch exchange info for both instruments and initial status cache
+        let exchange_info = self
+            .http_client
+            .exchange_info()
+            .await
+            .map_err(|e| anyhow::anyhow!("failed to request Binance exchange info: {e}"))?;
+
         let instruments = self
             .http_client
             .request_instruments()
@@ -292,9 +303,22 @@ impl DataClient for BinanceSpotDataClient {
         self.http_client.cache_instruments(instruments.clone());
 
         {
-            let mut guard = self.instruments.write().expect(MUTEX_POISONED);
+            let mut inst_guard = self.instruments.write().expect(MUTEX_POISONED);
+            let mut status_guard = self.status_cache.write().expect(MUTEX_POISONED);
+
             for instrument in &instruments {
-                guard.insert(instrument.id(), instrument.clone());
+                inst_guard.insert(instrument.id(), instrument.clone());
+            }
+
+            // Seed status cache from exchange info (no events emitted on initial connect)
+            for symbol_info in &exchange_info.symbols {
+                let instrument_id =
+                    InstrumentId::new(Symbol::from(symbol_info.symbol.as_str()), *BINANCE_VENUE);
+
+                if inst_guard.contains_key(&instrument_id) {
+                    let action = MarketStatusAction::from(SymbolStatus::from(symbol_info.status));
+                    status_guard.insert(instrument_id, action);
+                }
             }
         }
 
@@ -333,6 +357,70 @@ impl DataClient for BinanceSpotDataClient {
             }
         });
         self.tasks.push(handle);
+
+        // Spawn instrument status polling task
+        let poll_secs = self.config.instrument_status_poll_secs;
+        if poll_secs > 0 {
+            let http = self.http_client.clone();
+            let poll_sender = self.data_sender.clone();
+            let poll_instruments = self.instruments.clone();
+            let poll_status_cache = self.status_cache.clone();
+            let poll_cancel = self.cancellation_token.clone();
+            let clock = self.clock;
+
+            let poll_handle = get_runtime().spawn(async move {
+                let mut interval =
+                    tokio::time::interval(tokio::time::Duration::from_secs(poll_secs));
+                interval.tick().await; // Skip first immediate tick
+
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            match http.exchange_info().await {
+                                Ok(info) => {
+                                    let ts = clock.get_time_ns();
+                                    let inst_guard = poll_instruments.read()
+                                        .expect(MUTEX_POISONED);
+
+                                    let mut new_statuses = AHashMap::new();
+                                    for symbol_info in &info.symbols {
+                                        let instrument_id = InstrumentId::new(
+                                            Symbol::from(
+                                                symbol_info.symbol.as_str(),
+                                            ),
+                                            *BINANCE_VENUE,
+                                        );
+
+                                        if inst_guard.contains_key(&instrument_id) {
+                                            let action = MarketStatusAction::from(
+                                                SymbolStatus::from(symbol_info.status),
+                                            );
+                                            new_statuses.insert(instrument_id, action);
+                                        }
+                                    }
+                                    drop(inst_guard);
+
+                                    let mut cache = poll_status_cache.write()
+                                        .expect(MUTEX_POISONED);
+                                    diff_and_emit_statuses(
+                                        &new_statuses, &mut cache, &poll_sender, ts, ts,
+                                    );
+                                }
+                                Err(e) => {
+                                    log::warn!("Instrument status poll failed: {e}");
+                                }
+                            }
+                        }
+                        () = poll_cancel.cancelled() => {
+                            log::debug!("Instrument status polling task cancelled");
+                            break;
+                        }
+                    }
+                }
+            });
+            self.tasks.push(poll_handle);
+            log::info!("Instrument status polling started: interval={poll_secs}s");
+        }
 
         self.is_connected.store(true, Ordering::Release);
         log::info!("Connected: client_id={}", self.client_id);
@@ -470,6 +558,17 @@ impl DataClient for BinanceSpotDataClient {
         Ok(())
     }
 
+    fn subscribe_instrument_status(
+        &mut self,
+        cmd: &SubscribeInstrumentStatus,
+    ) -> anyhow::Result<()> {
+        log::debug!(
+            "subscribe_instrument_status: {id} (status changes detected via periodic exchange info polling)",
+            id = cmd.instrument_id,
+        );
+        Ok(())
+    }
+
     fn unsubscribe_book_deltas(&mut self, cmd: &UnsubscribeBookDeltas) -> anyhow::Result<()> {
         let instrument_id = cmd.instrument_id;
         let ws = self.ws_client.clone();
@@ -548,6 +647,17 @@ impl DataClient for BinanceSpotDataClient {
                     .context("bars unsubscribe")
             },
             "bar unsubscribe",
+        );
+        Ok(())
+    }
+
+    fn unsubscribe_instrument_status(
+        &mut self,
+        cmd: &UnsubscribeInstrumentStatus,
+    ) -> anyhow::Result<()> {
+        log::debug!(
+            "unsubscribe_instrument_status: {id}",
+            id = cmd.instrument_id,
         );
         Ok(())
     }

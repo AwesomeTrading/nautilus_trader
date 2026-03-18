@@ -22,6 +22,7 @@ pub mod encoder;
 pub mod enums;
 pub mod models;
 pub mod parse;
+pub mod status;
 pub mod symbol;
 pub mod urls;
 

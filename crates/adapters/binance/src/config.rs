@@ -47,6 +47,9 @@ pub struct BinanceDataClientConfig {
     pub api_key: Option<String>,
     /// API secret (Ed25519 base64-encoded or PEM).
     pub api_secret: Option<String>,
+    /// Interval in seconds for polling exchange info to detect instrument status
+    /// changes (e.g. Trading -> Halt). Set to 0 to disable. Defaults to 3600 (60 minutes).
+    pub instrument_status_poll_secs: u64,
 }
 
 impl Default for BinanceDataClientConfig {
@@ -58,6 +61,7 @@ impl Default for BinanceDataClientConfig {
             base_url_ws: None,
             api_key: None,
             api_secret: None,
+            instrument_status_poll_secs: 3600,
         }
     }
 }

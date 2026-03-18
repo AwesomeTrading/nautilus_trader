@@ -17,6 +17,7 @@
 
 use std::{collections::HashMap, num::NonZeroU32, sync::Arc, time::Duration};
 
+use ahash::AHashMap;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use nautilus_core::{
@@ -24,7 +25,10 @@ use nautilus_core::{
 };
 use nautilus_model::{
     data::{Bar, BarType, TradeTick},
-    enums::{AggregationSource, AggressorSide, BarAggregation, OrderSide, OrderType, TimeInForce},
+    enums::{
+        AggregationSource, AggressorSide, BarAggregation, MarketStatusAction, OrderSide, OrderType,
+        TimeInForce,
+    },
     events::AccountState,
     identifiers::{AccountId, ClientOrderId, InstrumentId, TradeId, VenueOrderId},
     instruments::any::InstrumentAny,
@@ -1252,6 +1256,52 @@ impl BinanceFuturesHttpClient {
         }
 
         Ok(())
+    }
+
+    /// Fetches exchange info and returns the current status of each symbol.
+    ///
+    /// Builds a fresh status snapshot from the response without disturbing the
+    /// shared instruments cache, so a transient failure does not break other
+    /// HTTP operations that depend on cached precision data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the product type is invalid.
+    pub async fn request_symbol_statuses(
+        &self,
+    ) -> BinanceFuturesHttpResult<AHashMap<Ustr, MarketStatusAction>> {
+        let mut statuses = AHashMap::new();
+
+        match self.product_type {
+            BinanceProductType::UsdM => {
+                let info: BinanceFuturesUsdExchangeInfo = self
+                    .raw
+                    .get("exchangeInfo", None::<&()>, false, false)
+                    .await?;
+                for symbol in &info.symbols {
+                    statuses.insert(symbol.symbol, MarketStatusAction::from(symbol.status));
+                }
+            }
+            BinanceProductType::CoinM => {
+                let info: BinanceFuturesCoinExchangeInfo = self
+                    .raw
+                    .get("exchangeInfo", None::<&()>, false, false)
+                    .await?;
+                for symbol in &info.symbols {
+                    let action = symbol
+                        .contract_status
+                        .map_or(MarketStatusAction::NotAvailableForTrading, Into::into);
+                    statuses.insert(symbol.symbol, action);
+                }
+            }
+            _ => {
+                return Err(BinanceFuturesHttpError::ValidationError(
+                    "Invalid product type for futures".to_string(),
+                ));
+            }
+        }
+
+        Ok(statuses)
     }
 
     /// Fetches exchange information and returns parsed Nautilus instruments.

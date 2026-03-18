@@ -37,6 +37,7 @@ impl BinanceDataClientConfig {
         base_url_ws = None,
         api_key = None,
         api_secret = None,
+        instrument_status_poll_secs = None,
     ))]
     fn py_new(
         product_types: Option<Vec<BinanceProductType>>,
@@ -45,6 +46,7 @@ impl BinanceDataClientConfig {
         base_url_ws: Option<String>,
         api_key: Option<String>,
         api_secret: Option<String>,
+        instrument_status_poll_secs: Option<u64>,
     ) -> Self {
         Self {
             product_types: product_types.unwrap_or_else(|| vec![BinanceProductType::Spot]),
@@ -53,6 +55,7 @@ impl BinanceDataClientConfig {
             base_url_ws,
             api_key,
             api_secret,
+            instrument_status_poll_secs: instrument_status_poll_secs.unwrap_or(3600),
         }
     }
 

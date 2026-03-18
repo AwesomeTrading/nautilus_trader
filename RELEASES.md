@@ -8,6 +8,7 @@ Released on TBD (UTC).
 - Added custom data registration, persistence, and routing in Rust (#3542), thanks @faysou
 - Added `cache.orders_active_local(...)` function in Rust (#3716), thanks @Javdu10
 - Added `interval` field to `FundingRateUpdate` (#3694), thanks @dxwil
+- Added Binance instrument status polling in Rust
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
