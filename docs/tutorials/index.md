@@ -8,6 +8,15 @@ Each tutorial is a Jupytext percent-format Python file in the docs
 You can run them directly as scripts or open them as notebooks with Jupytext.
 :::
 
+:::tip
+
+- **Latest**: docs built from the `master` branch for stable releases.
+  See <https://nautilustrader.io/docs/latest/tutorials/>.
+- **Nightly**: docs built from the `nightly` branch for experimental features.
+  See <https://nautilustrader.io/docs/nightly/tutorials/>.
+
+:::
+
 ## Recommended order
 
 New to NautilusTrader? Work through these in sequence:
@@ -47,12 +56,3 @@ New to NautilusTrader? Work through these in sequence:
 | [Gold perpetual book imbalance (AX Exchange)](gold_book_imbalance_ax)                      | Order book imbalance on XAU-PERP             | Databento API key |
 | [Grid market making with a deadman's switch (BitMEX)](grid_market_maker_bitmex)            | Grid MM with server-side safety on XBTUSD    | Tardis.dev        |
 | [On-chain grid market making with short-term orders (dYdX)](grid_market_maker_dydx)        | Grid MM on dYdX v4 perpetuals                | User-provided     |
-
-:::tip
-
-- **Latest**: docs built from the `master` branch for stable releases.
-  See <https://nautilustrader.io/docs/latest/tutorials/>.
-- **Nightly**: docs built from the `nightly` branch for experimental features.
-  See <https://nautilustrader.io/docs/nightly/tutorials/>.
-
-:::
