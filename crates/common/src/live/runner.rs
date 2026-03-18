@@ -67,6 +67,14 @@ pub fn get_exec_event_sender() -> tokio::sync::mpsc::UnboundedSender<ExecutionEv
     })
 }
 
+/// Attempts to get the global execution event sender without panicking.
+///
+/// Returns `None` if the sender is not initialized (e.g., in test environments).
+#[must_use]
+pub fn try_get_exec_event_sender() -> Option<tokio::sync::mpsc::UnboundedSender<ExecutionEvent>> {
+    EXEC_EVENT_SENDER.with(|sender| sender.get().cloned())
+}
+
 /// Sets the global execution event sender.
 ///
 /// Can only be called once per thread.

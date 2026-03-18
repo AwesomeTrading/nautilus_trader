@@ -99,6 +99,7 @@ pub struct OrderMatchingEngine {
     book: OrderBook,
     fill_model: FillModelAny,
     fee_model: FeeModelAny,
+    event_handler: Option<Rc<dyn Fn(OrderEventAny)>>,
     target_bid: Option<Price>,
     target_ask: Option<Price>,
     target_last: Option<Price>,
@@ -169,6 +170,7 @@ impl OrderMatchingEngine {
             raw_id,
             fill_model,
             fee_model,
+            event_handler: None,
             book_type,
             oms_type,
             account_type,
@@ -204,6 +206,25 @@ impl OrderMatchingEngine {
             instrument_close: None,
             settlement_price: None,
             expiration_processed: false,
+        }
+    }
+
+    /// Sets the event handler for dispatching order events.
+    ///
+    /// When set, events are routed through the handler instead of directly
+    /// through the message bus. This allows sandbox execution clients to
+    /// dispatch events through the async runner channel, avoiding `RefCell`
+    /// re-entrancy panics.
+    pub fn set_event_handler(&mut self, handler: Rc<dyn Fn(OrderEventAny)>) {
+        self.event_handler = Some(handler);
+    }
+
+    fn dispatch_order_event(&self, event: OrderEventAny) {
+        if let Some(handler) = &self.event_handler {
+            handler(event);
+        } else {
+            let endpoint = MessagingSwitchboard::exec_engine_process();
+            msgbus::send_order_event(endpoint, event);
         }
     }
 
@@ -4244,8 +4265,7 @@ impl OrderMatchingEngine {
             false,
             due_post_only,
         ));
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     fn generate_order_accepted(&self, order: &OrderAny, venue_order_id: VenueOrderId) {
@@ -4266,8 +4286,7 @@ impl OrderMatchingEngine {
             false,
         ));
 
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4295,8 +4314,7 @@ impl OrderMatchingEngine {
             venue_order_id,
             account_id,
         ));
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4324,8 +4342,7 @@ impl OrderMatchingEngine {
             venue_order_id,
             Some(account_id),
         ));
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     fn generate_order_updated(
@@ -4354,8 +4371,7 @@ impl OrderMatchingEngine {
             protection_price,
         ));
 
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     fn generate_order_canceled(&self, order: &OrderAny, venue_order_id: VenueOrderId) {
@@ -4372,8 +4388,7 @@ impl OrderMatchingEngine {
             Some(venue_order_id),
             order.account_id(),
         ));
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     fn generate_order_triggered(&self, order: &OrderAny) {
@@ -4390,8 +4405,7 @@ impl OrderMatchingEngine {
             order.venue_order_id(),
             order.account_id(),
         ));
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     fn generate_order_expired(&self, order: &OrderAny) {
@@ -4408,8 +4422,7 @@ impl OrderMatchingEngine {
             order.venue_order_id(),
             order.account_id(),
         ));
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -4457,7 +4470,6 @@ impl OrderMatchingEngine {
             Some(commission),
         ));
 
-        let endpoint = MessagingSwitchboard::exec_engine_process();
-        msgbus::send_order_event(endpoint, event);
+        self.dispatch_order_event(event);
     }
 }

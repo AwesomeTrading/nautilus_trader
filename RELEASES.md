@@ -36,6 +36,7 @@ Released on TBD (UTC).
 - Fixed `SimulatedExchange` account balance adjustment mutation (#3704), thanks for reporting @thaning0
 - Fixed analyzer and tearsheet returns to prefer portfolio-level daily returns when they can be derived from account balances
 - Fixed backtest analyzer to include position snapshots in Rust (#3710), thanks @necofx
+- Fixed Sandbox `RefCell` re-entrancy panic when submitting orders through `ExecutionEngine` in async runner (#3732), thanks for reporting @linimin
 - Fixed Sandbox reconciliation missing `account_id` (#3705), thanks for reporting @eliotOrderson
 - Fixed Rust `Portfolio` account-scoped `net_exposure`, `net_exposures`, and balance updates in multi-account mode
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
