@@ -13,6 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
+use nautilus_model::identifiers::{AccountId, TraderId};
 use pyo3::pymethods;
 
 use crate::{
@@ -25,11 +26,13 @@ use crate::{
 impl PolymarketDataClientConfig {
     /// Configuration for the Polymarket data client.
     #[new]
-    #[pyo3(signature = (base_url_http=None, base_url_ws=None, base_url_gamma=None, http_timeout_secs=None, ws_timeout_secs=None, ws_max_subscriptions=None, update_instruments_interval_mins=None))]
+    #[pyo3(signature = (base_url_http=None, base_url_ws=None, base_url_gamma=None, base_url_data_api=None, http_timeout_secs=None, ws_timeout_secs=None, ws_max_subscriptions=None, update_instruments_interval_mins=None))]
+    #[allow(clippy::too_many_arguments)]
     fn py_new(
         base_url_http: Option<String>,
         base_url_ws: Option<String>,
         base_url_gamma: Option<String>,
+        base_url_data_api: Option<String>,
         http_timeout_secs: Option<u64>,
         ws_timeout_secs: Option<u64>,
         ws_max_subscriptions: Option<usize>,
@@ -40,11 +43,13 @@ impl PolymarketDataClientConfig {
             base_url_http,
             base_url_ws,
             base_url_gamma,
+            base_url_data_api,
             http_timeout_secs: http_timeout_secs.or(default.http_timeout_secs),
             ws_timeout_secs: ws_timeout_secs.or(default.ws_timeout_secs),
             ws_max_subscriptions: ws_max_subscriptions.unwrap_or(default.ws_max_subscriptions),
             update_instruments_interval_mins: update_instruments_interval_mins
                 .or(default.update_instruments_interval_mins),
+            filters: Vec::new(),
         }
     }
 
@@ -63,8 +68,10 @@ impl PolymarketExecClientConfig {
     /// Configuration for the Polymarket execution client.
     #[new]
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (private_key=None, api_key=None, api_secret=None, passphrase=None, funder=None, signature_type=None, base_url_http=None, base_url_ws=None, base_url_gamma=None, http_timeout_secs=None, max_retries=None, retry_delay_initial_ms=None, retry_delay_max_ms=None, ack_timeout_secs=None))]
+    #[pyo3(signature = (trader_id=None, account_id=None, private_key=None, api_key=None, api_secret=None, passphrase=None, funder=None, signature_type=None, base_url_http=None, base_url_ws=None, base_url_gamma=None, http_timeout_secs=None, max_retries=None, retry_delay_initial_ms=None, retry_delay_max_ms=None, ack_timeout_secs=None))]
     fn py_new(
+        trader_id: Option<String>,
+        account_id: Option<String>,
         private_key: Option<String>,
         api_key: Option<String>,
         api_secret: Option<String>,
@@ -82,6 +89,8 @@ impl PolymarketExecClientConfig {
     ) -> Self {
         let default = Self::default();
         Self {
+            trader_id: trader_id.map_or(default.trader_id, |s| TraderId::from(s.as_str())),
+            account_id: account_id.map_or(default.account_id, |s| AccountId::from(s.as_str())),
             private_key,
             api_key,
             api_secret,
@@ -97,6 +106,7 @@ impl PolymarketExecClientConfig {
                 .unwrap_or(default.retry_delay_initial_ms),
             retry_delay_max_ms: retry_delay_max_ms.unwrap_or(default.retry_delay_max_ms),
             ack_timeout_secs: ack_timeout_secs.unwrap_or(default.ack_timeout_secs),
+            filters: Vec::new(),
         }
     }
 

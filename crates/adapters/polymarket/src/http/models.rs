@@ -294,6 +294,35 @@ pub struct TickSizeResponse {
     pub minimum_tick_size: f64,
 }
 
+/// A single price level from the CLOB order book.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ClobBookLevel {
+    pub price: String,
+    pub size: String,
+}
+
+/// Response from the CLOB `GET /book` endpoint.
+///
+/// Extra fields (`market`, `asset_id`, `hash`, `timestamp`) are silently ignored.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ClobBookResponse {
+    pub bids: Vec<ClobBookLevel>,
+    pub asks: Vec<ClobBookLevel>,
+}
+
+/// A trade from the Polymarket Data API `GET /trades` endpoint.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataApiTrade {
+    pub asset: String,
+    pub condition_id: String,
+    pub side: PolymarketOrderSide,
+    pub price: f64,
+    pub size: f64,
+    pub timestamp: i64,
+    pub transaction_hash: String,
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -556,5 +585,64 @@ mod tests {
         let response: SearchResponse = serde_json::from_str(json).unwrap();
         assert!(response.markets.is_none());
         assert!(response.events.is_none());
+    }
+
+    #[rstest]
+    fn test_clob_book_response_deserialization() {
+        let response: ClobBookResponse = load("clob_book_response.json");
+
+        assert_eq!(response.bids.len(), 3);
+        assert_eq!(response.asks.len(), 3);
+
+        assert_eq!(response.bids[0].price, "0.48");
+        assert_eq!(response.bids[0].size, "100.00");
+        assert_eq!(response.bids[2].price, "0.50");
+        assert_eq!(response.bids[2].size, "150.00");
+
+        assert_eq!(response.asks[0].price, "0.51");
+        assert_eq!(response.asks[0].size, "120.00");
+        assert_eq!(response.asks[2].price, "0.53");
+        assert_eq!(response.asks[2].size, "90.00");
+    }
+
+    #[rstest]
+    fn test_clob_book_response_ignores_extra_fields() {
+        // Verify serde silently ignores extra fields from the API
+        let json = r#"{"market": "0xabc", "asset_id": "123", "hash": "0x1", "timestamp": "123", "bids": [], "asks": []}"#;
+        let response: ClobBookResponse = serde_json::from_str(json).unwrap();
+        assert!(response.bids.is_empty());
+        assert!(response.asks.is_empty());
+    }
+
+    #[rstest]
+    fn test_data_api_trade_deserialization() {
+        let trades: Vec<DataApiTrade> = load("data_api_trades_response.json");
+
+        assert_eq!(trades.len(), 3);
+        assert_eq!(
+            trades[0].asset,
+            "71321045863084981365469005770620412523470745398083994982746259498689308907982"
+        );
+        assert_eq!(
+            trades[0].condition_id,
+            "0xc8f1cf5d4f26e0fd9c8fe89f2a7b3263b902cf14fde7bfccef525753bb492e47"
+        );
+        assert_eq!(trades[0].side, PolymarketOrderSide::Buy);
+        assert_eq!(trades[0].price, 0.55);
+        assert_eq!(trades[0].size, 100.0);
+        assert_eq!(trades[0].timestamp, 1710000000);
+        assert_eq!(
+            trades[0].transaction_hash,
+            "0xabc123def456789012345678901234567890abcdef1234567890abcdef123456"
+        );
+
+        assert_eq!(trades[1].side, PolymarketOrderSide::Sell);
+        assert_eq!(trades[1].price, 0.53);
+
+        // Third trade has different asset (other outcome token)
+        assert_eq!(
+            trades[2].asset,
+            "99999999999999999999999999999999999999999999999999999999999999999999999999999"
+        );
     }
 }

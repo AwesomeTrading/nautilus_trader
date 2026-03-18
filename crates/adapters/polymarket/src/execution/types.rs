@@ -13,14 +13,22 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! HTTP client implementation for the Polymarket CLOB and Gamma APIs.
+//! Shared types for the Polymarket execution module.
 
-pub mod auth;
-pub mod clob;
-pub mod data_api;
-pub mod error;
-pub mod gamma;
-pub mod models;
-pub mod parse;
-pub mod query;
-pub mod rate_limits;
+use crate::common::consts::CANCEL_ALREADY_DONE;
+
+/// Classifies cancel rejection reasons to eliminate duplicate if/else blocks.
+pub(crate) enum CancelOutcome {
+    AlreadyDone,
+    Rejected(String),
+}
+
+impl CancelOutcome {
+    pub fn classify(reason: &str) -> Self {
+        if reason.contains(CANCEL_ALREADY_DONE) {
+            Self::AlreadyDone
+        } else {
+            Self::Rejected(reason.to_string())
+        }
+    }
+}

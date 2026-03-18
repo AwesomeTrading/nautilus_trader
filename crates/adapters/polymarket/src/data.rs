@@ -21,20 +21,26 @@ use std::sync::{
 };
 
 use ahash::AHashMap;
+use anyhow::Context;
 use dashmap::{DashMap, DashSet};
 use nautilus_common::{
     clients::DataClient,
     live::{get_runtime, runner::get_data_event_sender},
     messages::{
-        DataEvent,
+        DataEvent, DataResponse,
         data::{
-            SubscribeBookDeltas, SubscribeQuotes, SubscribeTrades, UnsubscribeBookDeltas,
+            BookResponse, InstrumentResponse, InstrumentsResponse, RequestBookSnapshot,
+            RequestInstrument, RequestInstruments, RequestTrades, SubscribeBookDeltas,
+            SubscribeQuotes, SubscribeTrades, TradesResponse, UnsubscribeBookDeltas,
             UnsubscribeQuotes, UnsubscribeTrades,
         },
     },
     providers::InstrumentProvider,
 };
-use nautilus_core::time::{AtomicTime, get_atomic_clock_realtime};
+use nautilus_core::{
+    datetime::datetime_to_unix_nanos,
+    time::{AtomicTime, get_atomic_clock_realtime},
+};
 use nautilus_model::{
     data::{Data as NautilusData, OrderBookDeltas_API, QuoteTick},
     enums::BookType,
@@ -50,8 +56,11 @@ use crate::{
     common::consts::POLYMARKET_VENUE,
     config::PolymarketDataClientConfig,
     filters::InstrumentFilter,
-    http::gamma::PolymarketGammaHttpClient,
-    providers::PolymarketInstrumentProvider,
+    http::{
+        clob::PolymarketClobPublicClient, data_api::PolymarketDataApiHttpClient,
+        gamma::PolymarketGammaHttpClient, query::GetGammaMarketsParams,
+    },
+    providers::{PolymarketInstrumentProvider, extract_condition_id},
     websocket::{
         client::PolymarketWebSocketClient,
         messages::{MarketWsMessage, PolymarketQuotes, PolymarketWsMessage},
@@ -86,6 +95,8 @@ pub struct PolymarketDataClient {
     client_id: ClientId,
     config: PolymarketDataClientConfig,
     provider: PolymarketInstrumentProvider,
+    clob_public_client: PolymarketClobPublicClient,
+    data_api_client: PolymarketDataApiHttpClient,
     ws_client: PolymarketWebSocketClient,
     is_connected: AtomicBool,
     cancellation_token: CancellationToken,
@@ -104,6 +115,8 @@ impl PolymarketDataClient {
         client_id: ClientId,
         config: PolymarketDataClientConfig,
         gamma_client: PolymarketGammaHttpClient,
+        clob_public_client: PolymarketClobPublicClient,
+        data_api_client: PolymarketDataApiHttpClient,
         ws_client: PolymarketWebSocketClient,
     ) -> Self {
         let clock = get_atomic_clock_realtime();
@@ -115,6 +128,8 @@ impl PolymarketDataClient {
             client_id,
             config,
             provider,
+            clob_public_client,
+            data_api_client,
             ws_client,
             is_connected: AtomicBool::new(false),
             cancellation_token: CancellationToken::new(),
@@ -147,7 +162,7 @@ impl PolymarketDataClient {
     }
 
     /// Adds an instrument filter on the underlying provider.
-    pub fn add_instrument_filter(&mut self, filter: Box<dyn InstrumentFilter>) {
+    pub fn add_instrument_filter(&mut self, filter: Arc<dyn InstrumentFilter>) {
         self.provider.add_filter(filter);
     }
 
@@ -540,6 +555,232 @@ impl DataClient for PolymarketDataClient {
         !self.is_connected()
     }
 
+    fn request_instruments(&self, request: RequestInstruments) -> anyhow::Result<()> {
+        let instruments: Vec<InstrumentAny> = self
+            .provider
+            .store()
+            .list_all()
+            .into_iter()
+            .cloned()
+            .collect();
+        let request_id = request.request_id;
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let venue = *POLYMARKET_VENUE;
+        let start_nanos = datetime_to_unix_nanos(request.start);
+        let end_nanos = datetime_to_unix_nanos(request.end);
+        let params = request.params;
+        let ts_init = self.clock.get_time_ns();
+
+        log::info!(
+            "Returning {} cached instruments for request",
+            instruments.len()
+        );
+
+        let response = DataResponse::Instruments(InstrumentsResponse::new(
+            request_id,
+            client_id,
+            venue,
+            instruments,
+            start_nanos,
+            end_nanos,
+            ts_init,
+            params,
+        ));
+
+        if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
+            log::error!("Failed to send instruments response: {e}");
+        }
+
+        Ok(())
+    }
+
+    fn request_instrument(&self, request: RequestInstrument) -> anyhow::Result<()> {
+        let instrument_id = request.instrument_id;
+
+        // Fast path: return from cache
+        if let Some(instrument) = self.provider.store().find(&instrument_id).cloned() {
+            let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
+                request.request_id,
+                request.client_id.unwrap_or(self.client_id),
+                instrument_id,
+                instrument,
+                datetime_to_unix_nanos(request.start),
+                datetime_to_unix_nanos(request.end),
+                self.clock.get_time_ns(),
+                request.params,
+            )));
+
+            if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
+                log::error!("Failed to send instrument response: {e}");
+            }
+
+            return Ok(());
+        }
+
+        // Slow path: fetch from Gamma API via condition_id
+        log::info!("Instrument {instrument_id} not in cache, fetching from Gamma API");
+
+        let http = self.provider.http_client().clone();
+        let sender = self.data_sender.clone();
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let request_id = request.request_id;
+        let start = request.start;
+        let end = request.end;
+        let params = request.params;
+        let clock = self.clock;
+
+        get_runtime().spawn(async move {
+            let condition_id = match extract_condition_id(&instrument_id) {
+                Ok(cid) => cid,
+                Err(e) => {
+                    log::error!("Failed to extract condition_id for {instrument_id}: {e}");
+                    return;
+                }
+            };
+
+            let query_params = GetGammaMarketsParams {
+                condition_ids: Some(condition_id),
+                ..Default::default()
+            };
+
+            let instrument = match http.request_instruments_by_params(query_params).await {
+                Ok(instruments) => instruments.into_iter().find(|i| i.id() == instrument_id),
+                Err(e) => {
+                    log::error!("Failed to fetch instrument {instrument_id} from Gamma API: {e}");
+                    return;
+                }
+            };
+
+            if let Some(inst) = instrument {
+                let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
+                    request_id,
+                    client_id,
+                    instrument_id,
+                    inst,
+                    datetime_to_unix_nanos(start),
+                    datetime_to_unix_nanos(end),
+                    clock.get_time_ns(),
+                    params,
+                )));
+
+                if let Err(e) = sender.send(DataEvent::Response(response)) {
+                    log::error!("Failed to send instrument response: {e}");
+                }
+            } else {
+                log::error!("Instrument {instrument_id} not found on Polymarket");
+            }
+        });
+
+        Ok(())
+    }
+
+    fn request_book_snapshot(&self, request: RequestBookSnapshot) -> anyhow::Result<()> {
+        let instrument_id = request.instrument_id;
+        let instrument = self
+            .provider
+            .store()
+            .find(&instrument_id)
+            .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
+
+        let token_id = instrument.raw_symbol().as_str().to_string();
+        let price_precision = instrument.price_precision();
+        let size_precision = instrument.size_precision();
+
+        let clob_client = self.clob_public_client.clone();
+        let sender = self.data_sender.clone();
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let request_id = request.request_id;
+        let params = request.params;
+        let clock = self.clock;
+
+        get_runtime().spawn(async move {
+            match clob_client
+                .request_book_snapshot(instrument_id, &token_id, price_precision, size_precision)
+                .await
+                .context("failed to request book snapshot from Polymarket")
+            {
+                Ok(book) => {
+                    let response = DataResponse::Book(BookResponse::new(
+                        request_id,
+                        client_id,
+                        instrument_id,
+                        book,
+                        None,
+                        None,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send book snapshot response: {e}");
+                    }
+                }
+                Err(e) => log::error!("Book snapshot request failed: {e:?}"),
+            }
+        });
+
+        Ok(())
+    }
+
+    fn request_trades(&self, request: RequestTrades) -> anyhow::Result<()> {
+        let instrument_id = request.instrument_id;
+        let instrument = self
+            .provider
+            .store()
+            .find(&instrument_id)
+            .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
+
+        let condition_id = extract_condition_id(&instrument_id)?;
+        let token_id = instrument.raw_symbol().as_str().to_string();
+        let price_precision = instrument.price_precision();
+        let size_precision = instrument.size_precision();
+        let limit = request.limit.map(|n| n.get() as u32);
+
+        let data_api_client = self.data_api_client.clone();
+        let sender = self.data_sender.clone();
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let request_id = request.request_id;
+        let params = request.params;
+        let clock = self.clock;
+        let start_nanos = datetime_to_unix_nanos(request.start);
+        let end_nanos = datetime_to_unix_nanos(request.end);
+
+        get_runtime().spawn(async move {
+            match data_api_client
+                .request_trade_ticks(
+                    instrument_id,
+                    &condition_id,
+                    &token_id,
+                    price_precision,
+                    size_precision,
+                    limit,
+                )
+                .await
+                .context("failed to request trades from Polymarket Data API")
+            {
+                Ok(trades) => {
+                    let response = DataResponse::Trades(TradesResponse::new(
+                        request_id,
+                        client_id,
+                        instrument_id,
+                        trades,
+                        start_nanos,
+                        end_nanos,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send trades response: {e}");
+                    }
+                }
+                Err(e) => log::error!("Trade request failed for {instrument_id}: {e:?}"),
+            }
+        });
+
+        Ok(())
+    }
+
     fn subscribe_book_deltas(&mut self, cmd: &SubscribeBookDeltas) -> anyhow::Result<()> {
         if cmd.book_type != BookType::L2_MBP {
             anyhow::bail!(
@@ -562,7 +803,7 @@ impl DataClient for PolymarketDataClient {
             self.subscribe_ws_market(token_id);
         }
 
-        log::info!("Subscribed to book deltas for {instrument_id}");
+        log::debug!("Subscribed to book deltas for {instrument_id}");
         Ok(())
     }
 
@@ -577,7 +818,7 @@ impl DataClient for PolymarketDataClient {
             self.subscribe_ws_market(token_id);
         }
 
-        log::info!("Subscribed to quotes for {instrument_id}");
+        log::debug!("Subscribed to quotes for {instrument_id}");
         Ok(())
     }
 
@@ -592,7 +833,7 @@ impl DataClient for PolymarketDataClient {
             self.subscribe_ws_market(token_id);
         }
 
-        log::info!("Subscribed to trades for {instrument_id}");
+        log::debug!("Subscribed to trades for {instrument_id}");
         Ok(())
     }
 
@@ -606,7 +847,7 @@ impl DataClient for PolymarketDataClient {
             self.unsubscribe_ws_market(token_id);
         }
 
-        log::info!("Unsubscribed from book deltas for {instrument_id}");
+        log::debug!("Unsubscribed from book deltas for {instrument_id}");
         Ok(())
     }
 
@@ -620,7 +861,7 @@ impl DataClient for PolymarketDataClient {
             self.unsubscribe_ws_market(token_id);
         }
 
-        log::info!("Unsubscribed from quotes for {instrument_id}");
+        log::debug!("Unsubscribed from quotes for {instrument_id}");
         Ok(())
     }
 
@@ -634,7 +875,7 @@ impl DataClient for PolymarketDataClient {
             self.unsubscribe_ws_market(token_id);
         }
 
-        log::info!("Unsubscribed from trades for {instrument_id}");
+        log::debug!("Unsubscribed from trades for {instrument_id}");
         Ok(())
     }
 }

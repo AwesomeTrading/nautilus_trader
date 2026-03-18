@@ -13,14 +13,34 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! HTTP client implementation for the Polymarket CLOB and Gamma APIs.
+//! Python bindings for Polymarket factories.
 
-pub mod auth;
-pub mod clob;
-pub mod data_api;
-pub mod error;
-pub mod gamma;
-pub mod models;
-pub mod parse;
-pub mod query;
-pub mod rate_limits;
+use pyo3::prelude::*;
+
+use crate::factories::{PolymarketDataClientFactory, PolymarketExecutionClientFactory};
+
+#[pymethods]
+impl PolymarketDataClientFactory {
+    #[new]
+    fn py_new() -> Self {
+        Self
+    }
+
+    #[pyo3(name = "name")]
+    fn py_name(&self) -> &'static str {
+        "POLYMARKET"
+    }
+}
+
+#[pymethods]
+impl PolymarketExecutionClientFactory {
+    #[new]
+    fn py_new() -> Self {
+        Self
+    }
+
+    #[pyo3(name = "name")]
+    fn py_name(&self) -> &'static str {
+        "POLYMARKET"
+    }
+}
