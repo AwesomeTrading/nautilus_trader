@@ -382,7 +382,7 @@ Only use manual override if you have specific requirements that cannot be met th
 
 | Feature             | Linear Perpetual Swap | Notes                                      |
 |---------------------|-----------------------|--------------------------------------------|
-| Order lists         | -                     | *Not supported*.                           |
+| Order lists         | ✓                     | Batch via WS; regular orders only.         |
 | OCO orders          | ✓                     | One-Cancels-Other orders.                  |
 | Bracket orders      | ✓                     | Stop loss + take profit combinations.      |
 | Conditional orders  | ✓                     | Stop and limit-if-touched orders.          |

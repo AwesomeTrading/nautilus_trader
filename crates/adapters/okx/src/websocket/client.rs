@@ -2367,7 +2367,6 @@ impl OKXWebSocketClient {
         ) in orders
         {
             let mut builder = WsPostOrderParamsBuilder::default();
-            builder.inst_type(inst_type);
             builder.inst_id(inst_id.symbol.inner());
 
             // Look up instIdCode from cache (required for WebSocket orders per OKX deprecation)
@@ -2379,8 +2378,14 @@ impl OKXWebSocketClient {
             builder.cl_ord_id(cl_ord_id.as_str());
             builder.side(ord_side.as_specified());
 
+            if let Some(instrument) = self.instruments_cache.get(&inst_id.symbol.inner()) {
+                builder.ccy(instrument.quote_currency().to_string());
+            }
+
             if let Some(ps) = pos_side {
                 builder.pos_side(OKXPositionSide::from(ps));
+            } else if !matches!(inst_type, OKXInstrumentType::Spot) {
+                builder.pos_side(OKXPositionSide::Net);
             }
 
             let okx_ord_type = if post_only.unwrap_or(false) {

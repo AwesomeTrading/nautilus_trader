@@ -43,7 +43,7 @@ use nautilus_core::{
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
-    enums::{AccountType, OmsType, OrderSide, OrderType, TrailingOffsetType},
+    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce, TrailingOffsetType},
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TraderId, Venue, VenueOrderId,
     },
@@ -59,7 +59,7 @@ use crate::{
     common::{
         consts::{OKX_CONDITIONAL_ORDER_TYPES, OKX_VENUE},
         enums::{OKXInstrumentType, OKXMarginMode, OKXTradeMode, is_advance_algo_order},
-        parse::nanos_to_datetime,
+        parse::{nanos_to_datetime, okx_instrument_type_from_symbol},
     },
     config::OKXExecClientConfig,
     http::{client::OKXHttpClient, models::OKXCancelAlgoOrderRequest},
@@ -1180,10 +1180,97 @@ impl ExecutionClient for OKXExecutionClient {
     }
 
     fn submit_order_list(&self, cmd: &SubmitOrderList) -> anyhow::Result<()> {
-        anyhow::bail!(
-            "submit_order_list not implemented for OKX execution client (got {} orders)",
-            cmd.order_list.client_order_ids.len()
-        );
+        let inst_type = okx_instrument_type_from_symbol(cmd.instrument_id.symbol.as_str());
+
+        // Validate all orders before emitting any submitted events
+        let cache = self.core.cache();
+
+        for client_order_id in &cmd.order_list.client_order_ids {
+            let order = cache
+                .order(client_order_id)
+                .ok_or_else(|| anyhow::anyhow!("Order not found: {client_order_id}"))?;
+
+            if self.is_conditional_order(order.order_type()) {
+                anyhow::bail!("Conditional orders not supported in order lists: {client_order_id}");
+            }
+
+            if order.time_in_force() != TimeInForce::Gtc {
+                anyhow::bail!(
+                    "Only GTC orders supported in order lists: {client_order_id} has {:?}",
+                    order.time_in_force()
+                );
+            }
+        }
+
+        // Build batch payload and emit submitted events
+        let mut batch_orders = Vec::new();
+
+        for client_order_id in &cmd.order_list.client_order_ids {
+            let order = cache.order(client_order_id).expect("validated above");
+
+            batch_orders.push((
+                inst_type,
+                cmd.instrument_id,
+                self.trade_mode,
+                order.client_order_id(),
+                order.order_side(),
+                None, // position_side: WS client defaults to Net for derivatives
+                order.order_type(),
+                order.quantity(),
+                order.price(),
+                order.trigger_price(),
+                Some(order.is_post_only()),
+                Some(order.is_reduce_only()),
+            ));
+
+            self.ws_dispatch_state.order_identities.insert(
+                order.client_order_id(),
+                OrderIdentity {
+                    instrument_id: cmd.instrument_id,
+                    strategy_id: order.strategy_id(),
+                    order_side: order.order_side(),
+                    order_type: order.order_type(),
+                },
+            );
+
+            log::debug!("OrderSubmitted client_order_id={}", order.client_order_id());
+            self.emitter.emit_order_submitted(order);
+        }
+
+        drop(cache);
+
+        let ws_private = self.ws_private.clone();
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
+        let instrument_id = cmd.instrument_id;
+        let strategy_id = cmd.strategy_id;
+        let client_order_ids: Vec<_> = cmd.order_list.client_order_ids.clone();
+
+        self.spawn_task("batch_submit_orders", async move {
+            let result = ws_private
+                .batch_submit_orders(batch_orders)
+                .await
+                .map_err(|e| anyhow::anyhow!("Batch submit orders failed: {e}"));
+
+            if let Err(e) = result {
+                let ts_event = clock.get_time_ns();
+                for cid in &client_order_ids {
+                    emitter.emit_order_rejected_event(
+                        strategy_id,
+                        instrument_id,
+                        *cid,
+                        &format!("batch-submit-error: {e}"),
+                        ts_event,
+                        false,
+                    );
+                }
+                return Err(e);
+            }
+
+            Ok(())
+        });
+
+        Ok(())
     }
 
     fn modify_order(&self, cmd: &ModifyOrder) -> anyhow::Result<()> {

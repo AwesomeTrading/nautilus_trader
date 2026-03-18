@@ -17,16 +17,18 @@
 
 use nautilus_common::messages::{
     ExecutionEvent,
-    execution::{BatchCancelOrders, CancelOrder},
+    execution::{BatchCancelOrders, CancelOrder, SubmitOrder, SubmitOrderList},
 };
 use nautilus_core::{UUID4, UnixNanos, time::get_atomic_clock_realtime};
 use nautilus_live::ExecutionEventEmitter;
 use nautilus_model::{
     enums::{AccountType, LiquiditySide, OrderSide, OrderStatus, OrderType, TimeInForce},
+    events::OrderInitialized,
     identifiers::{
-        AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TradeId, TraderId,
-        VenueOrderId,
+        AccountId, ClientId, ClientOrderId, InstrumentId, OrderListId, StrategyId, TradeId,
+        TraderId, VenueOrderId,
     },
+    orders::OrderList,
     reports::{FillReport, OrderStatusReport},
     types::{Currency, Money, Price, Quantity},
 };
@@ -441,4 +443,141 @@ fn test_dispatch_full_lifecycle_stale_accepted_skipped() {
     let events = drain_events(&mut rx);
     // Only the first Triggered report and the Fill should have been emitted
     assert_eq!(events.len(), 2);
+}
+
+fn make_order_init(
+    client_order_id: ClientOrderId,
+    instrument_id: InstrumentId,
+) -> OrderInitialized {
+    OrderInitialized {
+        client_order_id,
+        instrument_id,
+        ..Default::default()
+    }
+}
+
+#[rstest]
+fn test_submit_order_list_builds_individual_commands() {
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("STRATEGY-001");
+    let client_id = Some(ClientId::from("OKX"));
+    let instrument_id = InstrumentId::from("ETH-USDT-SWAP.OKX");
+
+    let cid1 = ClientOrderId::new("order1");
+    let cid2 = ClientOrderId::new("order2");
+    let cid3 = ClientOrderId::new("order3");
+
+    let order_list = OrderList::new(
+        OrderListId::new("OL-001"),
+        instrument_id,
+        strategy_id,
+        vec![cid1, cid2, cid3],
+        UnixNanos::default(),
+    );
+
+    let order_inits = vec![
+        make_order_init(cid1, instrument_id),
+        make_order_init(cid2, instrument_id),
+        make_order_init(cid3, instrument_id),
+    ];
+
+    let cmd = SubmitOrderList::new(
+        trader_id,
+        client_id,
+        strategy_id,
+        order_list,
+        order_inits,
+        None,
+        None,
+        None,
+        UUID4::default(),
+        UnixNanos::default(),
+    );
+
+    // Verify each SubmitOrder can be constructed from the list
+    let submits: Vec<SubmitOrder> = cmd
+        .order_list
+        .client_order_ids
+        .iter()
+        .zip(cmd.order_inits.iter())
+        .map(|(cid, init)| SubmitOrder {
+            trader_id: cmd.trader_id,
+            client_id: cmd.client_id,
+            strategy_id: cmd.strategy_id,
+            instrument_id: cmd.instrument_id,
+            client_order_id: *cid,
+            order_init: init.clone(),
+            exec_algorithm_id: cmd.exec_algorithm_id,
+            position_id: cmd.position_id,
+            params: cmd.params.clone(),
+            command_id: cmd.command_id,
+            ts_init: cmd.ts_init,
+        })
+        .collect();
+
+    assert_eq!(submits.len(), 3);
+    assert_eq!(submits[0].client_order_id, cid1);
+    assert_eq!(submits[1].client_order_id, cid2);
+    assert_eq!(submits[2].client_order_id, cid3);
+
+    for submit in &submits {
+        assert_eq!(submit.trader_id, trader_id);
+        assert_eq!(submit.strategy_id, strategy_id);
+        assert_eq!(submit.client_id, client_id);
+        assert_eq!(submit.instrument_id, instrument_id);
+    }
+}
+
+#[rstest]
+fn test_submit_order_list_single_order() {
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("STRATEGY-001");
+    let instrument_id = InstrumentId::from("ETH-USDT-SWAP.OKX");
+    let cid = ClientOrderId::new("order1");
+
+    let order_list = OrderList::new(
+        OrderListId::new("OL-001"),
+        instrument_id,
+        strategy_id,
+        vec![cid],
+        UnixNanos::default(),
+    );
+
+    let order_inits = vec![make_order_init(cid, instrument_id)];
+
+    let cmd = SubmitOrderList::new(
+        trader_id,
+        Some(ClientId::from("OKX")),
+        strategy_id,
+        order_list,
+        order_inits,
+        None,
+        None,
+        None,
+        UUID4::default(),
+        UnixNanos::default(),
+    );
+
+    let submits: Vec<SubmitOrder> = cmd
+        .order_list
+        .client_order_ids
+        .iter()
+        .zip(cmd.order_inits.iter())
+        .map(|(cid, init)| SubmitOrder {
+            trader_id: cmd.trader_id,
+            client_id: cmd.client_id,
+            strategy_id: cmd.strategy_id,
+            instrument_id: cmd.instrument_id,
+            client_order_id: *cid,
+            order_init: init.clone(),
+            exec_algorithm_id: cmd.exec_algorithm_id,
+            position_id: cmd.position_id,
+            params: cmd.params.clone(),
+            command_id: cmd.command_id,
+            ts_init: cmd.ts_init,
+        })
+        .collect();
+
+    assert_eq!(submits.len(), 1);
+    assert_eq!(submits[0].client_order_id, cid);
 }

@@ -57,7 +57,7 @@ use ustr::Ustr;
 
 use crate::{
     common::{
-        consts::OKX_VENUE,
+        consts::{OKX_VENUE, resolve_book_depth},
         enums::{
             OKXBookChannel, OKXContractType, OKXInstrumentStatus, OKXInstrumentType, OKXVipLevel,
         },
@@ -819,20 +819,23 @@ impl DataClient for OKXDataClient {
             anyhow::bail!("OKX only supports L2_MBP order book deltas");
         }
 
-        let depth = cmd.depth.map_or(0, |d| d.get());
-        if !matches!(depth, 0 | 50 | 400) {
-            anyhow::bail!("invalid depth {depth}; valid values are 50 or 400");
+        let raw_depth = cmd.depth.map_or(0, |d| d.get());
+        let depth = resolve_book_depth(raw_depth);
+        if depth != raw_depth {
+            log::info!("Clamped book depth {raw_depth} to {depth} (OKX supports 50 or 400)");
         }
 
         let vip = self.vip_level().unwrap_or(OKXVipLevel::Vip0);
         let channel = match depth {
             50 => {
                 if vip < OKXVipLevel::Vip4 {
-                    anyhow::bail!(
-                        "VIP level {vip} insufficient for 50 depth subscription (requires VIP4)"
+                    log::info!(
+                        "VIP level {vip} insufficient for 50-depth channel, falling back to default"
                     );
+                    OKXBookChannel::Book
+                } else {
+                    OKXBookChannel::Books50L2Tbt
                 }
-                OKXBookChannel::Books50L2Tbt
             }
             0 | 400 => {
                 if vip >= OKXVipLevel::Vip5 {

@@ -12,6 +12,7 @@ Released on TBD (UTC).
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added Kraken FOK, `LimitIfTouched` orders, and batch submit
+- Added OKX `submit_order_list` via WebSocket batch endpoint for regular GTC orders
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
 - Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
@@ -53,6 +54,7 @@ Released on TBD (UTC).
 
 ### Internal Improvements
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
+- Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
 - Added Python strategy support to v2 `LiveNode` with `add_strategy_from_config`
 - Added backtest margin models, `FXRolloverInterestModule`, `PerContractFeeModel`, and `SimulationModule` trait in Rust
 - Refactored computation of greeks (#3691), thanks @faysou

@@ -133,3 +133,17 @@ pub const OKX_TARGET_CCY_BASE: &str = "base_ccy";
 
 /// Target currency literal for quote currency.
 pub const OKX_TARGET_CCY_QUOTE: &str = "quote_ccy";
+
+/// Clamps a requested book depth to the nearest OKX-supported value.
+///
+/// OKX WebSocket channels support depths of 50 and 400. Depth 0 means
+/// auto-select based on VIP level. Any other value rounds up to the nearest
+/// supported depth so the subscription succeeds and the data engine can
+/// truncate to the originally requested depth.
+pub fn resolve_book_depth(raw_depth: usize) -> usize {
+    match raw_depth {
+        0 | 400 => raw_depth,
+        1..=50 => 50,
+        _ => 400,
+    }
+}

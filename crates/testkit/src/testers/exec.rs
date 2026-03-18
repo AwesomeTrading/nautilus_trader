@@ -102,6 +102,8 @@ pub struct ExecTesterConfig {
     pub trailing_offset_type: TrailingOffsetType,
     /// Enable bracket orders (entry with TP/SL).
     pub enable_brackets: bool,
+    /// Submit limit buy and sell as an order list instead of individual orders.
+    pub batch_submit_limit_pair: bool,
     /// Entry order type for bracket orders.
     pub bracket_entry_order_type: OrderType,
     /// Offset in ticks for bracket TP/SL from entry price.
@@ -192,6 +194,7 @@ impl ExecTesterConfig {
             trailing_offset: None,
             trailing_offset_type: TrailingOffsetType::BasisPoints,
             enable_brackets: false,
+            batch_submit_limit_pair: false,
             bracket_entry_order_type: OrderType::Limit,
             bracket_offset_ticks: 500,
             modify_orders_to_maintain_tob_offset: false,
@@ -345,6 +348,12 @@ impl ExecTesterConfig {
     }
 
     #[must_use]
+    pub fn with_batch_submit_limit_pair(mut self, batch: bool) -> Self {
+        self.batch_submit_limit_pair = batch;
+        self
+    }
+
+    #[must_use]
     pub fn with_enable_brackets(mut self, enable: bool) -> Self {
         self.enable_brackets = enable;
         self
@@ -450,6 +459,7 @@ impl Default for ExecTesterConfig {
             trailing_offset: None,
             trailing_offset_type: TrailingOffsetType::BasisPoints,
             enable_brackets: false,
+            batch_submit_limit_pair: false,
             bracket_entry_order_type: OrderType::Limit,
             bracket_offset_ticks: 500,
             modify_orders_to_maintain_tob_offset: false,
@@ -864,6 +874,14 @@ impl ExecTester {
             return;
         }
 
+        if self.config.batch_submit_limit_pair
+            && self.config.enable_limit_buys
+            && self.config.enable_limit_sells
+        {
+            self.maintain_batch_limit_pair(best_bid, best_ask);
+            return;
+        }
+
         if self.config.enable_limit_buys {
             self.maintain_buy_orders(best_bid, best_ask);
         }
@@ -988,6 +1006,81 @@ impl ExecTester {
                     log::error!("Failed to submit replacement sell order: {e}");
                 }
             }
+        }
+    }
+
+    /// Submits a buy and sell limit order as an order list (batch).
+    fn maintain_batch_limit_pair(&mut self, best_bid: Price, best_ask: Price) {
+        let Some(instrument) = &self.instrument else {
+            return;
+        };
+        let Some(price_offset) = self.price_offset else {
+            return;
+        };
+
+        let buy_needs = match &self.buy_order {
+            None => true,
+            Some(order) => !self.is_order_active(order),
+        };
+        let sell_needs = match &self.sell_order {
+            None => true,
+            Some(order) => !self.is_order_active(order),
+        };
+
+        if !buy_needs || !sell_needs {
+            return;
+        }
+
+        let buy_price = instrument.make_price(best_bid.as_f64() - price_offset);
+        let sell_price = instrument.make_price(best_ask.as_f64() + price_offset);
+        let quantity = instrument.make_qty(self.config.order_qty.as_f64(), None);
+        let (time_in_force, expire_time) =
+            self.resolve_time_in_force(self.config.limit_time_in_force);
+
+        let buy_order = self.core.order_factory().limit(
+            self.config.instrument_id,
+            OrderSide::Buy,
+            quantity,
+            buy_price,
+            Some(time_in_force),
+            expire_time,
+            Some(self.config.use_post_only),
+            None,
+            Some(self.config.use_quote_quantity),
+            self.config.order_display_qty,
+            self.config.emulation_trigger,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let sell_order = self.core.order_factory().limit(
+            self.config.instrument_id,
+            OrderSide::Sell,
+            quantity,
+            sell_price,
+            Some(time_in_force),
+            expire_time,
+            Some(self.config.use_post_only),
+            None,
+            Some(self.config.use_quote_quantity),
+            self.config.order_display_qty,
+            self.config.emulation_trigger,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        self.buy_order = Some(buy_order.clone());
+        self.sell_order = Some(sell_order.clone());
+
+        let client_id = self.config.client_id;
+        if let Err(e) = self.submit_order_list(vec![buy_order, sell_order], None, client_id) {
+            log::error!("Failed to submit batch limit pair: {e}");
         }
     }
 
