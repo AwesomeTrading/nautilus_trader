@@ -30,6 +30,7 @@ Released on TBD (UTC).
 - Hardened Docker Compose to bind all ports to localhost and add `no-new-privileges` to all services
 - Hardened CI egress policy to block by default and fall back to `audit` mode for fork pull requests
 - Upgraded all `nautilustrader.io` URLs from HTTP to HTTPS (#3686), thanks @04cb
+- Documented `aws-lc-rs` non-FIPS mode rationale (FIPS 140-3 module requires Go toolchain)
 
 ### Fixes
 - Fixed `PRICE_UNDEF` panic in `OrderBookDelta.to_pyo3_list` Cython conversion (#3697), thanks @zshuang15

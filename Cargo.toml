@@ -125,7 +125,7 @@ arrow-row = "57.3.0"
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 aws-lc-rs = { version = "1.16.2", default-features = false, features = [
-  "non-fips",
+  "non-fips", # FIPS 140-3 mode blocked: aws-lc-fips-sys requires Go toolchain
 ] }
 base64 = "0.22.1"
 bytes = { version = "1.11.1", features = ["serde"] }
