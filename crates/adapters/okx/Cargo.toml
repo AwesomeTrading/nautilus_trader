@@ -125,6 +125,13 @@ path = "examples/node_data_tester.rs"
 required-features = []
 doc = false
 
+# Run with `cargo run --example okx-greeks-tester --package nautilus-okx`.
+[[example]]
+name = "okx-greeks-tester"
+path = "examples/node_greeks.rs"
+required-features = []
+doc = false
+
 # Run with `cargo run --example okx-exec-tester --package nautilus-okx`.
 [[example]]
 name = "okx-exec-tester"

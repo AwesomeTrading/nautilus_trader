@@ -18,12 +18,14 @@
 use std::str::FromStr;
 
 use ahash::AHashMap;
+use anyhow::Context;
 use nautilus_core::{UUID4, nanos::UnixNanos};
 use nautilus_model::{
     data::{
         Bar, BarSpecification, BarType, BookOrder, Data, FundingRateUpdate, IndexPriceUpdate,
-        InstrumentStatus, MarkPriceUpdate, OrderBookDelta, OrderBookDeltas, OrderBookDeltas_API,
-        OrderBookDepth10, QuoteTick, TradeTick, depth::DEPTH10_LEN,
+        InstrumentStatus, MarkPriceUpdate, OptionGreekValues, OrderBookDelta, OrderBookDeltas,
+        OrderBookDeltas_API, OrderBookDepth10, QuoteTick, TradeTick, depth::DEPTH10_LEN,
+        option_chain::OptionGreeks,
     },
     enums::{
         AggregationSource, AggressorSide, BookAction, LiquiditySide, OrderSide, OrderStatus,
@@ -43,8 +45,8 @@ use ustr::Ustr;
 use super::{
     enums::OKXWsChannel,
     messages::{
-        OKXAlgoOrderMsg, OKXBookMsg, OKXCandleMsg, OKXIndexPriceMsg, OKXMarkPriceMsg, OKXOrderMsg,
-        OKXTickerMsg, OKXTradeMsg, OrderBookEntry,
+        OKXAlgoOrderMsg, OKXBookMsg, OKXCandleMsg, OKXIndexPriceMsg, OKXMarkPriceMsg,
+        OKXOptionSummaryMsg, OKXOrderMsg, OKXTickerMsg, OKXTradeMsg, OrderBookEntry,
     },
 };
 use crate::{
@@ -1783,6 +1785,49 @@ pub fn parse_fill_report(
     );
 
     Ok(report)
+}
+
+/// Parses an option summary payload into [`OptionGreeks`].
+///
+/// Uses Black-Scholes greeks (`delta_bs`, `gamma_bs`, `vega_bs`, `theta_bs`) as primary
+/// values to align with what Deribit and Bybit provide.
+///
+/// # Errors
+///
+/// Returns an error if any of the greeks or volatility fields cannot be parsed as f64.
+pub fn parse_option_summary_greeks(
+    msg: &OKXOptionSummaryMsg,
+    instrument_id: &InstrumentId,
+    ts_init: UnixNanos,
+) -> anyhow::Result<OptionGreeks> {
+    let ts_event = UnixNanos::from(msg.ts * 1_000_000);
+
+    let delta: f64 = msg.delta_bs.parse().context("invalid delta_bs")?;
+    let gamma: f64 = msg.gamma_bs.parse().context("invalid gamma_bs")?;
+    let vega: f64 = msg.vega_bs.parse().context("invalid vega_bs")?;
+    let theta: f64 = msg.theta_bs.parse().context("invalid theta_bs")?;
+
+    let bid_iv: f64 = msg.bid_vol.parse().context("invalid bid_vol")?;
+    let ask_iv: f64 = msg.ask_vol.parse().context("invalid ask_vol")?;
+    let mark_iv: f64 = msg.mark_vol.parse().context("invalid mark_vol")?;
+
+    Ok(OptionGreeks {
+        instrument_id: *instrument_id,
+        greeks: OptionGreekValues {
+            delta,
+            gamma,
+            vega,
+            theta,
+            rho: 0.0, // OKX does not provide rho
+        },
+        mark_iv: Some(mark_iv),
+        bid_iv: Some(bid_iv),
+        ask_iv: Some(ask_iv),
+        underlying_price: None,
+        open_interest: None,
+        ts_event,
+        ts_init,
+    })
 }
 
 /// Parses OKX WebSocket message payloads into Nautilus data structures.
@@ -5523,5 +5568,77 @@ mod tests {
             }
             other => panic!("Expected Instrument with status, was {other:?}"),
         }
+    }
+
+    #[rstest]
+    fn test_parse_option_summary_greeks() {
+        let json_str = load_test_json("ws_opt_summary.json");
+        let msgs: Vec<OKXOptionSummaryMsg> =
+            serde_json::from_str(&json_str).expect("Failed to deserialize opt-summary fixture");
+        assert_eq!(msgs.len(), 2);
+
+        let instrument_id = InstrumentId::from("BTC-USD-250328-92000-C.OKX");
+        let ts_init = UnixNanos::from(1_711_612_900_000_000_000u64);
+        let greeks =
+            parse_option_summary_greeks(&msgs[0], &instrument_id, ts_init).expect("parse failed");
+
+        assert_eq!(greeks.instrument_id, instrument_id);
+        assert!((greeks.greeks.delta - 0.5312).abs() < 1e-10);
+        assert!((greeks.greeks.gamma - 0.0000134).abs() < 1e-15);
+        assert!((greeks.greeks.vega - 0.0038).abs() < 1e-10);
+        assert!((greeks.greeks.theta - (-0.0015)).abs() < 1e-10);
+        assert!((greeks.greeks.rho - 0.0).abs() < 1e-10);
+        assert!((greeks.mark_iv.unwrap() - 0.53).abs() < 1e-10);
+        assert!((greeks.bid_iv.unwrap() - 0.52).abs() < 1e-10);
+        assert!((greeks.ask_iv.unwrap() - 0.55).abs() < 1e-10);
+        assert!(greeks.underlying_price.is_none());
+        assert!(greeks.open_interest.is_none());
+        assert_eq!(
+            greeks.ts_event,
+            UnixNanos::from(1_711_612_800_000_000_000u64)
+        );
+        assert_eq!(greeks.ts_init, ts_init);
+    }
+
+    #[rstest]
+    fn test_option_summary_msg_deserializes_with_uppercase_bs_alias() {
+        let json = r#"{
+            "instId": "BTC-USD-250328-92000-C",
+            "uly": "BTC-USD",
+            "delta": "0.52",
+            "gamma": "0.00001",
+            "theta": "-0.001",
+            "vega": "0.003",
+            "deltaBS": "0.53",
+            "gammaBS": "0.00002",
+            "thetaBS": "-0.002",
+            "vegaBS": "0.004",
+            "realVol": "0.45",
+            "bidVol": "0.50",
+            "askVol": "0.55",
+            "markVol": "0.52",
+            "lever": "10.0",
+            "ts": "1711612800000"
+        }"#;
+        let msg: OKXOptionSummaryMsg =
+            serde_json::from_str(json).expect("deltaBS alias failed to deserialize");
+        assert_eq!(msg.delta_bs, "0.53");
+        assert_eq!(msg.gamma_bs, "0.00002");
+        assert_eq!(msg.theta_bs, "-0.002");
+        assert_eq!(msg.vega_bs, "0.004");
+    }
+
+    #[rstest]
+    fn test_parse_option_summary_greeks_put() {
+        let json_str = load_test_json("ws_opt_summary.json");
+        let msgs: Vec<OKXOptionSummaryMsg> =
+            serde_json::from_str(&json_str).expect("Failed to deserialize opt-summary fixture");
+
+        let instrument_id = InstrumentId::from("BTC-USD-250328-92000-P.OKX");
+        let ts_init = UnixNanos::from(1_711_612_900_000_000_000u64);
+        let greeks =
+            parse_option_summary_greeks(&msgs[1], &instrument_id, ts_init).expect("parse failed");
+
+        assert!((greeks.greeks.delta - (-0.4688)).abs() < 1e-10);
     }
 }

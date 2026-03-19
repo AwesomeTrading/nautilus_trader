@@ -220,6 +220,19 @@ pub fn parse_base_quote_from_symbol(symbol: &str) -> anyhow::Result<(&str, &str)
     Ok((base, quote))
 }
 
+/// Extracts the instrument family from an OKX symbol string.
+///
+/// All OKX derivative symbols encode the family as the first two segments:
+/// `BTC-USD-250328-92000-C` -> `BTC-USD`, `BTC-USDT-SWAP` -> `BTC-USDT`.
+///
+/// # Errors
+///
+/// Returns an error if the symbol does not contain at least two dash-separated parts.
+pub fn extract_inst_family(symbol: &str) -> anyhow::Result<Ustr> {
+    let (base, quote) = parse_base_quote_from_symbol(symbol)?;
+    Ok(Ustr::from(&format!("{base}-{quote}")))
+}
+
 /// Maps an [`OKXInstrumentStatus`] to a Nautilus [`MarketStatusAction`].
 #[must_use]
 pub fn okx_status_to_market_action(status: OKXInstrumentStatus) -> MarketStatusAction {
@@ -4785,5 +4798,20 @@ mod tests {
         #[case] expected: OrderType,
     ) {
         assert_eq!(determine_order_type(okx_ord_type, price), expected);
+    }
+
+    #[rstest]
+    #[case::option("BTC-USD-250328-92000-C", "BTC-USD")]
+    #[case::swap("BTC-USDT-SWAP", "BTC-USDT")]
+    #[case::futures("ETH-USD-250328", "ETH-USD")]
+    #[case::spot("BTC-USDT", "BTC-USDT")]
+    fn test_extract_inst_family(#[case] symbol: &str, #[case] expected: &str) {
+        let family = extract_inst_family(symbol).unwrap();
+        assert_eq!(family.as_str(), expected);
+    }
+
+    #[rstest]
+    fn test_extract_inst_family_single_segment_fails() {
+        assert!(extract_inst_family("BTC").is_err());
     }
 }

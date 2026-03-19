@@ -33,10 +33,11 @@ use nautilus_common::{
             InstrumentsResponse, RequestBars, RequestBookSnapshot, RequestFundingRates,
             RequestInstrument, RequestInstruments, RequestTrades, SubscribeBars,
             SubscribeBookDeltas, SubscribeFundingRates, SubscribeIndexPrices, SubscribeInstrument,
-            SubscribeInstrumentStatus, SubscribeInstruments, SubscribeMarkPrices, SubscribeQuotes,
-            SubscribeTrades, TradesResponse, UnsubscribeBars, UnsubscribeBookDeltas,
-            UnsubscribeFundingRates, UnsubscribeIndexPrices, UnsubscribeInstrumentStatus,
-            UnsubscribeMarkPrices, UnsubscribeQuotes, UnsubscribeTrades,
+            SubscribeInstrumentStatus, SubscribeInstruments, SubscribeMarkPrices,
+            SubscribeOptionGreeks, SubscribeQuotes, SubscribeTrades, TradesResponse,
+            UnsubscribeBars, UnsubscribeBookDeltas, UnsubscribeFundingRates,
+            UnsubscribeIndexPrices, UnsubscribeInstrumentStatus, UnsubscribeMarkPrices,
+            UnsubscribeOptionGreeks, UnsubscribeQuotes, UnsubscribeTrades,
         },
     },
 };
@@ -62,7 +63,7 @@ use crate::{
             OKXBookChannel, OKXContractType, OKXInstrumentStatus, OKXInstrumentType, OKXVipLevel,
         },
         parse::{
-            okx_instrument_type_from_symbol, okx_status_to_market_action,
+            extract_inst_family, okx_instrument_type_from_symbol, okx_status_to_market_action,
             parse_base_quote_from_symbol, parse_instrument_any, parse_instrument_id,
         },
     },
@@ -71,10 +72,10 @@ use crate::{
     websocket::{
         client::OKXWebSocketClient,
         enums::OKXWsChannel,
-        messages::{NautilusWsMessage, OKXWsMessage},
+        messages::{NautilusWsMessage, OKXOptionSummaryMsg, OKXWsMessage},
         parse::{
             extract_fees_from_cached_instrument, parse_book_msg_vec, parse_index_price_msg_vec,
-            parse_ws_message_data,
+            parse_option_summary_greeks, parse_ws_message_data,
         },
     },
 };
@@ -93,6 +94,8 @@ pub struct OKXDataClient {
     instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
     book_channels: Arc<RwLock<AHashMap<InstrumentId, OKXBookChannel>>>,
     index_ticker_map: Arc<RwLock<AHashMap<Ustr, AHashSet<Ustr>>>>,
+    option_greeks_subs: Arc<RwLock<AHashSet<InstrumentId>>>,
+    option_summary_family_subs: AHashMap<Ustr, usize>,
     clock: &'static AtomicTime,
 }
 
@@ -180,6 +183,8 @@ impl OKXDataClient {
             instruments: Arc::new(RwLock::new(AHashMap::new())),
             book_channels: Arc::new(RwLock::new(AHashMap::new())),
             index_ticker_map: Arc::new(RwLock::new(AHashMap::new())),
+            option_greeks_subs: Arc::new(RwLock::new(AHashSet::new())),
+            option_summary_family_subs: AHashMap::new(),
             clock,
         })
     }
@@ -221,6 +226,7 @@ impl OKXDataClient {
         });
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn handle_ws_message(
         message: OKXWsMessage,
         data_sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
@@ -228,6 +234,7 @@ impl OKXDataClient {
         instruments_by_symbol: &mut AHashMap<Ustr, InstrumentAny>,
         funding_cache: &mut AHashMap<Ustr, (Ustr, u64)>,
         index_ticker_map: &Arc<RwLock<AHashMap<Ustr, AHashSet<Ustr>>>>,
+        option_greeks_subs: &Arc<RwLock<AHashSet<InstrumentId>>>,
         clock: &AtomicTime,
     ) {
         match message {
@@ -262,6 +269,47 @@ impl OKXDataClient {
                 inst_id,
                 data,
             } => {
+                // Option summary subscriptions use instFamily (not instId), so
+                // the arg has inst_id: None. Each element in the data array carries
+                // its own inst_id that we resolve per-message.
+                if matches!(channel, OKXWsChannel::OptionSummary) {
+                    let ts_init = clock.get_time_ns();
+                    match serde_json::from_value::<Vec<OKXOptionSummaryMsg>>(data) {
+                        Ok(msgs) => {
+                            let subs = option_greeks_subs.read().expect(MUTEX_POISONED);
+                            for msg in &msgs {
+                                let Some(instrument) = instruments_by_symbol.get(&msg.inst_id)
+                                else {
+                                    continue;
+                                };
+                                let instrument_id = instrument.id();
+                                if !subs.contains(&instrument_id) {
+                                    continue;
+                                }
+                                match parse_option_summary_greeks(msg, &instrument_id, ts_init) {
+                                    Ok(greeks) => {
+                                        if let Err(e) =
+                                            data_sender.send(DataEvent::OptionGreeks(greeks))
+                                        {
+                                            log::error!("Failed to emit option greeks event: {e}");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        log::error!(
+                                            "Failed to parse option summary for {}: {e}",
+                                            msg.inst_id
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to deserialize option summary data: {e}");
+                        }
+                    }
+                    return;
+                }
+
                 let Some(inst_id) = inst_id else {
                     log::debug!("Channel data without inst_id: {channel:?}");
                     return;
@@ -551,6 +599,11 @@ impl DataClient for OKXDataClient {
             .write()
             .expect("book channel cache lock poisoned")
             .clear();
+        self.option_greeks_subs
+            .write()
+            .expect(MUTEX_POISONED)
+            .clear();
+        self.option_summary_family_subs.clear();
         Ok(())
     }
 
@@ -576,22 +629,64 @@ impl DataClient for OKXDataClient {
 
         let mut all_instruments = Vec::new();
         for inst_type in &instrument_types {
-            let (mut fetched, _inst_id_codes) = self
-                .http_client
-                .request_instruments(*inst_type, None)
-                .await
-                .with_context(|| format!("failed to request OKX instruments for {inst_type:?}"))?;
+            let families: Vec<String> = match (&self.config.instrument_families, inst_type) {
+                (Some(families), OKXInstrumentType::Option) => families.clone(),
+                (Some(families), OKXInstrumentType::Futures | OKXInstrumentType::Swap) => {
+                    families.clone()
+                }
+                (None, OKXInstrumentType::Option) => {
+                    log::warn!(
+                        "Skipping OPTION type: instrument_families required but not configured"
+                    );
+                    continue;
+                }
+                _ => vec![],
+            };
 
-            fetched.retain(|instrument| contract_filter_with_config(&self.config, instrument));
-            self.http_client.cache_instruments(fetched.clone());
+            if families.is_empty() {
+                let (mut fetched, _inst_id_codes) = self
+                    .http_client
+                    .request_instruments(*inst_type, None)
+                    .await
+                    .with_context(|| {
+                        format!("failed to request OKX instruments for {inst_type:?}")
+                    })?;
 
-            let mut guard = self.instruments.write().expect(MUTEX_POISONED);
-            for instrument in &fetched {
-                guard.insert(instrument.id(), instrument.clone());
+                fetched.retain(|instrument| contract_filter_with_config(&self.config, instrument));
+                self.http_client.cache_instruments(fetched.clone());
+
+                let mut guard = self.instruments.write().expect(MUTEX_POISONED);
+                for instrument in &fetched {
+                    guard.insert(instrument.id(), instrument.clone());
+                }
+                drop(guard);
+
+                all_instruments.extend(fetched);
+            } else {
+                for family in &families {
+                    let (mut fetched, _inst_id_codes) = self
+                        .http_client
+                        .request_instruments(*inst_type, Some(family.clone()))
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "failed to request OKX instruments for {inst_type:?} family {family}"
+                            )
+                        })?;
+
+                    fetched
+                        .retain(|instrument| contract_filter_with_config(&self.config, instrument));
+                    self.http_client.cache_instruments(fetched.clone());
+
+                    let mut guard = self.instruments.write().expect(MUTEX_POISONED);
+                    for instrument in &fetched {
+                        guard.insert(instrument.id(), instrument.clone());
+                    }
+                    drop(guard);
+
+                    all_instruments.extend(fetched);
+                }
             }
-            drop(guard);
-
-            all_instruments.extend(fetched);
         }
 
         for instrument in all_instruments {
@@ -622,6 +717,7 @@ impl DataClient for OKXDataClient {
             let sender = self.data_sender.clone();
             let insts = self.instruments.clone();
             let idx_map = self.index_ticker_map.clone();
+            let greeks_subs = self.option_greeks_subs.clone();
             let cancel = self.cancellation_token.clone();
             let clock = self.clock;
             let handle = get_runtime().spawn(async move {
@@ -644,6 +740,7 @@ impl DataClient for OKXDataClient {
                                 &mut instruments_by_symbol,
                                 &mut funding_cache,
                                 &idx_map,
+                                &greeks_subs,
                                 clock,
                             );
                         }
@@ -687,6 +784,7 @@ impl DataClient for OKXDataClient {
             let sender = self.data_sender.clone();
             let insts = self.instruments.clone();
             let idx_map = self.index_ticker_map.clone();
+            let greeks_subs = self.option_greeks_subs.clone();
             let cancel = self.cancellation_token.clone();
             let clock = self.clock;
             let handle = get_runtime().spawn(async move {
@@ -709,6 +807,7 @@ impl DataClient for OKXDataClient {
                                 &mut instruments_by_symbol,
                                 &mut funding_cache,
                                 &idx_map,
+                                &greeks_subs,
                                 clock,
                             );
                         }
@@ -765,6 +864,11 @@ impl DataClient for OKXDataClient {
         }
 
         self.book_channels.write().expect(MUTEX_POISONED).clear();
+        self.option_greeks_subs
+            .write()
+            .expect(MUTEX_POISONED)
+            .clear();
+        self.option_summary_family_subs.clear();
         self.is_connected.store(false, Ordering::Release);
         log::info!("Disconnected: client_id={}", self.client_id);
         Ok(())
@@ -977,6 +1081,30 @@ impl DataClient for OKXDataClient {
         Ok(())
     }
 
+    fn subscribe_option_greeks(&mut self, cmd: &SubscribeOptionGreeks) -> anyhow::Result<()> {
+        let instrument_id = cmd.instrument_id;
+        {
+            let mut subs = self.option_greeks_subs.write().expect(MUTEX_POISONED);
+            subs.insert(instrument_id);
+        }
+
+        let family = extract_inst_family(instrument_id.symbol.inner().as_str())?;
+        let count = self.option_summary_family_subs.entry(family).or_default();
+        *count += 1;
+        if *count == 1 {
+            let ws = self.public_ws()?.clone();
+            self.spawn_ws(
+                async move {
+                    ws.subscribe_option_summary(family)
+                        .await
+                        .context("opt-summary subscription")
+                },
+                "option greeks subscription",
+            );
+        }
+        Ok(())
+    }
+
     fn subscribe_instrument_status(
         &mut self,
         cmd: &SubscribeInstrumentStatus,
@@ -1134,6 +1262,32 @@ impl DataClient for OKXDataClient {
             },
             "funding rate unsubscribe",
         );
+        Ok(())
+    }
+
+    fn unsubscribe_option_greeks(&mut self, cmd: &UnsubscribeOptionGreeks) -> anyhow::Result<()> {
+        let instrument_id = cmd.instrument_id;
+        {
+            let mut subs = self.option_greeks_subs.write().expect(MUTEX_POISONED);
+            subs.remove(&instrument_id);
+        }
+
+        let family = extract_inst_family(instrument_id.symbol.inner().as_str())?;
+        if let Some(count) = self.option_summary_family_subs.get_mut(&family) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.option_summary_family_subs.remove(&family);
+                let ws = self.public_ws()?.clone();
+                self.spawn_ws(
+                    async move {
+                        ws.unsubscribe_option_summary(family)
+                            .await
+                            .context("opt-summary unsubscription")
+                    },
+                    "option greeks unsubscription",
+                );
+            }
+        }
         Ok(())
     }
 

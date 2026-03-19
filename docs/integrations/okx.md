@@ -21,10 +21,14 @@ You can find live example scripts [here](https://github.com/nautechsystems/nauti
 | Perpetual Swaps   | ✓         | ✓       | Linear and inverse contracts.                    |
 | Futures           | ✓         | ✓       | Specific expiration dates.                       |
 | Margin            | ✓         | ✓       | Spot trading with margin/leverage (spot margin). |
-| Options           | ✓         | -       | *Data feed supported, trading coming soon*.      |
+| Options           | ✓         | -       | Data, greeks; *trading coming soon*.             |
 
 :::note
-**Options support**: While you can subscribe to options market data and receive price updates, order execution for options is not yet implemented. You can use the symbology format shown above to subscribe to options data feeds.
+**Options support**: You can subscribe to options market data, venue-provided Greeks
+(`subscribe_option_greeks`), and receive real-time delta, gamma, vega, theta, and
+implied volatility updates via the OKX `opt-summary` channel. Order execution for
+options is not yet implemented. See the [Options](../concepts/options.md) guide for
+subscription patterns.
 :::
 
 :::info

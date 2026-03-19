@@ -41,6 +41,7 @@ from nautilus_trader.data.messages import SubscribeIndexPrices
 from nautilus_trader.data.messages import SubscribeInstrument
 from nautilus_trader.data.messages import SubscribeInstruments
 from nautilus_trader.data.messages import SubscribeMarkPrices
+from nautilus_trader.data.messages import SubscribeOptionGreeks
 from nautilus_trader.data.messages import SubscribeOrderBook
 from nautilus_trader.data.messages import SubscribeQuoteTicks
 from nautilus_trader.data.messages import SubscribeTradeTicks
@@ -50,6 +51,7 @@ from nautilus_trader.data.messages import UnsubscribeIndexPrices
 from nautilus_trader.data.messages import UnsubscribeInstrument
 from nautilus_trader.data.messages import UnsubscribeInstruments
 from nautilus_trader.data.messages import UnsubscribeMarkPrices
+from nautilus_trader.data.messages import UnsubscribeOptionGreeks
 from nautilus_trader.data.messages import UnsubscribeOrderBook
 from nautilus_trader.data.messages import UnsubscribeQuoteTicks
 from nautilus_trader.data.messages import UnsubscribeTradeTicks
@@ -58,6 +60,7 @@ from nautilus_trader.live.cancellation import cancel_tasks_with_timeout
 from nautilus_trader.live.data_client import LiveMarketDataClient
 from nautilus_trader.model.data import Bar
 from nautilus_trader.model.data import FundingRateUpdate
+from nautilus_trader.model.data import OptionGreeks
 from nautilus_trader.model.data import TradeTick
 from nautilus_trader.model.data import capsule_to_data
 from nautilus_trader.model.enums import BookType
@@ -151,6 +154,7 @@ class OKXDataClient(LiveMarketDataClient):
             heartbeat=20,
         )
         self._ws_client_futures: set[asyncio.Future] = set()
+        self._option_summary_family_subs: dict[str, int] = {}
 
         # WebSocket API for business data (bars/candlesticks)
         _public_url = config.base_url_ws or nautilus_pyo3.get_okx_ws_url_public(config.is_demo)
@@ -243,6 +247,7 @@ class OKXDataClient(LiveMarketDataClient):
 
         self._ws_client_futures.clear()
         self._ws_business_client_futures.clear()
+        self._option_summary_family_subs.clear()
 
     def _cache_instruments(self) -> None:
         # Ensures instrument definitions are available for correct
@@ -329,6 +334,30 @@ class OKXDataClient(LiveMarketDataClient):
         pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(command.instrument_id.value)
         await self._ws_client.subscribe_funding_rates(pyo3_instrument_id)
 
+    async def _subscribe_option_greeks(self, command: SubscribeOptionGreeks) -> None:
+        pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(command.instrument_id.value)
+        symbol = pyo3_instrument_id.symbol.value
+        parts = symbol.split("-")
+        if len(parts) < 2:
+            self._log.error(f"Cannot derive inst_family from {command.instrument_id}")
+            return
+        inst_family = f"{parts[0]}-{parts[1]}"
+
+        self._ws_client.add_option_greeks_sub(pyo3_instrument_id)  # type: ignore[attr-defined]
+
+        count = self._option_summary_family_subs.get(inst_family, 0)
+        self._option_summary_family_subs[inst_family] = count + 1
+
+        if count == 0:
+            try:
+                await self._ws_client.subscribe_option_summary(inst_family)  # type: ignore[attr-defined]
+            except Exception:
+                self._ws_client.remove_option_greeks_sub(pyo3_instrument_id)  # type: ignore[attr-defined]
+                self._option_summary_family_subs[inst_family] -= 1
+                if self._option_summary_family_subs[inst_family] <= 0:
+                    del self._option_summary_family_subs[inst_family]
+                raise
+
     async def _unsubscribe_order_book_deltas(self, command: UnsubscribeOrderBook) -> None:
         pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(command.instrument_id.value)
         active_channels = self._ws_client.get_subscriptions(pyo3_instrument_id)
@@ -381,6 +410,23 @@ class OKXDataClient(LiveMarketDataClient):
 
         pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(command.instrument_id.value)
         await self._ws_client.unsubscribe_funding_rates(pyo3_instrument_id)
+
+    async def _unsubscribe_option_greeks(self, command: UnsubscribeOptionGreeks) -> None:
+        pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(command.instrument_id.value)
+        self._ws_client.remove_option_greeks_sub(pyo3_instrument_id)  # type: ignore[attr-defined]
+
+        symbol = pyo3_instrument_id.symbol.value
+        parts = symbol.split("-")
+        if len(parts) < 2:
+            self._log.error(f"Cannot derive inst_family from {command.instrument_id}")
+            return
+        inst_family = f"{parts[0]}-{parts[1]}"
+
+        if inst_family in self._option_summary_family_subs:
+            self._option_summary_family_subs[inst_family] -= 1
+            if self._option_summary_family_subs[inst_family] <= 0:
+                del self._option_summary_family_subs[inst_family]
+                await self._ws_client.unsubscribe_option_summary(inst_family)  # type: ignore[attr-defined]
 
     async def _unsubscribe_instruments(self, command: UnsubscribeInstruments) -> None:
         # OKX instruments channel is subscribed at the type level, not per instrument
@@ -568,6 +614,10 @@ class OKXDataClient(LiveMarketDataClient):
                 self._handle_instrument_update(msg)
             elif isinstance(msg, nautilus_pyo3.FundingRateUpdate):
                 self._handle_data(FundingRateUpdate.from_pyo3(msg))
+            elif isinstance(msg, nautilus_pyo3.OptionGreeks):
+                greeks = OptionGreeks.from_pyo3(msg)
+                if greeks.instrument_id in self._subscriptions_option_greeks:
+                    self._handle_data(greeks)
             else:
                 self._log.error(f"Cannot handle message {msg}, not implemented")
         except Exception as e:

@@ -730,13 +730,17 @@ pub struct OKXOptionSummaryMsg {
     pub theta: String,
     /// Vega.
     pub vega: String,
-    /// Black-Scholes implied volatility delta.
+    /// Black-Scholes delta.
+    #[serde(alias = "deltaBS")]
     pub delta_bs: String,
-    /// Black-Scholes implied volatility gamma.
+    /// Black-Scholes gamma.
+    #[serde(alias = "gammaBS")]
     pub gamma_bs: String,
-    /// Black-Scholes implied volatility theta.
+    /// Black-Scholes theta.
+    #[serde(alias = "thetaBS")]
     pub theta_bs: String,
-    /// Black-Scholes implied volatility vega.
+    /// Black-Scholes vega.
+    #[serde(alias = "vegaBS")]
     pub vega_bs: String,
     /// Realized volatility.
     pub real_vol: String,

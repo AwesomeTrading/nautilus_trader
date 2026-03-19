@@ -719,6 +719,26 @@ Test option greeks and option chain subscriptions.
 
 - Greeks are only available for option instruments.
 - Values depend on the venue's pricing model and may update on every quote change.
+- Some venues (Bybit, Deribit) subscribe per instrument; OKX subscribes per instrument
+  family and filters to the requested instruments.
+- `rho` may be zero when the venue does not provide it (Bybit, OKX).
+- `underlying_price` and `open_interest` may be `None` depending on the venue channel.
+
+**Python config:**
+
+```python
+DataTesterConfig(
+    instrument_ids=[instrument_id],
+    subscribe_option_greeks=True,
+)
+```
+
+**Rust config:**
+
+```rust
+DataTesterConfig::new(client_id, vec![instrument_id])
+    .with_subscribe_option_greeks(true)
+```
 
 ### TC-D63: Subscribe option chain
 
@@ -735,6 +755,8 @@ Test option greeks and option chain subscriptions.
 - Option chain subscriptions are managed by the DataEngine, which creates per-instrument
   quote and greeks subscriptions internally.
 - ATM-relative strike ranges require a forward price bootstrap before subscriptions begin.
+- Not yet configurable via `DataTesterConfig`; requires manual actor setup with
+  `subscribe_option_chain` and an `OptionSeriesId`.
 
 ---
 
@@ -832,8 +854,9 @@ Note: Rust `DataTesterConfig::new` sets `manage_book=true`, while Python default
 | `subscribe_instrument`       | bool              | False           | 1              |
 | `subscribe_instrument_status`| bool              | False           | 7              |
 | `subscribe_instrument_close` | bool              | False           | 7              |
-| `subscribe_params`           | dict?             | None            | 8              |
-| `can_unsubscribe`            | bool              | True            | 8              |
+| `subscribe_option_greeks`    | bool              | False           | 8              |
+| `subscribe_params`           | dict?             | None            | 9              |
+| `can_unsubscribe`            | bool              | True            | 9              |
 | `request_instruments`        | bool              | False           | 1              |
 | `request_book_snapshot`      | bool              | False           | 2              |
 | `request_book_deltas`        | bool              | False           | 2              |
@@ -841,7 +864,7 @@ Note: Rust `DataTesterConfig::new` sets `manage_book=true`, while Python default
 | `request_trades`             | bool              | False           | 4              |
 | `request_bars`               | bool              | False           | 5              |
 | `request_funding_rates`      | bool              | False           | 6              |
-| `request_params`             | dict?             | None            | 8              |
+| `request_params`             | dict?             | None            | 9              |
 | `requests_start_delta`       | Timedelta?        | 1 hour          | 3, 4, 5        |
 | `book_type`                  | BookType          | L2_MBP          | 2              |
 | `book_depth`                 | PositiveInt?      | None            | 2              |

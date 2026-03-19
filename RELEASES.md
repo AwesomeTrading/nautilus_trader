@@ -16,6 +16,7 @@ Released on TBD (UTC).
 - Added Kraken FOK, `LimitIfTouched` orders, and batch submit
 - Added OKX `submit_order_list` via WebSocket batch endpoint for regular GTC orders
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
+- Added OKX `subscribe_option_greeks` for venue-provided Greeks via the `opt-summary` WebSocket channel
 - Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
 - Added Tardis raw provider metadata to `Instrument.info` (#3730), thanks for reporting @volemont
@@ -54,6 +55,7 @@ Released on TBD (UTC).
 - Fixed Interactive Brokers shared historical request dedup for concurrent warmup (#3719), thanks @Johnkhk
 - Fixed Interactive Brokers inactive order status handling to prevent silent dropping (#3723), thanks @pandashark
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
+- Fixed OKX `connect()` not passing `instrument_families` for OPTION instrument requests (HTTP 400 from OKX API)
 - Fixed OKX `base_url_ws` ignored for private and business WebSocket channels (#3727), thanks for reporting @Stamppot82
 - Fixed Polymarket WebSocket initial vs incremental subscribe (#3717), thanks @Javdu10
 
@@ -62,6 +64,7 @@ Released on TBD (UTC).
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
 - Added Python strategy support to v2 `LiveNode` with `add_strategy_from_config`
 - Added backtest margin models, `FXRolloverInterestModule`, `PerContractFeeModel`, and `SimulationModule` trait in Rust
+- Added `subscribe_option_greeks` support to `DataTester` in Rust
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Improved socket clients reconnect and shutdown reliability
@@ -84,6 +87,8 @@ Released on TBD (UTC).
 - Added Greeks concept guide covering venue-provided and local calculator paths
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
+- Added OKX to adapter support tables in Options and Greeks concept guides
+- Added option greeks test cases (TC-D62, TC-D63) with config examples to the data testing spec
 - Rewrote Live Trading concept guide for accuracy (reconciliation, periodic timers, lookback windows)
 - Rewrote Custom Data architecture docs for two-mode (Rust/Python) registration
 - Improved Value Types concept guide with full arithmetic operator and unary operation docs

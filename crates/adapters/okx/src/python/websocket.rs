@@ -44,6 +44,7 @@
 use std::str::FromStr;
 
 use ahash::AHashMap;
+use dashmap::DashSet;
 use futures_util::StreamExt;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
@@ -81,12 +82,14 @@ use crate::{
         OKXWebSocketClient,
         enums::{OKXWsChannel, OKXWsOperation},
         messages::{
-            ExecutionReport, NautilusWsMessage, OKXAlgoOrderMsg, OKXBookMsg, OKXOrderMsg,
-            OKXWebSocketError, OKXWsMessage, WsAttachAlgoOrdParams, WsAttachAlgoOrdParamsBuilder,
+            ExecutionReport, NautilusWsMessage, OKXAlgoOrderMsg, OKXBookMsg, OKXOptionSummaryMsg,
+            OKXOrderMsg, OKXWebSocketError, OKXWsMessage, WsAttachAlgoOrdParams,
+            WsAttachAlgoOrdParamsBuilder,
         },
         parse::{
             extract_fees_from_cached_instrument, parse_algo_order_msg, parse_book_msg_vec,
-            parse_index_price_msg_vec, parse_order_msg_vec, parse_ws_message_data,
+            parse_index_price_msg_vec, parse_option_summary_greeks, parse_order_msg_vec,
+            parse_ws_message_data,
         },
     },
 };
@@ -327,6 +330,7 @@ impl OKXWebSocketClient {
                 let mut funding_cache: AHashMap<Ustr, (Ustr, u64)> = AHashMap::new();
                 let mut fee_cache: AHashMap<Ustr, Money> = AHashMap::new();
                 let mut filled_qty_cache: AHashMap<Ustr, Quantity> = AHashMap::new();
+                let option_greeks_subs = client.option_greeks_subs().clone();
                 let _client = client;
                 tokio::pin!(stream);
 
@@ -354,6 +358,7 @@ impl OKXWebSocketClient {
                                 data,
                                 &mut instruments_by_symbol,
                                 &mut funding_cache,
+                                &option_greeks_subs,
                                 clock,
                                 &call_soon,
                                 &callback,
@@ -848,6 +853,50 @@ impl OKXWebSocketClient {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             if let Err(e) = client.unsubscribe_index_prices(instrument_id).await {
                 log::error!("Failed to unsubscribe from index prices: {e}");
+            }
+            Ok(())
+        })
+    }
+
+    #[pyo3(name = "add_option_greeks_sub")]
+    fn py_add_option_greeks_sub(&self, instrument_id: InstrumentId) {
+        self.add_option_greeks_sub(instrument_id);
+    }
+
+    #[pyo3(name = "remove_option_greeks_sub")]
+    fn py_remove_option_greeks_sub(&self, instrument_id: InstrumentId) {
+        self.remove_option_greeks_sub(&instrument_id);
+    }
+
+    #[pyo3(name = "subscribe_option_summary")]
+    fn py_subscribe_option_summary<'py>(
+        &self,
+        py: Python<'py>,
+        inst_family: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.clone();
+        let family = Ustr::from(inst_family);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            if let Err(e) = client.subscribe_option_summary(family).await {
+                log::error!("Failed to subscribe to option summary: {e}");
+            }
+            Ok(())
+        })
+    }
+
+    #[pyo3(name = "unsubscribe_option_summary")]
+    fn py_unsubscribe_option_summary<'py>(
+        &self,
+        py: Python<'py>,
+        inst_family: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.clone();
+        let family = Ustr::from(inst_family);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            if let Err(e) = client.unsubscribe_option_summary(family).await {
+                log::error!("Failed to unsubscribe from option summary: {e}");
             }
             Ok(())
         })
@@ -1396,10 +1445,45 @@ fn handle_channel_data(
     data: serde_json::Value,
     instruments_by_symbol: &mut AHashMap<Ustr, InstrumentAny>,
     funding_cache: &mut AHashMap<Ustr, (Ustr, u64)>,
+    option_greeks_subs: &DashSet<InstrumentId>,
     clock: &AtomicTime,
     call_soon: &Py<PyAny>,
     callback: &Py<PyAny>,
 ) {
+    if matches!(channel, OKXWsChannel::OptionSummary) {
+        let ts_init = clock.get_time_ns();
+        match serde_json::from_value::<Vec<OKXOptionSummaryMsg>>(data) {
+            Ok(msgs) => {
+                for msg in &msgs {
+                    let Some(instrument) = instruments_by_symbol.get(&msg.inst_id) else {
+                        continue;
+                    };
+                    let instrument_id = instrument.id();
+                    if !option_greeks_subs.contains(&instrument_id) {
+                        continue;
+                    }
+                    match parse_option_summary_greeks(msg, &instrument_id, ts_init) {
+                        Ok(greeks) => {
+                            Python::attach(|py| match greeks.into_py_any(py) {
+                                Ok(py_obj) => {
+                                    call_python_threadsafe(py, call_soon, callback, py_obj);
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to convert OptionGreeks to Python: {e}");
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            log::error!("Failed to parse option summary for {}: {e}", msg.inst_id);
+                        }
+                    }
+                }
+            }
+            Err(e) => log::error!("Failed to deserialize option summary data: {e}"),
+        }
+        return;
+    }
+
     let Some(inst_id) = inst_id else { return };
 
     if matches!(channel, OKXWsChannel::IndexTickers) {

@@ -31,7 +31,7 @@ Greeks-relevant metadata varies by instrument type:
 
 ## Subscribing to Greeks
 
-Venues like Deribit and Bybit publish real-time Greeks alongside their options markets.
+Venues like Deribit, Bybit, and OKX publish real-time Greeks alongside their options markets.
 Nautilus provides two subscription levels:
 
 - **Per-instrument Greeks** -- subscribe to individual option contracts.
@@ -283,6 +283,7 @@ The following adapters currently support option Greeks subscriptions:
 |---------|:---------------------:|:-------------:|
 | Deribit | ✓                     | ✓             |
 | Bybit   | ✓                     | ✓             |
+| OKX     | ✓                     | -             |
 
 ## See also
 

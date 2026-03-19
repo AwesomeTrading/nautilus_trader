@@ -34,6 +34,7 @@ use nautilus_model::{
     data::{
         Bar, FundingRateUpdate, IndexPriceUpdate, InstrumentClose, InstrumentStatus,
         MarkPriceUpdate, OrderBookDeltas, QuoteTick, TradeTick, bar::BarType,
+        option_chain::OptionGreeks,
     },
     enums::BookType,
     identifiers::{ClientId, InstrumentId},
@@ -76,6 +77,8 @@ pub struct DataTesterConfig {
     pub subscribe_instrument_status: bool,
     /// Whether to subscribe to instrument close.
     pub subscribe_instrument_close: bool,
+    /// Whether to subscribe to option greeks.
+    pub subscribe_option_greeks: bool,
     /// Optional parameters passed to all subscribe calls.
     pub subscribe_params: Option<Params>,
     /// Optional parameters passed to all request calls.
@@ -143,6 +146,7 @@ impl DataTesterConfig {
             subscribe_instrument: false,
             subscribe_instrument_status: false,
             subscribe_instrument_close: false,
+            subscribe_option_greeks: false,
             subscribe_params: None,
             request_params: None,
             can_unsubscribe: true,
@@ -244,6 +248,12 @@ impl DataTesterConfig {
     #[must_use]
     pub fn with_subscribe_instrument_close(mut self, subscribe: bool) -> Self {
         self.subscribe_instrument_close = subscribe;
+        self
+    }
+
+    #[must_use]
+    pub fn with_subscribe_option_greeks(mut self, subscribe: bool) -> Self {
+        self.subscribe_option_greeks = subscribe;
         self
     }
 
@@ -363,6 +373,7 @@ impl Default for DataTesterConfig {
             subscribe_instrument: false,
             subscribe_instrument_status: false,
             subscribe_instrument_close: false,
+            subscribe_option_greeks: false,
             subscribe_params: None,
             request_params: None,
             can_unsubscribe: true,
@@ -513,6 +524,10 @@ impl DataActor for DataTester {
 
             if self.config.subscribe_instrument_close {
                 self.subscribe_instrument_close(instrument_id, client_id, subscribe_params.clone());
+            }
+
+            if self.config.subscribe_option_greeks {
+                self.subscribe_option_greeks(instrument_id, client_id, subscribe_params.clone());
             }
 
             // TODO: Implement historical data requests
@@ -673,6 +688,10 @@ impl DataActor for DataTester {
                     subscribe_params.clone(),
                 );
             }
+
+            if self.config.subscribe_option_greeks {
+                self.unsubscribe_option_greeks(instrument_id, client_id, subscribe_params.clone());
+            }
         }
 
         if let Some(bar_types) = self.config.bar_types.clone() {
@@ -779,6 +798,13 @@ impl DataActor for DataTester {
     fn on_instrument_close(&mut self, update: &InstrumentClose) -> anyhow::Result<()> {
         if self.config.log_data {
             log_info!("{update:?}", color = LogColor::Cyan);
+        }
+        Ok(())
+    }
+
+    fn on_option_greeks(&mut self, greeks: &OptionGreeks) -> anyhow::Result<()> {
+        if self.config.log_data {
+            log_info!("{greeks:?}", color = LogColor::Cyan);
         }
         Ok(())
     }
@@ -1209,6 +1235,7 @@ mod tests {
         config.subscribe_instrument = true;
         config.subscribe_instrument_status = true;
         config.subscribe_instrument_close = true;
+        config.subscribe_option_greeks = true;
 
         let actor = DataTester::new(config);
 
@@ -1221,6 +1248,36 @@ mod tests {
         assert!(actor.config.subscribe_instrument);
         assert!(actor.config.subscribe_instrument_status);
         assert!(actor.config.subscribe_instrument_close);
+        assert!(actor.config.subscribe_option_greeks);
+    }
+
+    #[rstest]
+    fn test_on_option_greeks(config: DataTesterConfig) {
+        use nautilus_model::data::{OptionGreekValues, option_chain::OptionGreeks};
+
+        let mut actor = DataTester::new(config);
+
+        let instrument_id = InstrumentId::from("BTC-USD-250328-92000-C.OKX");
+        let greeks = OptionGreeks {
+            instrument_id,
+            greeks: OptionGreekValues {
+                delta: 0.53,
+                gamma: 0.00001,
+                vega: 0.004,
+                theta: -0.002,
+                rho: 0.0,
+            },
+            mark_iv: Some(0.53),
+            bid_iv: Some(0.52),
+            ask_iv: Some(0.55),
+            underlying_price: None,
+            open_interest: None,
+            ts_event: UnixNanos::default(),
+            ts_init: UnixNanos::default(),
+        };
+        let result = actor.on_option_greeks(&greeks);
+
+        assert!(result.is_ok());
     }
 
     #[rstest]

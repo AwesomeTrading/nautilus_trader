@@ -4,8 +4,8 @@ Nautilus provides two paths for working with option Greeks
 (sensitivities of option prices to changes in market variables):
 
 1. **Venue-provided Greeks (Rust/PyO3)** -- real-time Greeks streamed from venues
-   like Deribit and Bybit via the `OptionGreeks` data type and the option chain
-   aggregation system.
+   like Deribit, Bybit, and OKX via the `OptionGreeks` data type and the option
+   chain aggregation system.
 2. **Local Greeks calculator (Cython/Python)** -- the `GreeksCalculator` class that
    computes Black-Scholes Greeks from cached market data, with support for portfolio
    aggregation, shock scenarios, and beta weighting.
@@ -285,7 +285,7 @@ rate = curve(0.75)  # quadratic interpolation
 |------------------------------|----------------------------------------|------------------------------------------|
 | Computation                  | Done by the venue                      | Local Black-Scholes                      |
 | Latency                      | Arrives with market data               | Computed on demand                       |
-| Venues                       | Deribit, Bybit (adapters with support) | Any venue with option instruments        |
+| Venues                       | Deribit, Bybit, OKX                    | Any venue with option instruments        |
 | Shock scenarios              | Not supported                          | Spot, vol, and time shocks               |
 | Portfolio aggregation        | Manual (iterate `OptionChainSlice`)    | Built-in via `portfolio_greeks()`        |
 | Beta weighting               | Not supported                          | Built-in                                 |
@@ -312,6 +312,7 @@ Complete working examples are available in the repository:
 
 - `examples/live/bybit/bybit_option_greeks.py` -- subscribe to Bybit venue-provided Greeks.
 - `examples/live/deribit/deribit_option_greeks.py` -- subscribe to Deribit venue-provided Greeks.
+- `examples/live/okx/okx_option_greeks.py` -- subscribe to OKX venue-provided Greeks.
 
 ## Related guides
 

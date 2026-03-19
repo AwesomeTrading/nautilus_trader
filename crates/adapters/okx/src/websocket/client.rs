@@ -34,7 +34,7 @@ use std::{
 
 use ahash::{AHashMap, AHashSet};
 use arc_swap::ArcSwap;
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use futures_util::Stream;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
@@ -184,6 +184,7 @@ pub struct OKXWebSocketClient {
     pub(crate) pending_orders: Arc<DashMap<String, PendingOrderInfo>>,
     pub(crate) pending_cancels: Arc<DashMap<String, PendingOrderInfo>>,
     pub(crate) pending_amends: Arc<DashMap<String, PendingOrderInfo>>,
+    option_greeks_subs: Arc<DashSet<InstrumentId>>,
     cancellation_token: CancellationToken,
 }
 
@@ -268,6 +269,7 @@ impl OKXWebSocketClient {
             pending_orders: Arc::new(DashMap::new()),
             pending_cancels: Arc::new(DashMap::new()),
             pending_amends: Arc::new(DashMap::new()),
+            option_greeks_subs: Arc::new(DashSet::new()),
             cancellation_token: CancellationToken::new(),
         })
     }
@@ -1368,6 +1370,43 @@ impl OKXWebSocketClient {
         self.subscribe(vec![arg]).await
     }
 
+    /// Subscribes to option summary data for an instrument family.
+    ///
+    /// Streams greeks (delta, gamma, vega, theta), implied volatility, and other
+    /// option metrics for all instruments in the specified family.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the subscription request fails.
+    ///
+    /// # References
+    ///
+    /// <https://www.okx.com/docs-v5/en/#public-data-websocket-option-summary-channel>.
+    pub async fn subscribe_option_summary(&self, inst_family: Ustr) -> Result<(), OKXWsError> {
+        let arg = OKXSubscriptionArg {
+            channel: OKXWsChannel::OptionSummary,
+            inst_type: None,
+            inst_family: Some(inst_family),
+            inst_id: None,
+        };
+        self.subscribe(vec![arg]).await
+    }
+
+    /// Returns a reference to the option greeks subscription set.
+    pub fn option_greeks_subs(&self) -> &Arc<DashSet<InstrumentId>> {
+        &self.option_greeks_subs
+    }
+
+    /// Adds an instrument to the option greeks subscription filter.
+    pub fn add_option_greeks_sub(&self, instrument_id: InstrumentId) {
+        self.option_greeks_subs.insert(instrument_id);
+    }
+
+    /// Removes an instrument from the option greeks subscription filter.
+    pub fn remove_option_greeks_sub(&self, instrument_id: &InstrumentId) {
+        self.option_greeks_subs.remove(instrument_id);
+    }
+
     /// Subscribes to funding rate data for perpetual swap instruments.
     ///
     /// Updates when funding rate changes or at funding intervals.
@@ -1535,6 +1574,21 @@ impl OKXWebSocketClient {
         // Don't send WS unsubscribe — other instruments may share the same
         // base pair. Index ticker mapping is managed by the pyo3 wrapper layer.
         Ok(())
+    }
+
+    /// Unsubscribe from option summary data for an instrument family.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the unsubscription request fails.
+    pub async fn unsubscribe_option_summary(&self, inst_family: Ustr) -> Result<(), OKXWsError> {
+        let arg = OKXSubscriptionArg {
+            channel: OKXWsChannel::OptionSummary,
+            inst_type: None,
+            inst_family: Some(inst_family),
+            inst_id: None,
+        };
+        self.unsubscribe(vec![arg]).await
     }
 
     /// Unsubscribe from funding rate data for a perpetual swap instrument.
