@@ -37,7 +37,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    UnixNanos,
+    MUTEX_POISONED, UnixNanos,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -81,8 +81,7 @@ pub struct HyperliquidDataClient {
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
     instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-    /// Maps coin symbols (e.g., "BTC") to instrument IDs (e.g., "BTC-PERP")
-    /// for efficient O(1) lookup in WebSocket message handlers
+    // Maps coin symbols (e.g., "BTC") to instrument IDs (e.g., "BTC-PERP")
     coin_to_instrument_id: Arc<RwLock<AHashMap<Ustr, InstrumentId>>>,
     clock: &'static AtomicTime,
     #[allow(dead_code)]
@@ -300,8 +299,6 @@ impl HyperliquidDataClient {
                 let coin = data.coin;
                 log::debug!("Received BBO message for coin: {coin}");
 
-                // Use efficient O(1) lookup instead of iterating through all instruments
-                // Hyperliquid WebSocket sends coin="BTC", lookup returns "BTC-PERP" instrument ID
                 let coin_map = coin_to_instrument_id.read().unwrap();
                 let instrument_id = coin_map.get(&data.coin);
 
@@ -341,7 +338,6 @@ impl HyperliquidDataClient {
                 let count = data.len();
                 log::debug!("Received {count} trade(s)");
 
-                // Process each trade in the batch
                 for trade_data in data {
                     let coin = trade_data.coin;
                     let coin_map = coin_to_instrument_id.read().unwrap();
@@ -434,18 +430,9 @@ impl HyperliquidDataClient {
                 }
             }
             _ => {
-                // Log other message types for debugging
                 log::trace!("Received unhandled WebSocket message: {msg:?}");
             }
         }
-    }
-
-    fn get_instrument(&self, instrument_id: &InstrumentId) -> anyhow::Result<InstrumentAny> {
-        let instruments = self.instruments.read().unwrap();
-        instruments
-            .get(instrument_id)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))
     }
 }
 
@@ -538,22 +525,18 @@ impl DataClient for HyperliquidDataClient {
             return Ok(());
         }
 
-        // Cancel all tasks
         self.cancellation_token.cancel();
 
-        // Wait for all tasks to complete
         for task in self.tasks.drain(..) {
             if let Err(e) = task.await {
                 log::error!("Error waiting for task to complete: {e}");
             }
         }
 
-        // Disconnect WebSocket client
         if let Err(e) = self.ws_client.disconnect().await {
             log::error!("Error disconnecting WebSocket client: {e}");
         }
 
-        // Clear state
         {
             let mut instruments = self.instruments.write().unwrap();
             instruments.clear();
@@ -568,25 +551,55 @@ impl DataClient for HyperliquidDataClient {
     fn request_instruments(&self, request: RequestInstruments) -> anyhow::Result<()> {
         log::debug!("Requesting all instruments");
 
-        let instruments = {
-            let instruments_map = self.instruments.read().unwrap();
-            instruments_map.values().cloned().collect()
-        };
+        let http = self.http_client.clone();
+        let sender = self.data_sender.clone();
+        let instruments_cache = self.instruments.clone();
+        let coin_map = self.coin_to_instrument_id.clone();
+        let ws_instruments = self.ws_client.instruments_cache();
+        let request_id = request.request_id;
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let venue = self.venue();
+        let start_nanos = datetime_to_unix_nanos(request.start);
+        let end_nanos = datetime_to_unix_nanos(request.end);
+        let params = request.params;
+        let clock = self.clock;
 
-        let response = DataResponse::Instruments(InstrumentsResponse::new(
-            request.request_id,
-            request.client_id.unwrap_or(self.client_id),
-            self.venue(),
-            instruments,
-            datetime_to_unix_nanos(request.start),
-            datetime_to_unix_nanos(request.end),
-            self.clock.get_time_ns(),
-            request.params,
-        ));
+        get_runtime().spawn(async move {
+            match http.request_instruments().await {
+                Ok(instruments) => {
+                    {
+                        let mut instruments_map = instruments_cache.write().expect(MUTEX_POISONED);
+                        let mut coin_to_id = coin_map.write().expect(MUTEX_POISONED);
 
-        if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
-            log::error!("Failed to send instruments response: {e}");
-        }
+                        for instrument in &instruments {
+                            let instrument_id = instrument.id();
+                            instruments_map.insert(instrument_id, instrument.clone());
+                            let coin = instrument.raw_symbol().inner();
+                            coin_to_id.insert(coin, instrument_id);
+                            ws_instruments.insert(coin, instrument.clone());
+                        }
+                    }
+
+                    let response = DataResponse::Instruments(InstrumentsResponse::new(
+                        request_id,
+                        client_id,
+                        venue,
+                        instruments,
+                        start_nanos,
+                        end_nanos,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send instruments response: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to fetch instruments from Hyperliquid: {e:?}");
+                }
+            }
+        });
 
         Ok(())
     }
@@ -594,22 +607,62 @@ impl DataClient for HyperliquidDataClient {
     fn request_instrument(&self, request: RequestInstrument) -> anyhow::Result<()> {
         log::debug!("Requesting instrument: {}", request.instrument_id);
 
-        let instrument = self.get_instrument(&request.instrument_id)?;
+        let http = self.http_client.clone();
+        let sender = self.data_sender.clone();
+        let instruments_cache = self.instruments.clone();
+        let coin_map = self.coin_to_instrument_id.clone();
+        let ws_instruments = self.ws_client.instruments_cache();
+        let instrument_id = request.instrument_id;
+        let request_id = request.request_id;
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let start_nanos = datetime_to_unix_nanos(request.start);
+        let end_nanos = datetime_to_unix_nanos(request.end);
+        let params = request.params;
+        let clock = self.clock;
 
-        let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
-            request.request_id,
-            request.client_id.unwrap_or(self.client_id),
-            instrument.id(),
-            instrument,
-            datetime_to_unix_nanos(request.start),
-            datetime_to_unix_nanos(request.end),
-            self.clock.get_time_ns(),
-            request.params,
-        )));
+        get_runtime().spawn(async move {
+            match http.request_instruments().await {
+                Ok(all_instruments) => {
+                    {
+                        let mut instruments_map = instruments_cache.write().expect(MUTEX_POISONED);
+                        let mut coin_to_id = coin_map.write().expect(MUTEX_POISONED);
 
-        if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
-            log::error!("Failed to send instrument response: {e}");
-        }
+                        for instrument in &all_instruments {
+                            let id = instrument.id();
+                            instruments_map.insert(id, instrument.clone());
+                            let coin = instrument.raw_symbol().inner();
+                            coin_to_id.insert(coin, id);
+                            ws_instruments.insert(coin, instrument.clone());
+                        }
+                    }
+
+                    if let Some(instrument) = all_instruments
+                        .into_iter()
+                        .find(|i| i.id() == instrument_id)
+                    {
+                        let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
+                            request_id,
+                            client_id,
+                            instrument.id(),
+                            instrument,
+                            start_nanos,
+                            end_nanos,
+                            clock.get_time_ns(),
+                            params,
+                        )));
+
+                        if let Err(e) = sender.send(DataEvent::Response(response)) {
+                            log::error!("Failed to send instrument response: {e}");
+                        }
+                    } else {
+                        log::error!("Instrument not found: {instrument_id}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to fetch instruments from Hyperliquid: {e:?}");
+                }
+            }
+        });
 
         Ok(())
     }

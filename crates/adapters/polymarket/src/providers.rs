@@ -153,6 +153,12 @@ impl PolymarketInstrumentProvider {
         Ok(())
     }
 
+    /// Returns a clone of the configured instrument filters.
+    #[must_use]
+    pub fn filters(&self) -> Vec<Arc<dyn InstrumentFilter>> {
+        self.filters.clone()
+    }
+
     /// Returns a reference to the underlying HTTP client.
     #[must_use]
     pub fn http_client(&self) -> &PolymarketGammaHttpClient {
@@ -176,70 +182,70 @@ impl PolymarketInstrumentProvider {
     /// Loads instruments using all configured filters, combining results from
     /// each filter's methods that return `Some`.
     async fn load_filtered(&self) -> anyhow::Result<Vec<InstrumentAny>> {
-        let mut instruments = Vec::new();
+        fetch_instruments(&self.http_client, &self.filters).await
+    }
+}
 
-        for filter in &self.filters {
-            if let Some(slugs) = filter.market_slugs()
-                && !slugs.is_empty()
-            {
-                let result = self.http_client.request_instruments_by_slugs(slugs).await?;
-                instruments.extend(result);
-            }
+/// Fetches instruments from the Gamma API, respecting any configured filters.
+pub async fn fetch_instruments(
+    http_client: &PolymarketGammaHttpClient,
+    filters: &[Arc<dyn InstrumentFilter>],
+) -> anyhow::Result<Vec<InstrumentAny>> {
+    if filters.is_empty() {
+        return http_client.request_instruments().await;
+    }
 
-            if let Some(event_slugs) = filter.event_slugs()
-                && !event_slugs.is_empty()
-            {
-                let result = self
-                    .http_client
-                    .request_instruments_by_event_slugs(event_slugs)
-                    .await?;
-                instruments.extend(result);
-            }
+    let mut instruments = Vec::new();
 
-            if let Some(params) = filter.query_params() {
-                let result = self
-                    .http_client
-                    .request_instruments_by_params(params)
-                    .await?;
-                instruments.extend(result);
-            }
+    for filter in filters {
+        if let Some(slugs) = filter.market_slugs()
+            && !slugs.is_empty()
+        {
+            let result = http_client.request_instruments_by_slugs(slugs).await?;
+            instruments.extend(result);
+        }
 
-            if let Some(event_queries) = filter.event_queries() {
-                for (event_slug, params) in event_queries {
-                    let result = self
-                        .http_client
-                        .request_instruments_by_event_query(&event_slug, params)
-                        .await?;
-                    instruments.extend(result);
-                }
-            }
+        if let Some(event_slugs) = filter.event_slugs()
+            && !event_slugs.is_empty()
+        {
+            let result = http_client
+                .request_instruments_by_event_slugs(event_slugs)
+                .await?;
+            instruments.extend(result);
+        }
 
-            if let Some(params) = filter.event_params() {
-                let result = self
-                    .http_client
-                    .request_instruments_by_event_params(params)
-                    .await?;
-                instruments.extend(result);
-            }
+        if let Some(params) = filter.query_params() {
+            let result = http_client.request_instruments_by_params(params).await?;
+            instruments.extend(result);
+        }
 
-            if let Some(params) = filter.search_params() {
-                let result = self
-                    .http_client
-                    .request_instruments_by_search(params)
+        if let Some(event_queries) = filter.event_queries() {
+            for (event_slug, params) in event_queries {
+                let result = http_client
+                    .request_instruments_by_event_query(&event_slug, params)
                     .await?;
                 instruments.extend(result);
             }
         }
 
-        // Deduplicate by InstrumentId
-        let mut seen = AHashSet::new();
-        instruments.retain(|inst| seen.insert(inst.id()));
+        if let Some(params) = filter.event_params() {
+            let result = http_client
+                .request_instruments_by_event_params(params)
+                .await?;
+            instruments.extend(result);
+        }
 
-        // Accept: AND across ALL filters
-        instruments.retain(|inst| self.filters.iter().all(|f| f.accept(inst)));
-
-        Ok(instruments)
+        if let Some(params) = filter.search_params() {
+            let result = http_client.request_instruments_by_search(params).await?;
+            instruments.extend(result);
+        }
     }
+
+    let mut seen = AHashSet::new();
+    instruments.retain(|inst| seen.insert(inst.id()));
+    instruments.retain(|inst| filters.iter().all(|f| f.accept(inst)));
+
+    Ok(instruments)
 }
 
 /// Extracts the condition ID from an instrument symbol.

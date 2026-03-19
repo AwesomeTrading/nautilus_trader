@@ -366,6 +366,12 @@ impl HyperliquidWebSocketClient {
         }
     }
 
+    /// Returns a shared reference to the instrument cache.
+    #[must_use]
+    pub fn instruments_cache(&self) -> Arc<DashMap<Ustr, InstrumentAny>> {
+        self.instruments.clone()
+    }
+
     /// Caches spot fill coin mappings for instrument lookup.
     ///
     /// Hyperliquid WebSocket fills for spot use `@{pair_index}` format (e.g., `@107`),

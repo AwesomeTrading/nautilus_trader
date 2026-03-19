@@ -48,8 +48,8 @@ use nautilus_common::{
     messages::{
         DataEvent,
         data::{
-            DataResponse, RequestBookSnapshot, RequestFundingRates, SubscribeBookDeltas,
-            SubscribeQuotes, SubscribeTrades,
+            DataResponse, RequestBookSnapshot, RequestFundingRates, RequestInstrument,
+            RequestInstruments, SubscribeBookDeltas, SubscribeQuotes, SubscribeTrades,
         },
     },
     testing::wait_until_async,
@@ -58,7 +58,7 @@ use nautilus_core::{UUID4, UnixNanos};
 use nautilus_model::{
     data::Data,
     enums::BookType,
-    identifiers::{ClientId, InstrumentId},
+    identifiers::{ClientId, InstrumentId, Venue},
 };
 use nautilus_network::http::HttpClient;
 use rstest::rstest;
@@ -796,6 +796,85 @@ async fn test_data_client_request_funding_rates_rejects_option() {
             .unwrap_err()
             .to_string()
             .contains("Funding rates not available for Option instruments"),
+    );
+
+    client.disconnect().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_data_client_request_instruments() {
+    let (addr, _state) = start_test_server().await.unwrap();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+    set_data_event_sender(tx);
+
+    let config = create_test_config(addr);
+    let mut client = BybitDataClient::new(ClientId::new("BYBIT"), config).unwrap();
+    client.connect().await.unwrap();
+
+    // Drain instrument events from connect
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    while rx.try_recv().is_ok() {}
+
+    let request = RequestInstruments::new(
+        None,
+        None,
+        Some(ClientId::new("BYBIT")),
+        Some(Venue::new("BYBIT")),
+        UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+    client.request_instruments(request).unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("timeout waiting for instruments response")
+        .expect("channel closed");
+
+    assert!(
+        matches!(event, DataEvent::Response(DataResponse::Instruments(_))),
+        "Expected Instruments response, was: {event:?}"
+    );
+
+    client.disconnect().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_data_client_request_instrument() {
+    let (addr, _state) = start_test_server().await.unwrap();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+    set_data_event_sender(tx);
+
+    let config = create_test_config(addr);
+    let mut client = BybitDataClient::new(ClientId::new("BYBIT"), config).unwrap();
+    client.connect().await.unwrap();
+
+    // Drain instrument events from connect
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTCUSDT-LINEAR.BYBIT");
+    let request = RequestInstrument::new(
+        instrument_id,
+        None,
+        None,
+        Some(ClientId::new("BYBIT")),
+        UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+    client.request_instrument(request).unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("timeout waiting for instrument response")
+        .expect("channel closed");
+
+    assert!(
+        matches!(event, DataEvent::Response(DataResponse::Instrument(_))),
+        "Expected Instrument response, was: {event:?}"
     );
 
     client.disconnect().await.unwrap();

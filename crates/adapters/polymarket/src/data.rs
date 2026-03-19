@@ -60,7 +60,7 @@ use crate::{
         clob::PolymarketClobPublicClient, data_api::PolymarketDataApiHttpClient,
         gamma::PolymarketGammaHttpClient, query::GetGammaMarketsParams,
     },
-    providers::{PolymarketInstrumentProvider, extract_condition_id},
+    providers::{PolymarketInstrumentProvider, extract_condition_id, fetch_instruments},
     websocket::{
         client::PolymarketWebSocketClient,
         messages::{MarketWsMessage, PolymarketQuotes, PolymarketWsMessage},
@@ -102,6 +102,7 @@ pub struct PolymarketDataClient {
     cancellation_token: CancellationToken,
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
+    instruments: Arc<DashMap<InstrumentId, InstrumentAny>>,
     order_books: Arc<DashMap<InstrumentId, OrderBook>>,
     last_quotes: Arc<DashMap<InstrumentId, QuoteTick>>,
     active_quote_subs: Arc<DashSet<InstrumentId>>,
@@ -135,6 +136,7 @@ impl PolymarketDataClient {
             cancellation_token: CancellationToken::new(),
             tasks: Vec::new(),
             data_sender,
+            instruments: Arc::new(DashMap::new()),
             order_books: Arc::new(DashMap::new()),
             last_quotes: Arc::new(DashMap::new()),
             active_quote_subs: Arc::new(DashSet::new()),
@@ -174,9 +176,8 @@ impl PolymarketDataClient {
 
     fn resolve_token_id(&self, instrument_id: InstrumentId) -> anyhow::Result<String> {
         let instrument = self
-            .provider
-            .store()
-            .find(&instrument_id)
+            .instruments
+            .get(&instrument_id)
             .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
         Ok(instrument.raw_symbol().as_str().to_string())
     }
@@ -209,6 +210,8 @@ impl PolymarketDataClient {
         self.provider.load_all(None).await?;
 
         for instrument in self.provider.store().list_all() {
+            self.instruments.insert(instrument.id(), instrument.clone());
+
             if let Err(e) = self
                 .data_sender
                 .send(DataEvent::Instrument(instrument.clone()))
@@ -556,72 +559,56 @@ impl DataClient for PolymarketDataClient {
     }
 
     fn request_instruments(&self, request: RequestInstruments) -> anyhow::Result<()> {
-        let instruments: Vec<InstrumentAny> = self
-            .provider
-            .store()
-            .list_all()
-            .into_iter()
-            .cloned()
-            .collect();
+        let http = self.provider.http_client().clone();
+        let filters = self.provider.filters();
+        let sender = self.data_sender.clone();
+        let instruments_cache = self.instruments.clone();
         let request_id = request.request_id;
         let client_id = request.client_id.unwrap_or(self.client_id);
         let venue = *POLYMARKET_VENUE;
         let start_nanos = datetime_to_unix_nanos(request.start);
         let end_nanos = datetime_to_unix_nanos(request.end);
         let params = request.params;
-        let ts_init = self.clock.get_time_ns();
+        let clock = self.clock;
 
-        log::info!(
-            "Returning {} cached instruments for request",
-            instruments.len()
-        );
+        get_runtime().spawn(async move {
+            match fetch_instruments(&http, &filters).await {
+                Ok(instruments) => {
+                    log::info!("Fetched {} instruments from Gamma API", instruments.len());
 
-        let response = DataResponse::Instruments(InstrumentsResponse::new(
-            request_id,
-            client_id,
-            venue,
-            instruments,
-            start_nanos,
-            end_nanos,
-            ts_init,
-            params,
-        ));
+                    for instrument in &instruments {
+                        instruments_cache.insert(instrument.id(), instrument.clone());
+                    }
 
-        if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
-            log::error!("Failed to send instruments response: {e}");
-        }
+                    let response = DataResponse::Instruments(InstrumentsResponse::new(
+                        request_id,
+                        client_id,
+                        venue,
+                        instruments,
+                        start_nanos,
+                        end_nanos,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send instruments response: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to fetch instruments from Gamma API: {e:?}");
+                }
+            }
+        });
 
         Ok(())
     }
 
     fn request_instrument(&self, request: RequestInstrument) -> anyhow::Result<()> {
         let instrument_id = request.instrument_id;
-
-        // Fast path: return from cache
-        if let Some(instrument) = self.provider.store().find(&instrument_id).cloned() {
-            let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
-                request.request_id,
-                request.client_id.unwrap_or(self.client_id),
-                instrument_id,
-                instrument,
-                datetime_to_unix_nanos(request.start),
-                datetime_to_unix_nanos(request.end),
-                self.clock.get_time_ns(),
-                request.params,
-            )));
-
-            if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
-                log::error!("Failed to send instrument response: {e}");
-            }
-
-            return Ok(());
-        }
-
-        // Slow path: fetch from Gamma API via condition_id
-        log::info!("Instrument {instrument_id} not in cache, fetching from Gamma API");
-
         let http = self.provider.http_client().clone();
         let sender = self.data_sender.clone();
+        let instruments_cache = self.instruments.clone();
         let client_id = request.client_id.unwrap_or(self.client_id);
         let request_id = request.request_id;
         let start = request.start;
@@ -652,6 +639,8 @@ impl DataClient for PolymarketDataClient {
             };
 
             if let Some(inst) = instrument {
+                instruments_cache.insert(inst.id(), inst.clone());
+
                 let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
                     request_id,
                     client_id,
@@ -677,9 +666,8 @@ impl DataClient for PolymarketDataClient {
     fn request_book_snapshot(&self, request: RequestBookSnapshot) -> anyhow::Result<()> {
         let instrument_id = request.instrument_id;
         let instrument = self
-            .provider
-            .store()
-            .find(&instrument_id)
+            .instruments
+            .get(&instrument_id)
             .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
 
         let token_id = instrument.raw_symbol().as_str().to_string();
@@ -725,9 +713,8 @@ impl DataClient for PolymarketDataClient {
     fn request_trades(&self, request: RequestTrades) -> anyhow::Result<()> {
         let instrument_id = request.instrument_id;
         let instrument = self
-            .provider
-            .store()
-            .find(&instrument_id)
+            .instruments
+            .get(&instrument_id)
             .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
 
         let condition_id = extract_condition_id(&instrument_id)?;

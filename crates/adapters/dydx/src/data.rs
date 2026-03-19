@@ -723,22 +723,16 @@ impl DataClient for DydxDataClient {
         let end_nanos = datetime_to_unix_nanos(end);
 
         get_runtime().spawn(async move {
-            let instrument = if let Some(cached) = instrument_cache.get(&instrument_id) {
-                log::debug!("Found instrument {instrument_id} in cache");
-                Some(cached)
-            } else {
-                log::debug!("Instrument {instrument_id} not in cache, fetching from API");
-                match http.request_instruments(None, None, None).await {
-                    Ok(instruments) => {
-                        for inst in &instruments {
-                            instrument_cache.insert_instrument_only(inst.clone());
-                        }
-                        instruments.into_iter().find(|i| i.id() == instrument_id)
+            let instrument = match http.request_instruments(None, None, None).await {
+                Ok(instruments) => {
+                    for inst in &instruments {
+                        instrument_cache.insert_instrument_only(inst.clone());
                     }
-                    Err(e) => {
-                        log::error!("Failed to fetch instruments from dYdX: {e:?}");
-                        None
-                    }
+                    instruments.into_iter().find(|i| i.id() == instrument_id)
+                }
+                Err(e) => {
+                    log::error!("Failed to fetch instruments from dYdX: {e:?}");
+                    None
                 }
             };
 
