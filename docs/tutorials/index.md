@@ -56,3 +56,9 @@ New to NautilusTrader? Work through these in sequence:
 | [Gold perpetual book imbalance (AX Exchange)](gold_book_imbalance_ax)                      | Order book imbalance on XAU-PERP             | Databento API key |
 | [Grid market making with a deadman's switch (BitMEX)](grid_market_maker_bitmex)            | Grid MM with server-side safety on XBTUSD    | Tardis.dev        |
 | [On-chain grid market making with short-term orders (dYdX)](grid_market_maker_dydx)        | Grid MM on dYdX v4 perpetuals                | User-provided     |
+
+## Rust
+
+| Tutorial                                                                                   | Description                                  | Data              |
+|:-------------------------------------------------------------------------------------------|:---------------------------------------------|:------------------|
+| [Book imbalance backtest with Betfair data](backtest_book_imbalance_betfair)               | Book imbalance actor on Betfair L2 data | User-provided     |

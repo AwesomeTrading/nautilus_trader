@@ -69,8 +69,10 @@ pyo3 = { workspace = true, optional = true }
 pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
+nautilus-backtest = { workspace = true }
 nautilus-execution = { workspace = true }
 nautilus-testkit = { workspace = true }
+nautilus-trading = { workspace = true, features = ["examples"] }
 
 axum = { workspace = true }
 dotenvy = { workspace = true }
@@ -90,4 +92,10 @@ doc = false
 [[example]]
 name = "betfair-load-file"
 path = "examples/load_betfair_file.rs"
+doc = false
+
+# Run with `cargo run -p nautilus-betfair --example betfair-backtest`
+[[example]]
+name = "betfair-backtest"
+path = "examples/betfair_backtest.rs"
 doc = false

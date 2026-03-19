@@ -13,7 +13,8 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! Example components for backtesting and demonstration.
+//! Example data actors for backtesting and demonstration.
 
-pub mod actors;
-pub mod strategies;
+pub mod imbalance;
+
+pub use imbalance::BookImbalanceActor;

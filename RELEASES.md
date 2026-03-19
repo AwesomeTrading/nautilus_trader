@@ -8,6 +8,8 @@ Released on TBD (UTC).
 - Added custom data registration, persistence, and routing in Rust (#3542), thanks @faysou
 - Added `cache.orders_active_local(...)` function in Rust (#3716), thanks @Javdu10
 - Added `interval` field to `FundingRateUpdate` (#3694), thanks @dxwil
+- Added `BookImbalanceActor` example actor for order book quoted volume imbalance in Rust
+- Added Betfair backtest example streaming raw `.gz` data through `BacktestEngine` in Rust
 - Added Binance instrument status polling in Rust
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
@@ -77,6 +79,7 @@ Released on TBD (UTC).
 - Upgraded `tokio-tungstenite` crate to v0.29.0
 
 ### Documentation
+- Added Rust tutorial for Betfair book imbalance backtest with `DataActor` walkthrough
 - Added Options concept guide with chain architecture, subscription API, strike filtering, and snapshot modes
 - Added Greeks concept guide covering venue-provided and local calculator paths
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
