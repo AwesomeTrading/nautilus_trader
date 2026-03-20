@@ -58,6 +58,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.1 -> 1.0.2"
 notes = "Version bump only, re-exports EventResponse from types module root"
 
+[[audits.itoa]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.17 -> 1.0.18"
+notes = "Performance optimization for 128-bit integer formatting, pointer simplification in Buffer::format. No new unsafe patterns."
+
 [[audits.lz4_flex]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
@@ -81,6 +87,12 @@ who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "0.2.5 -> 0.2.6"
 notes = "Repository extraction from portable-atomic monorepo. Inlines version.rs build script, doc/lint updates. No logic changes."
+
+[[audits.rustls-webpki]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.103.9 -> 0.103.10"
+notes = "CRL authoritative_for() fix for multiple distribution point URIs, Rust 1.94 import compatibility. No new unsafe or dependency changes."
 
 [[audits.sysinfo]]
 who = "Nautech Systems <info@nautechsystems.io>"

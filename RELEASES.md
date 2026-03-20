@@ -12,6 +12,7 @@ Released on TBD (UTC).
 - Added `ExecTesterConfig.test_reject_post_only` implicitly setting `post_only` on orders without requiring `use_post_only` (Python and Rust)
 - Added Betfair backtest example streaming raw `.gz` data through `BacktestEngine` in Rust
 - Added Binance instrument status polling in Rust
+- Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added Kraken FOK, `LimitIfTouched` orders, and batch submit
@@ -60,6 +61,7 @@ Released on TBD (UTC).
 - Fixed Sandbox reconciliation missing `account_id` (#3705), thanks for reporting @eliotOrderson
 - Fixed Rust `Portfolio` account-scoped `net_exposure`, `net_exposures`, and balance updates in multi-account mode
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
+- Fixed option chains emitting data after expiry (#3735), thanks @filipmacek
 - Fixed Betfair order modify `Quantity` serialization for partial cancel size reduction
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
 - Fixed Binance SBE price/quantity precision derivation (#3670), thanks @husariancom
@@ -98,9 +100,10 @@ Released on TBD (UTC).
 - Refactored Tardis adapter module organization to align with adapter spec (`common/`, `machine/cache.rs`)
 - Refactored Tardis `TardisDataClient` with `Credential::resolve()`, centralized URL resolution, and `AHashMap`
 - Improved socket clients reconnect and shutdown reliability
+- Improved `LiveNode` event loop to use biased `select!` with pinned `ctrl_c` for reliable signal handling
 - Improved Databento live price precision handling with maps populated from instrument definitions
 - Improved Polymarket Rust adapter (#3726), thanks @filipmacek
-- Improved `LiveNode` event loop to use biased `select!` with pinned `ctrl_c` for reliable signal handling
+- Improved Polymarket execution client (#3734), thanks @filipmacek
 - Refined `AtomicTime` mode switching and datetime panics
 - Refined base catalog interface (#3703), thanks @faysou
 - Refined IB option symbols to be OCC compliant (#3731), thanks @faysou
