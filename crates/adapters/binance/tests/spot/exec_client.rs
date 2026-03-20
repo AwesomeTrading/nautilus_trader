@@ -38,7 +38,7 @@ use nautilus_common::{
     live::runner::set_exec_event_sender,
     messages::{
         ExecutionEvent,
-        execution::{CancelAllOrders, QueryAccount, SubmitOrder},
+        execution::{CancelAllOrders, CancelOrder, ModifyOrder, QueryAccount, SubmitOrder},
     },
     testing::wait_until_async,
 };
@@ -48,7 +48,9 @@ use nautilus_model::{
     accounts::{AccountAny, CashAccount},
     enums::{AccountType, OmsType, OrderSide, TimeInForce},
     events::{AccountState, OrderEventAny},
-    identifiers::{AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TraderId, Venue},
+    identifiers::{
+        AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TraderId, Venue, VenueOrderId,
+    },
     orders::{LimitOrder, Order, OrderAny},
     types::{AccountBalance, Money, Price, Quantity},
 };
@@ -400,6 +402,34 @@ fn create_exec_test_router() -> Router {
         .route(
             "/api/v3/ping",
             get(|| async { sbe_response(build_ping_response()).into_response() }),
+        )
+        .route(
+            "/api/v3/order/cancelReplace",
+            post(
+                |headers: HeaderMap, Query(params): Query<HashMap<String, String>>| async move {
+                    if !has_auth_headers(&headers) {
+                        return unauthorized_response().into_response();
+                    }
+                    let symbol = params
+                        .get("symbol")
+                        .cloned()
+                        .unwrap_or_else(|| "BTCUSDT".to_string());
+                    let client_order_id = params
+                        .get("newClientOrderId")
+                        .cloned()
+                        .unwrap_or_else(|| "replace-order".to_string());
+                    sbe_response(build_new_order_response(
+                        99998,
+                        &symbol,
+                        &client_order_id,
+                        100_000_000_000,
+                        10_000_000,
+                        0,
+                        1, // NEW
+                    ))
+                    .into_response()
+                },
+            ),
         )
         .route(
             "/api/v3/exchangeInfo",
@@ -766,6 +796,187 @@ async fn test_cancel_all_orders_generates_canceled_events() {
         Duration::from_secs(5),
     )
     .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_cancel_order_generates_canceled_event() {
+    let addr = start_exec_test_server().await;
+    let base_url = format!("http://{addr}");
+
+    let (mut client, mut rx, cache) = create_test_execution_client(base_url);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.start().unwrap();
+    client.connect().await.unwrap();
+
+    let instrument_id = InstrumentId::from("BTCUSDT.BINANCE");
+    let client_order_id = ClientOrderId::new("cancel-test-001");
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("TEST-STRATEGY");
+
+    // Create and cache an order first (cancel needs it in cache)
+    let order = LimitOrder::new(
+        trader_id,
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        OrderSide::Buy,
+        Quantity::from("0.001"),
+        Price::from("50000.00"),
+        TimeInForce::Gtc,
+        None,
+        true,
+        false,
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let order_any = OrderAny::Limit(order);
+    cache
+        .borrow_mut()
+        .add_order(order_any, None, None, false)
+        .unwrap();
+
+    let cancel_cmd = CancelOrder::new(
+        trader_id,
+        Some(ClientId::from("BINANCE")),
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        Some(VenueOrderId::from("12345")),
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+
+    client.cancel_order(&cancel_cmd).unwrap();
+
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Canceled(_))));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_modify_order_generates_events() {
+    let addr = start_exec_test_server().await;
+    let base_url = format!("http://{addr}");
+
+    let (mut client, mut rx, cache) = create_test_execution_client(base_url);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.start().unwrap();
+    client.connect().await.unwrap();
+
+    let instrument_id = InstrumentId::from("BTCUSDT.BINANCE");
+    let client_order_id = ClientOrderId::new("modify-test-001");
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("TEST-STRATEGY");
+
+    let order = LimitOrder::new(
+        trader_id,
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        OrderSide::Buy,
+        Quantity::from("0.001"),
+        Price::from("50000.00"),
+        TimeInForce::Gtc,
+        None,
+        true,
+        false,
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let order_any = OrderAny::Limit(order);
+    cache
+        .borrow_mut()
+        .add_order(order_any, None, None, false)
+        .unwrap();
+
+    let modify_cmd = ModifyOrder::new(
+        trader_id,
+        Some(ClientId::from("BINANCE")),
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        Some(VenueOrderId::from("12345")),
+        Some(Quantity::from("0.002")),
+        Some(Price::from("51000.00")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+
+    // Modify uses cancel-replace on Binance Spot, which generates cancel + new events
+    let result = client.modify_order(&modify_cmd);
+    assert!(result.is_ok());
+
+    // Should get at least one execution event (cancel or accepted for the replacement)
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Order(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_connect_disconnect_reconnect() {
+    let addr = start_exec_test_server().await;
+    let base_url = format!("http://{addr}");
+
+    let (mut client, _rx, cache) = create_test_execution_client(base_url);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
+
+    client.disconnect().await.unwrap();
+    assert!(!client.is_connected());
+
+    // Reconnect
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
 }
 
 // Note: This test is ignored because query_account uses block_on internally

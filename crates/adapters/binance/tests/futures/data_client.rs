@@ -33,12 +33,20 @@ use nautilus_common::{
     live::runner::set_data_event_sender,
     messages::{
         DataEvent,
-        data::subscribe::{SubscribeQuotes, SubscribeTrades},
+        data::{
+            subscribe::{
+                SubscribeBookDeltas, SubscribeMarkPrices, SubscribeQuotes, SubscribeTrades,
+            },
+            unsubscribe::{UnsubscribeQuotes, UnsubscribeTrades},
+        },
     },
     testing::wait_until_async,
 };
 use nautilus_core::UnixNanos;
-use nautilus_model::identifiers::{ClientId, InstrumentId, Venue};
+use nautilus_model::{
+    enums::BookType,
+    identifiers::{ClientId, InstrumentId, Venue},
+};
 use nautilus_network::http::HttpClient;
 use rstest::rstest;
 use serde_json::json;
@@ -100,6 +108,37 @@ async fn handle_ws_connection(mut socket: WebSocket) {
                                 });
                                 tokio::time::sleep(Duration::from_millis(50)).await;
                                 let _ = socket.send(Message::Text(quote.to_string().into())).await;
+                            } else if stream.contains("@depth") {
+                                let depth_update = json!({
+                                    "e": "depthUpdate",
+                                    "E": 1700000000000_i64,
+                                    "T": 1700000000000_i64,
+                                    "s": "BTCUSDT",
+                                    "U": 1027024,
+                                    "u": 1027025,
+                                    "pu": 1027023,
+                                    "b": [["50000.00", "1.000"], ["49999.00", "2.000"]],
+                                    "a": [["50001.00", "0.500"], ["50002.00", "1.500"]]
+                                });
+                                tokio::time::sleep(Duration::from_millis(50)).await;
+                                let _ = socket
+                                    .send(Message::Text(depth_update.to_string().into()))
+                                    .await;
+                            } else if stream.contains("@markPrice") {
+                                let mark_price = json!({
+                                    "e": "markPriceUpdate",
+                                    "E": 1700000000000_i64,
+                                    "s": "BTCUSDT",
+                                    "p": "50000.50",
+                                    "i": "50000.25",
+                                    "P": "50000.75",
+                                    "r": "0.00010000",
+                                    "T": 1700028800000_i64
+                                });
+                                tokio::time::sleep(Duration::from_millis(50)).await;
+                                let _ = socket
+                                    .send(Message::Text(mark_price.to_string().into()))
+                                    .await;
                             }
                         }
                     }
@@ -361,6 +400,328 @@ async fn test_subscribe_quotes() {
         || {
             let found = rx.try_recv().is_ok_and(|e| matches!(e, DataEvent::Data(_)));
             async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_subscribe_book_deltas() {
+    let addr = start_data_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx) = create_test_data_client(base_url_http, base_url_ws);
+
+    client.connect().await.unwrap();
+
+    // Drain instrument events from connect
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+    let cmd = SubscribeBookDeltas::new(
+        instrument_id,
+        BookType::L2_MBP,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        false,
+        None,
+        None,
+    );
+
+    client.subscribe_book_deltas(&cmd).unwrap();
+
+    wait_until_async(
+        || {
+            let found = rx.try_recv().is_ok_and(|e| matches!(e, DataEvent::Data(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_subscribe_mark_prices() {
+    let addr = start_data_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx) = create_test_data_client(base_url_http, base_url_ws);
+
+    client.connect().await.unwrap();
+
+    // Drain instrument events from connect
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+    let cmd = SubscribeMarkPrices::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+
+    client.subscribe_mark_prices(&cmd).unwrap();
+
+    wait_until_async(
+        || {
+            let found = rx.try_recv().is_ok_and(|e| matches!(e, DataEvent::Data(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_unsubscribe_trades() {
+    let addr = start_data_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx) = create_test_data_client(base_url_http, base_url_ws);
+
+    client.connect().await.unwrap();
+
+    // Drain instrument events
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+
+    let sub_cmd = SubscribeTrades::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+    client.subscribe_trades(&sub_cmd).unwrap();
+
+    wait_until_async(
+        || {
+            let found = rx.try_recv().is_ok_and(|e| matches!(e, DataEvent::Data(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let unsub_cmd = UnsubscribeTrades::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+    let result = client.unsubscribe_trades(&unsub_cmd);
+    assert!(result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_unsubscribe_quotes() {
+    let addr = start_data_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx) = create_test_data_client(base_url_http, base_url_ws);
+
+    client.connect().await.unwrap();
+
+    // Drain instrument events
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+
+    let sub_cmd = SubscribeQuotes::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+    client.subscribe_quotes(&sub_cmd).unwrap();
+
+    wait_until_async(
+        || {
+            let found = rx.try_recv().is_ok_and(|e| matches!(e, DataEvent::Data(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let unsub_cmd = UnsubscribeQuotes::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+    let result = client.unsubscribe_quotes(&unsub_cmd);
+    assert!(result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_connect_disconnect_reconnect() {
+    let addr = start_data_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx) = create_test_data_client(base_url_http, base_url_ws);
+
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
+
+    // Drain instrument events
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    client.disconnect().await.unwrap();
+    assert!(!client.is_connected());
+
+    // Reconnect
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
+
+    // Should emit instruments again on reconnect
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_subscribe_trades_and_quotes_simultaneously() {
+    let addr = start_data_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx) = create_test_data_client(base_url_http, base_url_ws);
+
+    client.connect().await.unwrap();
+
+    // Drain instrument events
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, DataEvent::Instrument(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+
+    let trades_cmd = SubscribeTrades::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+    let quotes_cmd = SubscribeQuotes::new(
+        instrument_id,
+        Some(ClientId::from("BINANCE")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+        None,
+    );
+
+    client.subscribe_trades(&trades_cmd).unwrap();
+    client.subscribe_quotes(&quotes_cmd).unwrap();
+
+    let mut data_count = 0;
+    wait_until_async(
+        || {
+            while rx.try_recv().is_ok_and(|e| matches!(e, DataEvent::Data(_))) {
+                data_count += 1;
+            }
+            async move { data_count >= 2 }
         },
         Duration::from_secs(5),
     )

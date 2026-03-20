@@ -33,7 +33,7 @@ use nautilus_common::{
     live::runner::set_exec_event_sender,
     messages::{
         ExecutionEvent,
-        execution::{CancelAllOrders, SubmitOrder},
+        execution::{CancelAllOrders, CancelOrder, ModifyOrder, SubmitOrder},
     },
     testing::wait_until_async,
 };
@@ -43,7 +43,9 @@ use nautilus_model::{
     accounts::{AccountAny, MarginAccount},
     enums::{AccountType, OmsType, OrderSide, TimeInForce},
     events::{AccountState, OrderEventAny},
-    identifiers::{AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TraderId, Venue},
+    identifiers::{
+        AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, TraderId, Venue, VenueOrderId,
+    },
     orders::{LimitOrder, Order, OrderAny},
     types::{AccountBalance, Money, Price, Quantity},
 };
@@ -206,6 +208,12 @@ fn create_exec_test_router() -> Router {
                 let mut resp = load_fixture("order_response.json");
                 resp["status"] = json!("CANCELED");
                 json_response(&resp)
+            })
+            .put(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&load_fixture("order_response.json"))
             }),
         )
         .route(
@@ -498,4 +506,178 @@ async fn test_cancel_all_orders_completes() {
     // Futures cancel_all returns success code via HTTP; cancel events arrive through WS
     let result = client.cancel_all_orders(&cancel_all_cmd);
     assert!(result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_cancel_order_completes() {
+    let addr = start_exec_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, _rx, cache) = create_test_execution_client(base_url_http, base_url_ws);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.start().unwrap();
+    client.connect().await.unwrap();
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+    let client_order_id = ClientOrderId::new("cancel-test-001");
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("TEST-STRATEGY");
+
+    let order = LimitOrder::new(
+        trader_id,
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        OrderSide::Buy,
+        Quantity::from("0.001"),
+        Price::from("50000.00"),
+        TimeInForce::Gtc,
+        None,
+        true,
+        false,
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let order_any = OrderAny::Limit(order);
+    cache
+        .borrow_mut()
+        .add_order(order_any, None, None, false)
+        .unwrap();
+
+    let cancel_cmd = CancelOrder::new(
+        trader_id,
+        Some(ClientId::from("BINANCE")),
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        Some(VenueOrderId::from("12345")),
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+
+    // Futures cancel queues an async HTTP task. The actual OrderCanceled event
+    // arrives via the WS user data stream, which this mock does not simulate.
+    // We verify the command is accepted and the HTTP request completes without error.
+    let result = client.cancel_order(&cancel_cmd);
+    assert!(result.is_ok());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_modify_order_completes() {
+    let addr = start_exec_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx, cache) = create_test_execution_client(base_url_http, base_url_ws);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.start().unwrap();
+    client.connect().await.unwrap();
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+    let client_order_id = ClientOrderId::new("modify-test-001");
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("TEST-STRATEGY");
+
+    let order = LimitOrder::new(
+        trader_id,
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        OrderSide::Buy,
+        Quantity::from("0.001"),
+        Price::from("50000.00"),
+        TimeInForce::Gtc,
+        None,
+        true,
+        false,
+        false,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let order_any = OrderAny::Limit(order);
+    cache
+        .borrow_mut()
+        .add_order(order_any, None, None, false)
+        .unwrap();
+
+    let modify_cmd = ModifyOrder::new(
+        trader_id,
+        Some(ClientId::from("BINANCE")),
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        Some(VenueOrderId::from("12345")),
+        Some(Quantity::from("0.002")),
+        Some(Price::from("51000.00")),
+        None,
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+
+    client.modify_order(&modify_cmd).unwrap();
+
+    // Futures modify_order HTTP path emits OrderUpdated on success
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Updated(_))));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_connect_disconnect_reconnect() {
+    let addr = start_exec_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, _rx, cache) = create_test_execution_client(base_url_http, base_url_ws);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
+
+    client.disconnect().await.unwrap();
+    assert!(!client.is_connected());
+
+    // Reconnect
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
 }
