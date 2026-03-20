@@ -278,7 +278,7 @@ impl OptionChainAggregator {
     pub fn update_quote(&mut self, quote: &QuoteTick) {
         if self.is_expired(quote.ts_event) {
             log::warn!(
-                "Dropping quote for {} — series {} expired at {}",
+                "Dropping quote for {}, series {} expired at {}",
                 quote.instrument_id,
                 self.series_id,
                 self.series_id.expiration_ns,
@@ -325,7 +325,7 @@ impl OptionChainAggregator {
     pub fn update_greeks(&mut self, greeks: &OptionGreeks) {
         if self.is_expired(greeks.ts_event) {
             log::warn!(
-                "Dropping greeks for {} — series {} expired at {}",
+                "Dropping greeks for {}, series {} expired at {}",
                 greeks.instrument_id,
                 self.series_id,
                 self.series_id.expiration_ns,

@@ -406,7 +406,7 @@ impl OptionChainManager {
             }
 
             // Push deferred wire unsubscribes
-            self.push_unsubscribe_pair(*instrument_id);
+            self.push_unsubscribe_commands(*instrument_id);
         }
 
         log::info!(
@@ -452,7 +452,7 @@ impl OptionChainManager {
         self.register_handlers_for_instruments_bulk(&active_ids);
 
         for &id in &active_ids {
-            self.push_subscribe_pair(id);
+            self.push_subscribe_commands(id);
         }
 
         self.bootstrapped = true;
@@ -516,8 +516,8 @@ impl OptionChainManager {
         }
     }
 
-    /// Pushes deferred subscribe commands (quotes + greeks) for a single instrument.
-    fn push_subscribe_pair(&self, instrument_id: InstrumentId) {
+    /// Pushes deferred subscribe commands (quotes, greeks, instrument status) for a single instrument.
+    fn push_subscribe_commands(&self, instrument_id: InstrumentId) {
         let venue = self.aggregator.series_id().venue;
         let ts_init = self.clock.borrow().timestamp_ns();
         let mut queue = self.deferred_cmd_queue.borrow_mut();
@@ -556,8 +556,8 @@ impl OptionChainManager {
         ));
     }
 
-    /// Pushes deferred unsubscribe commands (quotes + greeks) for a single instrument.
-    fn push_unsubscribe_pair(&self, instrument_id: InstrumentId) {
+    /// Pushes deferred unsubscribe commands (quotes, greeks, instrument status) for a single instrument.
+    fn push_unsubscribe_commands(&self, instrument_id: InstrumentId) {
         let venue = self.aggregator.series_id().venue;
         let ts_init = self.clock.borrow().timestamp_ns();
         let mut queue = self.deferred_cmd_queue.borrow_mut();
@@ -596,7 +596,7 @@ impl OptionChainManager {
         ));
     }
 
-    /// Forwards quote and greeks subscriptions for a single instrument to the data client.
+    /// Forwards quote, greeks, and instrument status subscriptions for a single instrument.
     fn forward_instrument_subscriptions(
         client: Option<&mut DataClientAdapter>,
         instrument_id: InstrumentId,
@@ -688,10 +688,10 @@ impl OptionChainManager {
 
         // Push deferred wire-level changes into the shared command queue
         for &id in &action.add {
-            self.push_subscribe_pair(id);
+            self.push_subscribe_commands(id);
         }
         for &id in &action.remove {
-            self.push_unsubscribe_pair(id);
+            self.push_unsubscribe_commands(id);
         }
 
         if !action.add.is_empty() || !action.remove.is_empty() {

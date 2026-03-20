@@ -2781,7 +2781,7 @@ cdef class DataEngine(Component):
         # Safeguard: reject data past expiry
         if tick.ts_event >= manager.series_id.expiration_ns:
             self._log.warning(
-                f"Dropping quote for {tick.instrument_id} — series {series_key} expired",
+                f"Dropping quote for {tick.instrument_id}, series {series_key} expired",
             )
             self._expire_option_chain_instrument(tick.instrument_id, series_key)
             return
@@ -2811,7 +2811,7 @@ cdef class DataEngine(Component):
         # Safeguard: reject data past expiry
         if option_greeks.ts_event >= manager.series_id.expiration_ns:
             self._log.warning(
-                f"Dropping greeks for {option_greeks.instrument_id} — series {series_key} expired",
+                f"Dropping greeks for {option_greeks.instrument_id}, series {series_key} expired",
             )
             self._expire_option_chain_instrument(option_greeks.instrument_id, series_key)
             return

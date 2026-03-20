@@ -1245,7 +1245,7 @@ impl DataEngine {
     /// managers (or any other component) and executes them against the appropriate
     /// data client.
     fn drain_deferred_commands(&mut self) {
-        // Loop because handlers (e.g. expire_series) may push new commands during processing
+        // Loop because expire_series pushes Unsubscribe commands; converges in <= 3 iterations
         loop {
             let commands: VecDeque<DeferredCommand> =
                 std::mem::take(&mut *self.deferred_cmd_queue.borrow_mut());
@@ -1277,6 +1277,10 @@ impl DataEngine {
     }
 
     /// Proactively expires all instruments for a series and tears down the manager.
+    ///
+    /// `handle_instrument_expired` removes each instrument from the aggregator and pushes
+    /// deferred unsubscribe commands. `teardown` then cancels the snapshot timer and clears
+    /// the handler lists (the aggregator is already empty at that point).
     fn expire_series(&mut self, series_id: OptionSeriesId) {
         let Some(manager_rc) = self.option_chain_managers.get(&series_id).cloned() else {
             return;
