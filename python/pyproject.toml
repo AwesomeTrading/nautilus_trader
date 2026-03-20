@@ -40,8 +40,10 @@ docs = "https://nautilustrader.io/docs"
 requires = ["maturin>=1.12.6", "patchelf"]
 build-backend = "maturin"
 
-[tool.maturin.scripts]
-pre-build = "python generate_stubs.py"
+# Disabled: pyo3-stub-gen 0.19.0 deadlocks during StubInfoBuilder::build()
+# when processing the full set of annotations. Re-enable once resolved.
+# [tool.maturin.scripts]
+# pre-build = "python generate_stubs.py"
 
 [tool.maturin]
 manifest-path = "../crates/pyo3/Cargo.toml"

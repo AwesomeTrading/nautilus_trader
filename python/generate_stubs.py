@@ -113,6 +113,7 @@ def run_command(
     cmd: Sequence[str],
     cwd: Path | None = None,
     check: bool = True,
+    stream_output: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a command and return the result.
@@ -122,10 +123,14 @@ def run_command(
     if cwd:
         print(f"  in: {cwd}")
 
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+    if stream_output:
+        result = subprocess.run(cmd, cwd=cwd, text=True, check=False)
+    else:
+        result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
 
     if check and result.returncode != 0:
-        print(f"Error: {result.stderr}")
+        if not stream_output:
+            print(f"Error: {result.stderr}")
         raise subprocess.CalledProcessError(result.returncode, cmd)
 
     return result
@@ -182,7 +187,7 @@ def generate_stubs() -> bool:
     if cargo_features:
         cmd.extend(["--features", ",".join(cargo_features)])
 
-    result = run_command(cmd, cwd=crates_dir)
+    result = run_command(cmd, cwd=crates_dir, stream_output=True)
 
     print("Stubs generated successfully")
 
