@@ -35,9 +35,13 @@ use nautilus_system::{
 use pyo3::prelude::*;
 use ustr::Ustr;
 
-use super::enums::{TardisExchange, TardisInstrumentType};
 use crate::{
-    config::TardisDataClientConfig, factories::TardisDataClientFactory, parse::normalize_symbol_str,
+    common::{
+        enums::{TardisExchange, TardisInstrumentType},
+        parse::normalize_symbol_str,
+    },
+    config::TardisDataClientConfig,
+    factories::TardisDataClientFactory,
 };
 
 /// Normalize a symbol string for Tardis, returning a suffix-modified symbol.

@@ -16,7 +16,7 @@
 use nautilus_core::UnixNanos;
 use nautilus_model::instruments::Instrument;
 use nautilus_tardis::{
-    enums::TardisExchange,
+    common::enums::TardisExchange,
     http::{client::TardisHttpClient, query::InstrumentFilterBuilder},
 };
 

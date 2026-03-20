@@ -16,7 +16,7 @@
 use pyo3::prelude::*;
 use strum::IntoEnumIterator;
 
-use crate::enums::TardisExchange;
+use crate::common::enums::TardisExchange;
 
 #[must_use]
 #[pyfunction(name = "tardis_exchanges")]

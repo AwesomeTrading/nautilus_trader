@@ -22,10 +22,16 @@ Released on TBD (UTC).
 - Added OKX `fwdPx` (forward price) to `OKXOptionSummaryMsg` and mapped to `underlying_price` on `OptionGreeks` for ATM tracking
 - Added OKX missing WebSocket message fields across all channel structs
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
+- Added Tardis `MarkPriceUpdate` and `IndexPriceUpdate` parsing from `derivative_ticker` messages in Rust
+- Added Tardis `DerivativeTickerCache` for deduplicating unchanged funding rate, mark price, and index price updates
+- Added Tardis `TardisDataType` enum for normalized Tardis Machine data type identifiers
+- Added Tardis live streaming support via `stream_options` config with automatic reconnection and exponential backoff
 - Added Tardis raw provider metadata to `Instrument.info` (#3730), thanks for reporting @volemont
 - Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
 
 ### Breaking Changes
+- Removed `TARDIS_BASE_URL` constant from `nautilus_tardis::http` - use `nautilus_tardis::common::urls::TARDIS_HTTP_BASE_URL`
+- Changed Tardis HTTP client from `reqwest::Client` to `nautilus_network::http::HttpClient` with rate limiting
 - Changed `ExecutionEngine.register_client` to error when a venue is already routed to another client (Rust)
 - Changed `ExecutionEngine.register_venue_routing` to error when re-routing a venue to a different client (Rust)
 - Renamed `OrderEvent.kind()` to `type_name()` in Rust
@@ -72,6 +78,9 @@ Released on TBD (UTC).
 - Fixed OKX `connect()` not passing `instrument_families` for OPTION instrument requests (HTTP 400 from OKX API)
 - Fixed OKX `base_url_ws` ignored for private and business WebSocket channels (#3727), thanks for reporting @Stamppot82
 - Fixed Polymarket WebSocket initial vs incremental subscribe (#3717), thanks @Javdu10
+- Fixed Tardis data client CTRL+C not responding due to signal starvation in `LiveNode` event loop
+- Fixed Tardis data client `stop()`/`disconnect()` lifecycle leaving tasks alive or `is_connected` stale
+- Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
 
 ### Internal Improvements
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
@@ -82,11 +91,16 @@ Released on TBD (UTC).
 - Added `subscribe_option_greeks` support to `DataTester` in Rust
 - Added `WebSocketClient.notify_closed()` for stream-mode callers to signal reader EOF to the controller
 - Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
+- Added Tardis HTTP and WebSocket mock server integration tests
+- Added `LiveNode` stop-handle timeout test for shutdown reliability
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
+- Refactored Tardis adapter module organization to align with adapter spec (`common/`, `machine/cache.rs`)
+- Refactored Tardis `TardisDataClient` with `Credential::resolve()`, centralized URL resolution, and `AHashMap`
 - Improved socket clients reconnect and shutdown reliability
 - Improved Databento live price precision handling with maps populated from instrument definitions
 - Improved Polymarket Rust adapter (#3726), thanks @filipmacek
+- Improved `LiveNode` event loop to use biased `select!` with pinned `ctrl_c` for reliable signal handling
 - Refined `AtomicTime` mode switching and datetime panics
 - Refined base catalog interface (#3703), thanks @faysou
 - Refined IB option symbols to be OCC compliant (#3731), thanks @faysou

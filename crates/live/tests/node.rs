@@ -276,4 +276,39 @@ mod serial_tests {
         assert!(result.is_ok());
         assert_eq!(handle.state(), NodeState::Stopped);
     }
+
+    #[rstest]
+    #[tokio::test]
+    async fn test_handle_stop_completes_within_timeout() {
+        let config = LiveNodeConfig {
+            exec_engine: LiveExecEngineConfig {
+                reconciliation: false,
+                ..Default::default()
+            },
+            delay_post_stop: Duration::from_millis(50),
+            ..Default::default()
+        };
+        let mut node = LiveNode::build("TestNode".to_string(), Some(config)).unwrap();
+        let handle = node.handle();
+
+        let stop_handle = handle.clone();
+        tokio::spawn(async move {
+            wait_until_async(
+                || async { stop_handle.is_running() },
+                Duration::from_secs(5),
+            )
+            .await;
+            stop_handle.stop();
+        });
+
+        // The biased select in the event loop prioritizes signals over data,
+        // so stop should complete well within 5 seconds even under load
+        let result = tokio::time::timeout(Duration::from_secs(5), node.run()).await;
+
+        assert!(
+            result.is_ok(),
+            "run() should complete within 5 seconds after stop"
+        );
+        assert_eq!(handle.state(), NodeState::Stopped);
+    }
 }

@@ -28,8 +28,8 @@ use nautilus_common::enums::Environment;
 use nautilus_live::node::LiveNode;
 use nautilus_model::identifiers::{ClientId, InstrumentId, TraderId};
 use nautilus_tardis::{
-    config::TardisDataClientConfig, enums::TardisExchange, factories::TardisDataClientFactory,
-    machine::types::ReplayNormalizedRequestOptions,
+    common::enums::TardisExchange, config::TardisDataClientConfig,
+    factories::TardisDataClientFactory, machine::types::ReplayNormalizedRequestOptions,
 };
 use nautilus_testkit::testers::{DataTester, DataTesterConfig};
 
@@ -65,8 +65,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     let tester_config = DataTesterConfig::new(client_id, instrument_ids)
+        .with_subscribe_quotes(true)
         .with_subscribe_trades(true)
-        .with_subscribe_book_deltas(true);
+        .with_subscribe_mark_prices(true)
+        .with_subscribe_index_prices(true)
+        .with_subscribe_funding_rates(true);
+    // .with_subscribe_trades(true);
+    // .with_subscribe_book_deltas(true);
     let tester = DataTester::new(tester_config);
 
     node.add_actor(tester)?;

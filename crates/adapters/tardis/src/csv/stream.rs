@@ -32,6 +32,7 @@ use nautilus_model::{
 use pyo3::{Py, PyAny, Python};
 
 use crate::{
+    common::parse::{parse_instrument_id, parse_timestamp},
     csv::{
         create_book_order, create_csv_reader, infer_precision, parse_delta_record,
         parse_derivative_ticker_record, parse_quote_record, parse_trade_record,
@@ -40,7 +41,6 @@ use crate::{
             TardisOrderBookSnapshot25Record, TardisQuoteRecord, TardisTradeRecord,
         },
     },
-    parse::{parse_instrument_id, parse_timestamp},
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1500,7 +1500,10 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::{common::testing::get_test_data_path, csv::load::load_deltas, parse::parse_price};
+    use crate::{
+        common::{parse::parse_price, testing::get_test_data_path},
+        csv::load::load_deltas,
+    };
 
     #[rstest]
     #[case(0.0, 0)]

@@ -37,9 +37,6 @@ where
 {
     String::deserialize(deserializer).map(|s| Ustr::from(&s.to_uppercase()))
 }
-// Errors
-//
-// Returns a deserialization error if the input is not a valid string.
 
 /// Deserialize a trade ID or generate a new UUID if empty.
 ///

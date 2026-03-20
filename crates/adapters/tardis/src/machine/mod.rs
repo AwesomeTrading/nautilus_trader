@@ -13,6 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
+pub mod cache;
 pub mod client;
 pub mod message;
 pub mod parse;

@@ -30,7 +30,7 @@ use super::{
     },
     models::TardisInstrumentInfo,
 };
-use crate::{
+use crate::common::{
     enums::TardisInstrumentType,
     parse::{normalize_instrument_id, parse_instrument_id},
 };

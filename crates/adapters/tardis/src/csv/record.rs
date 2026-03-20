@@ -16,7 +16,7 @@
 use serde::{Deserialize, Serialize};
 use ustr::Ustr;
 
-use crate::{
+use crate::common::{
     enums::TardisExchange,
     parse::{deserialize_trade_id, deserialize_uppercase},
 };

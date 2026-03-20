@@ -114,6 +114,49 @@ pub enum TardisBarKind {
     Tick,
 }
 
+/// Normalized data type identifiers used in Tardis Machine Server requests.
+/// See <https://docs.tardis.dev/api/tardis-machine#normalized-data-types>.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Display,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    FromRepr,
+)]
+#[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum TardisDataType {
+    Trade,
+    BookChange,
+    BookSnapshot,
+    DerivativeTicker,
+    Quote,
+    Disconnect,
+}
+
+impl TardisDataType {
+    /// Returns the Tardis Machine Server data type string.
+    #[must_use]
+    pub fn as_tardis_str(&self) -> &str {
+        match self {
+            Self::Trade => "trade",
+            Self::BookChange => "book_change",
+            Self::BookSnapshot => "book_snapshot",
+            Self::DerivativeTicker => "derivative_ticker",
+            Self::Quote => "quote",
+            Self::Disconnect => "disconnect",
+        }
+    }
+}
+
 #[derive(
     Copy,
     Clone,

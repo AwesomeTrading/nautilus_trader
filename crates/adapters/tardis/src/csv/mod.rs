@@ -43,16 +43,13 @@ pub use stream::{
     stream_funding_rates, stream_quotes, stream_trades,
 };
 
-use super::{
-    csv::record::{
-        TardisBookUpdateRecord, TardisDerivativeTickerRecord, TardisQuoteRecord, TardisTradeRecord,
-    },
-    parse::{
-        parse_aggressor_side, parse_book_action, parse_instrument_id, parse_order_side,
-        parse_timestamp,
-    },
+use super::csv::record::{
+    TardisBookUpdateRecord, TardisDerivativeTickerRecord, TardisQuoteRecord, TardisTradeRecord,
 };
-use crate::parse::parse_price;
+use crate::common::parse::{
+    parse_aggressor_side, parse_book_action, parse_instrument_id, parse_order_side, parse_price,
+    parse_timestamp,
+};
 
 fn infer_precision(value: f64) -> u8 {
     let mut buf = ryu::Buffer::new(); // Stack allocation

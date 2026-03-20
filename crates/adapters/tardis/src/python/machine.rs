@@ -13,7 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use ahash::AHashMap;
 use futures_util::{Stream, StreamExt, pin_mut};
@@ -127,8 +127,8 @@ impl TardisMachineClient {
         let map = if instruments.is_empty() {
             self.instruments.clone()
         } else {
-            let mut instrument_map: HashMap<TardisInstrumentKey, Arc<TardisInstrumentMiniInfo>> =
-                HashMap::new();
+            let mut instrument_map: AHashMap<TardisInstrumentKey, Arc<TardisInstrumentMiniInfo>> =
+                AHashMap::new();
             for inst in instruments {
                 let key = inst.as_tardis_instrument_key();
                 instrument_map.insert(key, Arc::new(inst.clone()));
@@ -226,8 +226,8 @@ impl TardisMachineClient {
         callback: Py<PyAny>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let mut instrument_map: HashMap<TardisInstrumentKey, Arc<TardisInstrumentMiniInfo>> =
-            HashMap::new();
+        let mut instrument_map: AHashMap<TardisInstrumentKey, Arc<TardisInstrumentMiniInfo>> =
+            AHashMap::new();
         for inst in instruments {
             let key = inst.as_tardis_instrument_key();
             instrument_map.insert(key, Arc::new(inst.clone()));
@@ -285,7 +285,7 @@ async fn handle_python_stream<S>(
     stream: S,
     callback: Py<PyAny>,
     instrument: Option<Arc<TardisInstrumentMiniInfo>>,
-    instrument_map: Option<HashMap<TardisInstrumentKey, Arc<TardisInstrumentMiniInfo>>>,
+    instrument_map: Option<AHashMap<TardisInstrumentKey, Arc<TardisInstrumentMiniInfo>>>,
     book_snapshot_output: BookSnapshotOutput,
 ) where
     S: Stream<Item = Result<WsMessage, Error>> + Unpin,

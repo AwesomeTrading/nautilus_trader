@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ustr::Ustr;
 
-use crate::{
+use crate::common::{
     enums::{TardisExchange, TardisInstrumentType, TardisOptionType},
     parse::deserialize_uppercase,
 };

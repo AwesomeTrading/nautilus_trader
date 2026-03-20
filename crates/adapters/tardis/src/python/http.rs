@@ -21,7 +21,7 @@ use nautilus_model::python::instruments::instrument_any_to_pyobject;
 use pyo3::prelude::*;
 
 use crate::{
-    enums::TardisExchange,
+    common::enums::TardisExchange,
     http::{TardisHttpClient, query::InstrumentFilterBuilder},
 };
 

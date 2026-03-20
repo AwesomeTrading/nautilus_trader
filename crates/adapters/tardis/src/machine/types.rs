@@ -18,7 +18,7 @@ use nautilus_model::identifiers::InstrumentId;
 use serde::{Deserialize, Serialize};
 use ustr::Ustr;
 
-use crate::enums::TardisExchange;
+use crate::common::enums::TardisExchange;
 pub use crate::machine::client::TardisMachineClient;
 
 /// Instrument definition information necessary for stream parsing.

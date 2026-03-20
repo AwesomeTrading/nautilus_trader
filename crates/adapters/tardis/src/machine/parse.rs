@@ -20,8 +20,9 @@ use chrono::{DateTime, Utc};
 use nautilus_core::UnixNanos;
 use nautilus_model::{
     data::{
-        Bar, BarType, BookOrder, DEPTH10_LEN, Data, FundingRateUpdate, NULL_ORDER, OrderBookDelta,
-        OrderBookDeltas, OrderBookDeltas_API, OrderBookDepth10, QuoteTick, TradeTick,
+        Bar, BarType, BookOrder, DEPTH10_LEN, Data, FundingRateUpdate, IndexPriceUpdate,
+        MarkPriceUpdate, NULL_ORDER, OrderBookDelta, OrderBookDeltas, OrderBookDeltas_API,
+        OrderBookDepth10, QuoteTick, TradeTick,
     },
     enums::{AggregationSource, BookAction, OrderSide, RecordFlag},
     identifiers::{InstrumentId, TradeId},
@@ -36,8 +37,8 @@ use super::{
     types::TardisInstrumentMiniInfo,
 };
 use crate::{
+    common::parse::{normalize_amount, parse_aggressor_side, parse_bar_spec, parse_book_action},
     config::BookSnapshotOutput,
-    parse::{normalize_amount, parse_aggressor_side, parse_bar_spec, parse_book_action},
 };
 
 #[must_use]
@@ -520,21 +521,10 @@ pub fn parse_bar_msg(
     ))
 }
 
-/// Parse a derivative ticker message into a funding rate update.
-///
-/// # Errors
-///
-/// Returns an error if timestamp fields cannot be converted to nanoseconds or decimal conversion fails.
-pub fn parse_derivative_ticker_msg(
+/// Extracts event and init timestamps from a derivative ticker message.
+fn parse_derivative_ticker_timestamps(
     msg: &DerivativeTickerMsg,
-    instrument_id: InstrumentId,
-) -> anyhow::Result<Option<FundingRateUpdate>> {
-    // Only process if we have funding rate data
-    let funding_rate = match msg.funding_rate {
-        Some(rate) => rate,
-        None => return Ok(None), // No funding rate data
-    };
-
+) -> anyhow::Result<(UnixNanos, UnixNanos)> {
     let ts_event_nanos = msg
         .timestamp
         .timestamp_nanos_opt()
@@ -543,7 +533,6 @@ pub fn parse_derivative_ticker_msg(
         ts_event_nanos >= 0,
         "invalid timestamp: event nanoseconds {ts_event_nanos} is before UNIX epoch"
     );
-    let ts_event = UnixNanos::from(ts_event_nanos as u64);
 
     let ts_init_nanos = msg
         .local_timestamp
@@ -553,19 +542,86 @@ pub fn parse_derivative_ticker_msg(
         ts_init_nanos >= 0,
         "invalid timestamp: init nanoseconds {ts_init_nanos} is before UNIX epoch"
     );
-    let ts_init = UnixNanos::from(ts_init_nanos as u64);
 
+    Ok((
+        UnixNanos::from(ts_event_nanos as u64),
+        UnixNanos::from(ts_init_nanos as u64),
+    ))
+}
+
+/// Parses a derivative ticker message into a funding rate update.
+///
+/// # Errors
+///
+/// Returns an error if timestamp conversion or decimal conversion fails.
+pub fn parse_derivative_ticker_msg(
+    msg: &DerivativeTickerMsg,
+    instrument_id: InstrumentId,
+) -> anyhow::Result<Option<FundingRateUpdate>> {
+    let funding_rate = match msg.funding_rate {
+        Some(rate) => rate,
+        None => return Ok(None),
+    };
+
+    let (ts_event, ts_init) = parse_derivative_ticker_timestamps(msg)?;
     let rate = rust_decimal::Decimal::try_from(funding_rate)
-        .with_context(|| format!("Failed to convert funding rate {funding_rate} to Decimal"))?;
-
-    // For live data, we don't typically have funding timestamp info from derivative ticker
-    let next_funding_ns = None;
+        .with_context(|| format!("failed to convert funding rate {funding_rate} to Decimal"))?;
 
     Ok(Some(FundingRateUpdate::new(
         instrument_id,
         rate,
         None,
-        next_funding_ns,
+        None,
+        ts_event,
+        ts_init,
+    )))
+}
+
+/// Parses a derivative ticker message into a mark price update.
+///
+/// # Errors
+///
+/// Returns an error if timestamp conversion fails.
+pub fn parse_derivative_ticker_mark_price(
+    msg: &DerivativeTickerMsg,
+    instrument_id: InstrumentId,
+    price_precision: u8,
+) -> anyhow::Result<Option<MarkPriceUpdate>> {
+    let mark_price = match msg.mark_price {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let (ts_event, ts_init) = parse_derivative_ticker_timestamps(msg)?;
+
+    Ok(Some(MarkPriceUpdate::new(
+        instrument_id,
+        Price::new(mark_price, price_precision),
+        ts_event,
+        ts_init,
+    )))
+}
+
+/// Parses a derivative ticker message into an index price update.
+///
+/// # Errors
+///
+/// Returns an error if timestamp conversion fails.
+pub fn parse_derivative_ticker_index_price(
+    msg: &DerivativeTickerMsg,
+    instrument_id: InstrumentId,
+    price_precision: u8,
+) -> anyhow::Result<Option<IndexPriceUpdate>> {
+    let index_price = match msg.index_price {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let (ts_event, ts_init) = parse_derivative_ticker_timestamps(msg)?;
+
+    Ok(Some(IndexPriceUpdate::new(
+        instrument_id,
+        Price::new(index_price, price_precision),
         ts_event,
         ts_init,
     )))
@@ -577,7 +633,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::{common::testing::load_test_json, enums::TardisExchange};
+    use crate::common::{enums::TardisExchange, testing::load_test_json};
 
     #[rstest]
     fn test_parse_book_change_message() {
@@ -835,5 +891,89 @@ mod tests {
 
         assert!(result.is_some());
         assert!(matches!(result.unwrap(), Data::Deltas(_)));
+    }
+
+    #[rstest]
+    fn test_parse_derivative_ticker_funding_rate() {
+        let json_data = load_test_json("derivative_ticker.json");
+        let msg: DerivativeTickerMsg = serde_json::from_str(&json_data).unwrap();
+
+        let instrument_id = InstrumentId::from("BTC-PERPETUAL.DERIBIT");
+
+        let result = parse_derivative_ticker_msg(&msg, instrument_id).unwrap();
+        assert!(result.is_some());
+
+        let funding = result.unwrap();
+        assert_eq!(funding.instrument_id, instrument_id);
+        assert_eq!(funding.rate.to_string(), "-0.00001568");
+        assert!(funding.ts_event.as_u64() > 0);
+        assert!(funding.ts_init.as_u64() > 0);
+    }
+
+    #[rstest]
+    fn test_parse_derivative_ticker_mark_price() {
+        let json_data = load_test_json("derivative_ticker.json");
+        let msg: DerivativeTickerMsg = serde_json::from_str(&json_data).unwrap();
+
+        let instrument_id = InstrumentId::from("BTC-PERPETUAL.DERIBIT");
+        let price_precision = 2;
+
+        let result =
+            parse_derivative_ticker_mark_price(&msg, instrument_id, price_precision).unwrap();
+        assert!(result.is_some());
+
+        let mark = result.unwrap();
+        assert_eq!(mark.instrument_id, instrument_id);
+        assert_eq!(mark.value, Price::new(7987.56, price_precision));
+        assert!(mark.ts_event.as_u64() > 0);
+        assert!(mark.ts_init.as_u64() > 0);
+    }
+
+    #[rstest]
+    fn test_parse_derivative_ticker_index_price() {
+        let json_data = load_test_json("derivative_ticker.json");
+        let msg: DerivativeTickerMsg = serde_json::from_str(&json_data).unwrap();
+
+        let instrument_id = InstrumentId::from("BTC-PERPETUAL.DERIBIT");
+        let price_precision = 2;
+
+        let result =
+            parse_derivative_ticker_index_price(&msg, instrument_id, price_precision).unwrap();
+        assert!(result.is_some());
+
+        let index = result.unwrap();
+        assert_eq!(index.instrument_id, instrument_id);
+        assert_eq!(index.value, Price::new(7989.28, price_precision));
+        assert!(index.ts_event.as_u64() > 0);
+        assert!(index.ts_init.as_u64() > 0);
+    }
+
+    #[rstest]
+    fn test_parse_derivative_ticker_missing_fields() {
+        // Test with minimal data (only funding_rate, no mark/index)
+        let json = r#"{
+            "type": "derivative_ticker",
+            "symbol": "BTCUSD",
+            "exchange": "bitmex",
+            "lastPrice": null,
+            "openInterest": null,
+            "fundingRate": 0.0001,
+            "indexPrice": null,
+            "markPrice": null,
+            "timestamp": "2024-01-01T00:00:00.000Z",
+            "localTimestamp": "2024-01-01T00:00:00.100Z"
+        }"#;
+        let msg: DerivativeTickerMsg = serde_json::from_str(json).unwrap();
+
+        let instrument_id = InstrumentId::from("BTCUSD.BITMEX");
+
+        let funding = parse_derivative_ticker_msg(&msg, instrument_id).unwrap();
+        assert!(funding.is_some());
+
+        let mark = parse_derivative_ticker_mark_price(&msg, instrument_id, 1).unwrap();
+        assert!(mark.is_none());
+
+        let index = parse_derivative_ticker_index_price(&msg, instrument_id, 1).unwrap();
+        assert!(index.is_none());
     }
 }

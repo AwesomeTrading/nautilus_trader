@@ -15,7 +15,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::machine::types::ReplayNormalizedRequestOptions;
+use super::machine::types::{ReplayNormalizedRequestOptions, StreamNormalizedRequestOptions};
 
 /// Determines the output format for Tardis `book_snapshot_*` messages.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -28,7 +28,7 @@ pub enum BookSnapshotOutput {
     Depth10,
 }
 
-/// Provides a configuration for a Tarid Machine -> Nautilus data -> Parquet replay run.
+/// Provides a configuration for a Tardis Machine -> Nautilus data -> Parquet replay run.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TardisReplayConfig {
     /// The Tardis Machine websocket url.
@@ -73,7 +73,12 @@ pub struct TardisDataClientConfig {
     /// Output format for `book_snapshot_*` messages.
     pub book_snapshot_output: BookSnapshotOutput,
     /// Replay options defining exchanges, symbols, date ranges, and data types.
+    /// When non-empty the client connects to `ws-replay-normalized`.
     pub options: Vec<ReplayNormalizedRequestOptions>,
+    /// Live stream options defining exchanges, symbols, and data types.
+    /// When non-empty (and `options` is empty) the client connects to
+    /// `ws-stream-normalized` with automatic reconnection.
+    pub stream_options: Vec<StreamNormalizedRequestOptions>,
 }
 
 impl Default for TardisDataClientConfig {
@@ -84,6 +89,7 @@ impl Default for TardisDataClientConfig {
             normalize_symbols: true,
             book_snapshot_output: BookSnapshotOutput::default(),
             options: Vec::new(),
+            stream_options: Vec::new(),
         }
     }
 }
@@ -105,6 +111,7 @@ mod tests {
             BookSnapshotOutput::Deltas
         ));
         assert!(config.options.is_empty());
+        assert!(config.stream_options.is_empty());
     }
 
     #[rstest]

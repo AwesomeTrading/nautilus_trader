@@ -22,7 +22,7 @@ use nautilus_model::{
 use rust_decimal::Decimal;
 
 use super::{models::TardisInstrumentInfo, parse::parse_settlement_currency};
-use crate::parse::parse_option_kind;
+use crate::common::parse::parse_option_kind;
 
 /// Returns a currency from the internal map or creates a new crypto currency.
 ///

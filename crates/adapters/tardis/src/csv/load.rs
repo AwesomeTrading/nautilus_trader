@@ -28,6 +28,7 @@ use nautilus_model::{
 };
 
 use crate::{
+    common::parse::{parse_instrument_id, parse_timestamp},
     csv::{
         create_book_order, create_csv_reader, infer_precision, parse_delta_record,
         parse_derivative_ticker_record, parse_quote_record, parse_trade_record,
@@ -36,7 +37,6 @@ use crate::{
             TardisOrderBookSnapshot25Record, TardisQuoteRecord, TardisTradeRecord,
         },
     },
-    parse::{parse_instrument_id, parse_timestamp},
 };
 
 fn update_precision_if_needed(current: &mut u8, value: f64, explicit: Option<u8>) -> bool {
@@ -759,7 +759,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::{common::testing::get_test_data_path, parse::parse_price};
+    use crate::common::{parse::parse_price, testing::get_test_data_path};
 
     #[rstest]
     #[case(0.0, 0)]

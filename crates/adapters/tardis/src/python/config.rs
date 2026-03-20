@@ -19,10 +19,11 @@ use pyo3::prelude::*;
 use ustr::Ustr;
 
 use crate::{
+    common::{enums::TardisExchange, parse::bar_spec_to_tardis_trade_bar_string},
     config::TardisDataClientConfig,
-    enums::TardisExchange,
-    machine::types::{ReplayNormalizedRequestOptions, TardisInstrumentMiniInfo},
-    parse::bar_spec_to_tardis_trade_bar_string,
+    machine::types::{
+        ReplayNormalizedRequestOptions, StreamNormalizedRequestOptions, TardisInstrumentMiniInfo,
+    },
 };
 
 #[pymethods]
@@ -101,12 +102,18 @@ impl TardisDataClientConfig {
         tardis_ws_url = None,
         normalize_symbols = None,
         options = None,
+        stream_options = None,
     ))]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "Python constructor mirrors config fields"
+    )]
     fn py_new(
         api_key: Option<String>,
         tardis_ws_url: Option<String>,
         normalize_symbols: Option<bool>,
         options: Option<Vec<ReplayNormalizedRequestOptions>>,
+        stream_options: Option<Vec<StreamNormalizedRequestOptions>>,
     ) -> Self {
         let defaults = Self::default();
         Self {
@@ -115,6 +122,7 @@ impl TardisDataClientConfig {
             normalize_symbols: normalize_symbols.unwrap_or(defaults.normalize_symbols),
             book_snapshot_output: defaults.book_snapshot_output,
             options: options.unwrap_or_default(),
+            stream_options: stream_options.unwrap_or_default(),
         }
     }
 
