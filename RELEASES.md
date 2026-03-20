@@ -44,6 +44,8 @@ Released on TBD (UTC).
 - Fixed reconciliation when trigger_price is set for non-conditional orders (#3673), thanks @husariancom
 - Fixed spurious "Timer replaced" warnings for expired timers in `LiveClock` and `TestClock` (#3690), thanks @HaakonFlaaronning
 - Fixed time bar historical event deferral (#3698), thanks @faysou
+- Fixed `DataActor` and `Strategy` timer callbacks in live mode silently lost on shared clock
+- Fixed `DataActor::handle_time_event` missing `not_running()` state guard
 - Fixed `SimulatedExchange` account balance adjustment mutation (#3704), thanks for reporting @thaning0
 - Fixed analyzer and tearsheet returns to prefer portfolio-level daily returns when they can be derived from account balances
 - Fixed backtest analyzer to include position snapshots in Rust (#3710), thanks @necofx

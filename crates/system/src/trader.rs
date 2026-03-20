@@ -227,22 +227,28 @@ impl Trader {
 
     /// Creates a clock for a component and registers it for time advancement.
     ///
-    /// Creates a test clock in backtest environment, otherwise returns a reference
-    /// to the system clock. The clock is stored in the per-component clock map so
-    /// the backtest engine can advance all component clocks together.
+    /// Each component gets its own clock instance so that the default time event
+    /// callback registered on each clock is independent. In backtest mode, the
+    /// clocks are also used for deterministic time advancement by the engine.
     pub fn create_component_clock(&mut self, component_id: ComponentId) -> Rc<RefCell<dyn Clock>> {
-        let clock = match self.environment {
-            Environment::Backtest => {
-                // Create individual test clock for component in backtest
-                Rc::new(RefCell::new(TestClock::new()))
-            }
-            Environment::Live | Environment::Sandbox => {
-                // Share system clock in live environments
-                self.clock.clone()
-            }
+        let clock: Rc<RefCell<dyn Clock>> = match self.environment {
+            Environment::Backtest => Rc::new(RefCell::new(TestClock::new())),
+            Environment::Live | Environment::Sandbox => Self::create_live_clock(),
         };
         self.clocks.insert(component_id, clock.clone());
         clock
+    }
+
+    #[cfg(feature = "live")]
+    fn create_live_clock() -> Rc<RefCell<dyn Clock>> {
+        Rc::new(RefCell::new(
+            nautilus_common::live::clock::LiveClock::default(), // nautilus-import-ok
+        ))
+    }
+
+    #[cfg(not(feature = "live"))]
+    fn create_live_clock() -> Rc<RefCell<dyn Clock>> {
+        panic!("Live/Sandbox environment requires the 'live' feature to be enabled");
     }
 
     /// Adds an actor to the trader.
@@ -1295,43 +1301,29 @@ mod tests {
     }
 
     #[rstest]
-    fn test_create_component_clock_backtest_vs_live() {
+    fn test_create_component_clock_backtest_creates_individual_clocks() {
         let (_msgbus, cache, portfolio, _data_engine, _risk_engine, _exec_engine, clock) =
             create_trader_components();
         let trader_id = TraderId::test_default();
         let instance_id = UUID4::new();
 
-        // Test backtest environment - should create individual test clocks
-        let mut trader_backtest = Trader::new(
+        let mut trader = Trader::new(
             trader_id,
             instance_id,
             Environment::Backtest,
-            clock.clone(),
-            cache.clone(),
-            portfolio.clone(),
-        );
-
-        let test_component = ComponentId::new("TEST-001");
-        let backtest_clock = trader_backtest.create_component_clock(test_component);
-        // In backtest, component clock should be different from system clock
-        assert_ne!(
-            backtest_clock.as_ptr() as *const _,
-            clock.as_ptr() as *const _
-        );
-
-        // Test live environment - should share system clock
-        let mut trader_live = Trader::new(
-            trader_id,
-            instance_id,
-            Environment::Live,
             clock.clone(),
             cache,
             portfolio,
         );
 
-        let live_clock = trader_live.create_component_clock(test_component);
-        // In live, component clock should be same as system clock
-        assert_eq!(live_clock.as_ptr() as *const _, clock.as_ptr() as *const _);
+        let component_a = ComponentId::new("ACTOR-A");
+        let component_b = ComponentId::new("ACTOR-B");
+        let clock_a = trader.create_component_clock(component_a);
+        let clock_b = trader.create_component_clock(component_b);
+
+        // Each component gets its own clock instance
+        assert_ne!(clock_a.as_ptr() as *const _, clock.as_ptr() as *const _);
+        assert_ne!(clock_a.as_ptr() as *const _, clock_b.as_ptr() as *const _);
     }
 
     #[rstest]

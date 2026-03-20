@@ -583,6 +583,11 @@ pub trait DataActor:
     fn handle_time_event(&mut self, event: &TimeEvent) {
         log_received(&event);
 
+        if self.not_running() {
+            log_not_running(&event);
+            return;
+        }
+
         if let Err(e) = DataActor::on_time_event(self, event) {
             log_error(&e);
         }
