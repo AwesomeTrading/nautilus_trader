@@ -25,6 +25,8 @@ Released on TBD (UTC).
 - Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
 
 ### Breaking Changes
+- Changed `ExecutionEngine.register_client` to error when a venue is already routed to another client (Rust)
+- Changed `ExecutionEngine.register_venue_routing` to error when re-routing a venue to a different client (Rust)
 - Renamed `OrderEvent.kind()` to `type_name()` in Rust
 - Renamed instrument `type_str` PyO3 getter to `type_name`
 
@@ -36,6 +38,7 @@ Released on TBD (UTC).
 
 ### Fixes
 - Fixed `PRICE_UNDEF` panic in `OrderBookDelta.to_pyo3_list` Cython conversion (#3697), thanks @zshuang15
+- Fixed `ExecutionEngine` silently dropping `SubmitOrder` and `SubmitOrderList` commands when no execution client can be resolved; now emits `OrderDenied` (Rust)
 - Fixed `RiskEngine` RefCell re-entrancy panic on order denial (#3680), thanks @husariancom
 - Fixed reconciliation when trigger_price is set for non-conditional orders (#3673), thanks @husariancom
 - Fixed spurious "Timer replaced" warnings for expired timers in `LiveClock` and `TestClock` (#3690), thanks @HaakonFlaaronning

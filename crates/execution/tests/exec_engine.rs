@@ -8817,3 +8817,156 @@ fn test_get_all_clients_with_registered_and_default(
     assert!(client_ids.contains(&registered_id));
     assert!(client_ids.contains(&default_id));
 }
+
+#[rstest]
+fn test_submit_order_with_no_client_denies_order(execution_engine: ExecutionEngine) {
+    let trader_id = TraderId::test_default();
+    let strategy_id = StrategyId::test_default();
+    let instrument = audusd_sim();
+
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_instrument(instrument.clone().into())
+        .unwrap();
+
+    let order = OrderTestBuilder::new(OrderType::Market)
+        .trader_id(trader_id)
+        .strategy_id(strategy_id)
+        .instrument_id(instrument.id)
+        .client_order_id(ClientOrderId::from("O-19700101-000000-001-001-1"))
+        .side(OrderSide::Buy)
+        .quantity(Quantity::from(10))
+        .build();
+
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_order(order.clone(), None, None, true)
+        .unwrap();
+
+    let submit_order = SubmitOrder {
+        trader_id,
+        strategy_id,
+        instrument_id: instrument.id,
+        client_order_id: order.client_order_id(),
+        order_init: order.init_event().clone(),
+        position_id: None,
+        params: None,
+        client_id: None,
+        exec_algorithm_id: None,
+        command_id: UUID4::new(),
+        ts_init: UnixNanos::default(),
+    };
+
+    // No clients registered, no default client: should deny the order
+    execution_engine.execute(&TradingCommand::SubmitOrder(submit_order));
+
+    let cache = execution_engine.cache().borrow();
+    let cached_order = cache.order(&order.client_order_id()).unwrap();
+    assert_eq!(cached_order.status(), OrderStatus::Denied);
+}
+
+#[rstest]
+fn test_register_client_errors_on_duplicate_venue(mut execution_engine: ExecutionEngine) {
+    let client_a = StubExecutionClient::new(
+        ClientId::from("CLIENT_A"),
+        AccountId::from("ACCOUNT-A"),
+        Venue::test_default(),
+        OmsType::Netting,
+        None,
+    );
+    let client_b = StubExecutionClient::new(
+        ClientId::from("CLIENT_B"),
+        AccountId::from("ACCOUNT-B"),
+        Venue::test_default(),
+        OmsType::Netting,
+        None,
+    );
+
+    execution_engine
+        .register_client(Box::new(client_a))
+        .unwrap();
+
+    let result = execution_engine.register_client(Box::new(client_b));
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("already routed to CLIENT_A"),
+    );
+}
+
+#[rstest]
+fn test_submit_order_list_with_no_client_denies_all_orders(execution_engine: ExecutionEngine) {
+    let trader_id = TraderId::test_default();
+    let strategy_id = StrategyId::test_default();
+    let instrument = audusd_sim();
+
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_instrument(instrument.clone().into())
+        .unwrap();
+
+    let entry = OrderTestBuilder::new(OrderType::Market)
+        .trader_id(trader_id)
+        .strategy_id(strategy_id)
+        .instrument_id(instrument.id)
+        .client_order_id(ClientOrderId::from("O-19700101-000000-001-001-1"))
+        .side(OrderSide::Buy)
+        .quantity(Quantity::from(100_000))
+        .build();
+
+    let stop_loss = OrderTestBuilder::new(OrderType::StopMarket)
+        .trader_id(trader_id)
+        .strategy_id(strategy_id)
+        .instrument_id(instrument.id)
+        .client_order_id(ClientOrderId::from("O-19700101-000000-001-002-1"))
+        .side(OrderSide::Sell)
+        .quantity(Quantity::from(100_000))
+        .trigger_price(Price::from_str("0.50000").unwrap())
+        .build();
+
+    let orders = [entry.clone(), stop_loss.clone()];
+
+    for order in &orders {
+        execution_engine
+            .cache()
+            .borrow_mut()
+            .add_order(order.clone(), None, None, true)
+            .unwrap();
+    }
+
+    let order_list = OrderList::new(
+        OrderListId::from("1"),
+        instrument.id,
+        strategy_id,
+        vec![entry.client_order_id(), stop_loss.client_order_id()],
+        UnixNanos::default(),
+    );
+
+    let submit_order_list = SubmitOrderList {
+        trader_id,
+        client_id: None,
+        strategy_id,
+        instrument_id: instrument.id,
+        order_list,
+        order_inits: orders.iter().map(|o| o.init_event().clone()).collect(),
+        exec_algorithm_id: None,
+        position_id: None,
+        params: None,
+        command_id: UUID4::new(),
+        ts_init: UnixNanos::default(),
+    };
+
+    // No clients registered: all child orders should be denied
+    execution_engine.execute(&TradingCommand::SubmitOrderList(submit_order_list));
+
+    let cache = execution_engine.cache().borrow();
+    let cached_entry = cache.order(&entry.client_order_id()).unwrap();
+    let cached_stop = cache.order(&stop_loss.client_order_id()).unwrap();
+    assert_eq!(cached_entry.status(), OrderStatus::Denied);
+    assert_eq!(cached_stop.status(), OrderStatus::Denied);
+}

@@ -284,8 +284,14 @@ impl ExecutionEngine {
 
         let adapter = ExecutionClientAdapter::new(client);
 
-        self.routing_map.insert(venue, client_id);
+        if let Some(existing_client_id) = self.routing_map.get(&venue) {
+            anyhow::bail!(
+                "Venue {venue} already routed to {existing_client_id}, \
+                 cannot register {client_id} for the same venue"
+            );
+        }
 
+        self.routing_map.insert(venue, client_id);
         log::debug!("Registered client {client_id}");
         self.clients.insert(client_id, adapter);
         Ok(())
@@ -464,6 +470,15 @@ impl ExecutionEngine {
     ) -> anyhow::Result<()> {
         if !self.clients.contains_key(&client_id) {
             anyhow::bail!("No client registered with ID {client_id}");
+        }
+
+        if let Some(existing_client_id) = self.routing_map.get(&venue)
+            && *existing_client_id != client_id
+        {
+            anyhow::bail!(
+                "Venue {venue} already routed to {existing_client_id}, \
+                 cannot re-route to {client_id}"
+            );
         }
 
         self.routing_map.insert(venue, client_id);
@@ -955,6 +970,34 @@ impl ExecutionEngine {
                 command.client_id(),
                 command.instrument_id().venue,
             );
+
+            let reason = format!(
+                "No execution client found for client_id={:?}, venue={}",
+                command.client_id(),
+                command.instrument_id().venue,
+            );
+
+            match command {
+                TradingCommand::SubmitOrder(cmd) => {
+                    let cache = self.cache.borrow();
+                    if let Some(order) = cache.order(&cmd.client_order_id) {
+                        let order = order.clone();
+                        drop(cache);
+                        self.deny_order(&order, &reason);
+                    }
+                }
+                TradingCommand::SubmitOrderList(cmd) => {
+                    let orders: Vec<OrderAny> = self
+                        .cache
+                        .borrow()
+                        .orders_for_ids(&cmd.order_list.client_order_ids, cmd);
+                    for order in &orders {
+                        self.deny_order(order, &reason);
+                    }
+                }
+                _ => {}
+            }
+
             return;
         };
 
