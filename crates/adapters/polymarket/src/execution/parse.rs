@@ -13,7 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! Parsing functions for Polymarket execution reports and order building.
+//! Parsing functions for Polymarket execution reports.
 
 use nautilus_core::{UUID4, UnixNanos};
 use nautilus_model::{
@@ -278,62 +278,6 @@ pub fn parse_balance_allowance(
     Ok(AccountBalance::new(total, locked, free))
 }
 
-/// Builds the maker/taker amounts for a Polymarket CLOB order.
-///
-/// Returns `(maker_amount, taker_amount)` in on-chain base units (USDC 10^6 / CTF shares 10^6).
-///
-/// For BUY: paying USDC (maker) to receive CTF shares (taker)
-///   - `maker_amount = qty * price * 10^6`
-///   - `taker_amount = qty * 10^6`
-///
-/// For SELL: paying CTF shares (maker) to receive USDC (taker)
-///   - `maker_amount = qty * 10^6`
-///   - `taker_amount = qty * price * 10^6`
-pub fn compute_maker_taker_amounts(
-    price: Decimal,
-    quantity: Decimal,
-    side: PolymarketOrderSide,
-) -> (Decimal, Decimal) {
-    let scale = Decimal::new(1_000_000, 0);
-    match side {
-        PolymarketOrderSide::Buy => {
-            let maker_amount = (quantity * price * scale).trunc();
-            let taker_amount = (quantity * scale).trunc();
-            (maker_amount, taker_amount)
-        }
-        PolymarketOrderSide::Sell => {
-            let maker_amount = (quantity * scale).trunc();
-            let taker_amount = (quantity * price * scale).trunc();
-            (maker_amount, taker_amount)
-        }
-    }
-}
-
-/// Builds maker/taker amounts for a Polymarket market order.
-///
-/// Unlike limit orders where quantity always means shares, market order semantics differ by side:
-/// - BUY: `amount` is USDC to spend → maker_amount = amount * scale, taker_amount = (amount / price) * scale
-/// - SELL: `amount` is shares to sell → maker_amount = amount * scale, taker_amount = (amount * price) * scale
-pub fn compute_market_maker_taker_amounts(
-    price: Decimal,
-    amount: Decimal,
-    side: PolymarketOrderSide,
-) -> (Decimal, Decimal) {
-    let scale = Decimal::new(1_000_000, 0);
-    match side {
-        PolymarketOrderSide::Buy => {
-            let maker_amount = (amount * scale).trunc();
-            let taker_amount = (amount / price * scale).trunc();
-            (maker_amount, taker_amount)
-        }
-        PolymarketOrderSide::Sell => {
-            let maker_amount = (amount * scale).trunc();
-            let taker_amount = (amount * price * scale).trunc();
-            (maker_amount, taker_amount)
-        }
-    }
-}
-
 /// Calculates the market-crossing price by walking the order book.
 ///
 /// For BUY: walks asks (best-first), accumulates `size * price` until >= amount (USDC).
@@ -343,7 +287,7 @@ pub fn compute_market_maker_taker_amounts(
 /// returns the worst available level. If the book side is empty, returns an error.
 pub fn calculate_market_price(
     book_levels: &[ClobBookLevel],
-    amount: f64,
+    amount: Decimal,
     side: PolymarketOrderSide,
 ) -> anyhow::Result<Decimal> {
     if book_levels.is_empty() {
@@ -354,11 +298,11 @@ pub fn calculate_market_price(
     let mut last_price = Decimal::ZERO;
 
     for level in book_levels {
-        let price: f64 = level.price.parse().unwrap_or(0.0);
-        let size: f64 = level.size.parse().unwrap_or(0.0);
-        last_price = Decimal::try_from(price).unwrap_or(Decimal::ZERO);
+        let price = Decimal::from_str_exact(&level.price).unwrap_or(Decimal::ZERO);
+        let size = Decimal::from_str_exact(&level.size).unwrap_or(Decimal::ZERO);
+        last_price = price;
 
-        if price <= 0.0 || size <= 0.0 {
+        if price.is_zero() || size.is_zero() {
             continue;
         }
 
@@ -368,7 +312,7 @@ pub fn calculate_market_price(
         };
 
         remaining -= consumed;
-        if remaining <= 0.0 {
+        if remaining <= Decimal::ZERO {
             return Ok(last_price);
         }
     }
@@ -417,22 +361,6 @@ mod tests {
             "expected {expected}, was {total_f64}"
         );
         assert_eq!(balance.free, balance.total);
-    }
-
-    #[rstest]
-    #[case(dec!(0.50), dec!(100), PolymarketOrderSide::Buy, dec!(50_000_000), dec!(100_000_000))]
-    #[case(dec!(0.50), dec!(100), PolymarketOrderSide::Sell, dec!(100_000_000), dec!(50_000_000))]
-    #[case(dec!(0.75), dec!(200), PolymarketOrderSide::Buy, dec!(150_000_000), dec!(200_000_000))]
-    fn test_compute_maker_taker_amounts(
-        #[case] price: Decimal,
-        #[case] quantity: Decimal,
-        #[case] side: PolymarketOrderSide,
-        #[case] expected_maker: Decimal,
-        #[case] expected_taker: Decimal,
-    ) {
-        let (maker, taker) = compute_maker_taker_amounts(price, quantity, side);
-        assert_eq!(maker, expected_maker);
-        assert_eq!(taker, expected_taker);
     }
 
     #[rstest]
@@ -617,29 +545,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(dec!(0.50), dec!(50), PolymarketOrderSide::Buy, dec!(50_000_000), dec!(100_000_000))]
-    #[case(dec!(0.50), dec!(100), PolymarketOrderSide::Sell, dec!(100_000_000), dec!(50_000_000))]
-    #[case(dec!(0.75), dec!(150), PolymarketOrderSide::Buy, dec!(150_000_000), dec!(200_000_000))]
-    fn test_compute_market_maker_taker_amounts(
-        #[case] price: Decimal,
-        #[case] amount: Decimal,
-        #[case] side: PolymarketOrderSide,
-        #[case] expected_maker: Decimal,
-        #[case] expected_taker: Decimal,
-    ) {
-        let (maker, taker) = compute_market_maker_taker_amounts(price, amount, side);
-        assert_eq!(maker, expected_maker);
-        assert_eq!(taker, expected_taker);
-    }
-
-    #[rstest]
     fn test_calculate_market_price_buy_single_level() {
         let levels = vec![ClobBookLevel {
             price: "0.55".to_string(),
             size: "200.0".to_string(),
         }];
-        let price = calculate_market_price(&levels, 50.0, PolymarketOrderSide::Buy).unwrap();
-        assert_eq!(price, Decimal::try_from(0.55).unwrap());
+        let price = calculate_market_price(&levels, dec!(50), PolymarketOrderSide::Buy).unwrap();
+        assert_eq!(price, dec!(0.55));
     }
 
     #[rstest]
@@ -659,8 +571,8 @@ mod tests {
             },
         ];
         // 10*0.50 = 5 USDC from first level, need 15 more → second level has 100*0.55 = 55 USDC → fills
-        let price = calculate_market_price(&levels, 20.0, PolymarketOrderSide::Buy).unwrap();
-        assert_eq!(price, Decimal::try_from(0.55).unwrap());
+        let price = calculate_market_price(&levels, dec!(20), PolymarketOrderSide::Buy).unwrap();
+        assert_eq!(price, dec!(0.55));
     }
 
     #[rstest]
@@ -676,14 +588,14 @@ mod tests {
             },
         ];
         // Need 80 shares: first level gives 50, second gives 100 → fills at second
-        let price = calculate_market_price(&levels, 80.0, PolymarketOrderSide::Sell).unwrap();
-        assert_eq!(price, Decimal::try_from(0.48).unwrap());
+        let price = calculate_market_price(&levels, dec!(80), PolymarketOrderSide::Sell).unwrap();
+        assert_eq!(price, dec!(0.48));
     }
 
     #[rstest]
     fn test_calculate_market_price_empty_book() {
         let levels: Vec<ClobBookLevel> = vec![];
-        let result = calculate_market_price(&levels, 50.0, PolymarketOrderSide::Buy);
+        let result = calculate_market_price(&levels, dec!(50), PolymarketOrderSide::Buy);
         assert!(result.is_err());
     }
 
@@ -694,7 +606,7 @@ mod tests {
             size: "10.0".to_string(),
         }];
         // 10 * 0.55 = 5.5 USDC < 50 USDC needed, but returns worst price
-        let price = calculate_market_price(&levels, 50.0, PolymarketOrderSide::Buy).unwrap();
-        assert_eq!(price, Decimal::try_from(0.55).unwrap());
+        let price = calculate_market_price(&levels, dec!(50), PolymarketOrderSide::Buy).unwrap();
+        assert_eq!(price, dec!(0.55));
     }
 }

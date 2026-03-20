@@ -16,6 +16,7 @@
 //! Live execution client implementation for the Polymarket adapter.
 
 pub mod order_builder;
+pub(crate) mod order_fill_tracker;
 pub mod parse;
 pub(crate) mod reconciliation;
 pub(crate) mod submitter;
@@ -31,7 +32,7 @@ use ahash::AHashMap;
 use anyhow::Context;
 use async_trait::async_trait;
 use nautilus_common::{
-    cache::fifo::FifoCache,
+    cache::fifo::{FifoCache, FifoCacheMap},
     clients::ExecutionClient,
     live::{runner::get_exec_event_sender, runtime::get_runtime},
     messages::execution::{
@@ -64,6 +65,7 @@ use ustr::Ustr;
 
 use self::{
     order_builder::PolymarketOrderBuilder,
+    order_fill_tracker::OrderFillTrackerMap,
     parse::{
         build_maker_fill_report, compute_commission, determine_order_side, make_composite_trade_id,
         parse_balance_allowance, parse_liquidity_side, parse_order_status_report,
@@ -76,7 +78,9 @@ use crate::{
     common::{
         consts::{POLYMARKET_VENUE, USDC},
         credential::Secrets,
-        enums::{PolymarketLiquiditySide, PolymarketTradeStatus, SignatureType},
+        enums::{
+            PolymarketLiquiditySide, PolymarketOrderStatus, PolymarketTradeStatus, SignatureType,
+        },
     },
     config::PolymarketExecClientConfig,
     filters::InstrumentFilter,
@@ -109,6 +113,9 @@ pub struct PolymarketExecutionClient {
     pending_tasks: Mutex<Vec<JoinHandle<()>>>,
     ws_stream_handle: Mutex<Option<JoinHandle<()>>>,
     neg_risk_index: AHashMap<InstrumentId, bool>,
+    fill_tracker: Arc<OrderFillTrackerMap>,
+    pending_fills: Arc<Mutex<FifoCacheMap<VenueOrderId, Vec<FillReport>, 1_000>>>,
+    pending_order_reports: Arc<Mutex<FifoCacheMap<VenueOrderId, Vec<OrderStatusReport>, 1_000>>>,
 }
 
 impl PolymarketExecutionClient {
@@ -203,6 +210,9 @@ impl PolymarketExecutionClient {
             pending_tasks: Mutex::new(Vec::new()),
             ws_stream_handle: Mutex::new(None),
             neg_risk_index: AHashMap::new(),
+            fill_tracker: Arc::new(OrderFillTrackerMap::new()),
+            pending_fills: Arc::new(Mutex::new(FifoCacheMap::default())),
+            pending_order_reports: Arc::new(Mutex::new(FifoCacheMap::default())),
         })
     }
 
@@ -301,6 +311,10 @@ impl PolymarketExecutionClient {
             .unwrap_or_else(|| self.secrets.address.clone());
         let user_api_key = self.secrets.credential.api_key().to_string();
 
+        let fill_tracker = self.fill_tracker.clone();
+        let pending_fills = self.pending_fills.clone();
+        let pending_order_reports = self.pending_order_reports.clone();
+
         let handle = get_runtime().spawn(async move {
             let mut processed_fills: FifoCache<String, 10_000> = FifoCache::default();
 
@@ -353,7 +367,49 @@ impl PolymarketExecutionClient {
                                 None,
                             );
                             report.price = Some(price);
-                            emitter.send_order_status_report(report);
+
+                            let is_accepted = fill_tracker.contains(&venue_order_id);
+                            if is_accepted {
+                                emitter.send_order_status_report(report);
+                            } else {
+                                let mut guard = pending_order_reports.lock().expect(MUTEX_POISONED);
+                                if let Some(reports) = guard.get_mut(&venue_order_id) {
+                                    reports.push(report);
+                                } else {
+                                    guard.insert(venue_order_id, vec![report]);
+                                }
+                            }
+
+                            // MATCHED convergence: check for dust residual
+                            if order.status == PolymarketOrderStatus::Matched
+                                && let Some(dust_fill) =
+                                    fill_tracker.check_dust_and_build_fill(
+                                        &venue_order_id,
+                                        account_id,
+                                        &order.id,
+                                        price.as_f64(),
+                                        get_usdc_currency(),
+                                        ts_event,
+                                    )
+                            {
+                                if is_accepted {
+                                    emitter.send_fill_report(dust_fill);
+                                } else {
+                                    let mut guard =
+                                        pending_fills.lock().expect(MUTEX_POISONED);
+
+                                    if let Some(fills) =
+                                        guard.get_mut(&venue_order_id)
+                                    {
+                                        fills.push(dust_fill);
+                                    } else {
+                                        guard.insert(
+                                            venue_order_id,
+                                            vec![dust_fill],
+                                        );
+                                    }
+                                }
+                            }
                         }
                         UserWsMessage::Trade(trade) => {
                             if !trade.status.is_finalized()
@@ -428,7 +484,7 @@ impl PolymarketExecutionClient {
                                             continue;
                                         }
                                     };
-                                    let report = build_maker_fill_report(
+                                    let mut report = build_maker_fill_report(
                                         mo,
                                         &trade.id,
                                         trade.trader_side,
@@ -443,7 +499,26 @@ impl PolymarketExecutionClient {
                                         ts_event,
                                         ts_event,
                                     );
-                                    emitter.send_fill_report(report);
+                                    let maker_venue_order_id = report.venue_order_id;
+                                    report.last_qty = fill_tracker
+                                        .snap_fill_qty(&maker_venue_order_id, report.last_qty);
+                                    let is_accepted = fill_tracker.contains(&maker_venue_order_id);
+                                    if is_accepted {
+                                        fill_tracker.record_fill(
+                                            &maker_venue_order_id,
+                                            report.last_qty.as_f64(),
+                                            report.last_px.as_f64(),
+                                            report.ts_event,
+                                        );
+                                        emitter.send_fill_report(report);
+                                    } else {
+                                        let mut guard = pending_fills.lock().expect(MUTEX_POISONED);
+                                        if let Some(fills) = guard.get_mut(&maker_venue_order_id) {
+                                            fills.push(report);
+                                        } else {
+                                            guard.insert(maker_venue_order_id, vec![report]);
+                                        }
+                                    }
                                 }
                             } else {
                                 let instrument = match token_instruments.get(&trade.asset_id) {
@@ -463,10 +538,13 @@ impl PolymarketExecutionClient {
                                     trade.asset_id.as_str(),
                                     trade.asset_id.as_str(),
                                 );
-                                let last_qty = Quantity::new(
+
+                                let mut last_qty = Quantity::new(
                                     trade.size.parse::<f64>().unwrap_or(0.0),
                                     instrument.size_precision(),
                                 );
+                                last_qty = fill_tracker.snap_fill_qty(&venue_order_id, last_qty);
+
                                 let last_px = Price::new(
                                     trade.price.parse::<f64>().unwrap_or(0.0),
                                     instrument.price_precision(),
@@ -478,7 +556,7 @@ impl PolymarketExecutionClient {
                                 let commission_value =
                                     compute_commission(fee_bps, size, price_dec);
                                 let usdc = get_usdc_currency();
-                                emitter.send_fill_report(FillReport {
+                                let fill_report = FillReport {
                                     account_id,
                                     instrument_id: instrument.id(),
                                     venue_order_id,
@@ -493,7 +571,24 @@ impl PolymarketExecutionClient {
                                     ts_init: ts_event,
                                     client_order_id: None,
                                     venue_position_id: None,
-                                });
+                                };
+                                let is_accepted = fill_tracker.contains(&venue_order_id);
+                                if is_accepted {
+                                    fill_tracker.record_fill(
+                                        &venue_order_id,
+                                        last_qty.as_f64(),
+                                        last_px.as_f64(),
+                                        ts_event,
+                                    );
+                                    emitter.send_fill_report(fill_report);
+                                } else {
+                                    let mut guard = pending_fills.lock().expect(MUTEX_POISONED);
+                                    if let Some(fills) = guard.get_mut(&venue_order_id) {
+                                        fills.push(fill_report);
+                                    } else {
+                                        guard.insert(venue_order_id, vec![fill_report]);
+                                    }
+                                }
                             }
                         }
                     },
@@ -504,7 +599,7 @@ impl PolymarketExecutionClient {
                         log::info!("User WebSocket reconnected");
                     }
                     None => {
-                        log::warn!("User WebSocket stream ended");
+                        log::debug!("User WebSocket stream ended");
                         break;
                     }
                 }
@@ -551,6 +646,7 @@ impl PolymarketExecutionClient {
 
         let neg_risk = self.get_neg_risk(&order.instrument_id());
         let token_id = instrument.raw_symbol().to_string();
+        let tick_decimals = instrument.price_precision() as u32;
         let price = order.price().unwrap(); // validated above
         let quantity = order.quantity();
         let tif = order.time_in_force();
@@ -563,6 +659,12 @@ impl PolymarketExecutionClient {
         let submitter = self.submitter.clone();
         let emitter = self.emitter.clone();
         let clock = self.clock;
+        let fill_tracker = self.fill_tracker.clone();
+        let pending_fills = self.pending_fills.clone();
+        let pending_order_reports = self.pending_order_reports.clone();
+        let account_id = self.core.account_id;
+        let size_precision = instrument.size_precision();
+        let price_precision = instrument.price_precision();
 
         self.spawn_task("submit_limit_order", async move {
             match submitter
@@ -575,11 +677,23 @@ impl PolymarketExecutionClient {
                     post_only,
                     neg_risk,
                     expire_time,
+                    tick_decimals,
                 )
                 .await
             {
                 Ok(response) => {
-                    handle_order_response(Ok(response), &order, &emitter, clock);
+                    handle_order_response(
+                        Ok(response),
+                        &order,
+                        &emitter,
+                        clock,
+                        &fill_tracker,
+                        &pending_fills,
+                        &pending_order_reports,
+                        account_id,
+                        size_precision,
+                        price_precision,
+                    );
                 }
                 Err(e) => {
                     let ts = clock.get_time_ns();
@@ -603,21 +717,39 @@ impl PolymarketExecutionClient {
 
         let neg_risk = self.get_neg_risk(&order.instrument_id());
         let token_id = instrument.raw_symbol().to_string();
+        let tick_decimals = instrument.price_precision() as u32;
         let side = order.order_side();
         let amount = order.quantity();
 
         let submitter = self.submitter.clone();
         let emitter = self.emitter.clone();
         let clock = self.clock;
+        let fill_tracker = self.fill_tracker.clone();
+        let pending_fills = self.pending_fills.clone();
+        let pending_order_reports = self.pending_order_reports.clone();
+        let account_id = self.core.account_id;
+        let size_precision = instrument.size_precision();
+        let price_precision = instrument.price_precision();
 
         self.spawn_task("submit_market_order", async move {
             match submitter
-                .submit_market_order(&token_id, side, amount, neg_risk)
+                .submit_market_order(&token_id, side, amount, neg_risk, tick_decimals)
                 .await
             {
                 Ok(response) => {
                     emitter.emit_order_submitted(&order);
-                    handle_order_response(Ok(response), &order, &emitter, clock);
+                    handle_order_response(
+                        Ok(response),
+                        &order,
+                        &emitter,
+                        clock,
+                        &fill_tracker,
+                        &pending_fills,
+                        &pending_order_reports,
+                        account_id,
+                        size_precision,
+                        price_precision,
+                    );
                 }
                 Err(e) => {
                     let ts = clock.get_time_ns();
@@ -1251,11 +1383,18 @@ fn process_cancel_result(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_order_response(
     result: crate::http::error::Result<OrderResponse>,
     order: &OrderAny,
     emitter: &ExecutionEventEmitter,
     clock: &'static AtomicTime,
+    fill_tracker: &Arc<OrderFillTrackerMap>,
+    pending_fills: &Arc<Mutex<FifoCacheMap<VenueOrderId, Vec<FillReport>, 1_000>>>,
+    pending_order_reports: &Arc<Mutex<FifoCacheMap<VenueOrderId, Vec<OrderStatusReport>, 1_000>>>,
+    account_id: AccountId,
+    size_precision: u8,
+    price_precision: u8,
 ) {
     match result {
         Ok(response) => {
@@ -1264,6 +1403,68 @@ fn handle_order_response(
                     let venue_order_id = VenueOrderId::from(order_id.as_str());
                     let ts = clock.get_time_ns();
                     emitter.emit_order_accepted(order, venue_order_id, ts);
+
+                    // Register order in fill tracker for dust detection
+                    fill_tracker.register(
+                        venue_order_id,
+                        order.quantity(),
+                        order.order_side(),
+                        order.instrument_id(),
+                        size_precision,
+                        price_precision,
+                    );
+
+                    // Drain any fills buffered during the HTTP round-trip,
+                    // snapping dust fills and recording in tracker
+                    if let Some(buffered) = pending_fills
+                        .lock()
+                        .expect(MUTEX_POISONED)
+                        .remove(&venue_order_id)
+                    {
+                        for mut fill in buffered {
+                            fill.last_qty =
+                                fill_tracker.snap_fill_qty(&venue_order_id, fill.last_qty);
+                            fill_tracker.record_fill(
+                                &venue_order_id,
+                                fill.last_qty.as_f64(),
+                                fill.last_px.as_f64(),
+                                fill.ts_event,
+                            );
+                            emitter.send_fill_report(fill);
+                        }
+                    }
+
+                    // Drain any order reports buffered during the HTTP round-trip
+                    if let Some(buffered) = pending_order_reports
+                        .lock()
+                        .expect(MUTEX_POISONED)
+                        .remove(&venue_order_id)
+                    {
+                        let mut has_filled = false;
+                        for report in &buffered {
+                            if report.order_status == OrderStatus::Filled {
+                                has_filled = true;
+                            }
+                        }
+                        for report in buffered {
+                            emitter.send_order_status_report(report);
+                        }
+
+                        // If a MATCHED (Filled) status was buffered, check for dust residual
+                        if has_filled {
+                            let fallback_px = order.price().map_or(0.0, |p| p.as_f64());
+                            if let Some(dust_fill) = fill_tracker.check_dust_and_build_fill(
+                                &venue_order_id,
+                                account_id,
+                                &order_id,
+                                fallback_px,
+                                get_usdc_currency(),
+                                ts,
+                            ) {
+                                emitter.send_fill_report(dust_fill);
+                            }
+                        }
+                    }
                 } else {
                     log::warn!(
                         "Order accepted but no order_id returned for {}",
