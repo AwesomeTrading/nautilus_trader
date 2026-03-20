@@ -355,7 +355,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-py${{ matrix.python-version }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-test-py${{ matrix.python-version }}
       RUST_BACKTRACE: 1
     steps:
       # https://github.com/step-security/harden-runner
@@ -381,8 +381,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
-          rust-cache-key: build-macos-${{ matrix.python-version }}
-          rust-cache-workspaces: . -> target/build-macos-py${{ matrix.python-version }}
+          rust-cache-key: build-macos-test-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target/build-macos-test-py${{ matrix.python-version }}
+          rust-cache-on-failure: "false"
 
       - name: Cached test data
         uses: ./.github/actions/common-test-data
@@ -396,6 +397,10 @@ jobs:
 
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build
+        env:
+          CARGO_BUILD_JOBS: 1
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-wheel-py${{ matrix.python-version }}
+          PARALLEL_BUILD: false
         with:
           python-version: ${{ matrix.python-version }}
           github_ref: ${{ github.ref }}
