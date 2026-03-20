@@ -26,8 +26,9 @@ use nautilus_common::{
     cache::Cache,
     clock::Clock,
     messages::data::{
-        SubscribeCommand, SubscribeOptionChain, SubscribeOptionGreeks, SubscribeQuotes,
-        UnsubscribeCommand, UnsubscribeOptionGreeks, UnsubscribeQuotes,
+        SubscribeCommand, SubscribeInstrumentStatus, SubscribeOptionChain, SubscribeOptionGreeks,
+        SubscribeQuotes, UnsubscribeCommand, UnsubscribeInstrumentStatus, UnsubscribeOptionGreeks,
+        UnsubscribeQuotes,
     },
     msgbus::{self, MStr, Topic, TypedHandler, switchboard},
     timer::{TimeEvent, TimeEventCallback},
@@ -261,11 +262,21 @@ impl OptionChainManager {
                 correlation_id: None,
                 params: None,
             }));
+            client.execute_subscribe(&SubscribeCommand::InstrumentStatus(
+                SubscribeInstrumentStatus {
+                    instrument_id: *instrument_id,
+                    client_id: cmd.client_id,
+                    venue: Some(venue),
+                    command_id: UUID4::new(),
+                    ts_init,
+                    correlation_id: None,
+                    params: None,
+                },
+            ));
         }
 
         log::info!(
-            "Forwarded {} quote + {} greeks subscriptions to DataClient",
-            instrument_ids.len(),
+            "Forwarded {} quote + greeks + instrument status subscriptions to DataClient",
             instrument_ids.len(),
         );
     }
@@ -532,6 +543,17 @@ impl OptionChainManager {
                 params: None,
             },
         )));
+        queue.push_back(DeferredCommand::Subscribe(
+            SubscribeCommand::InstrumentStatus(SubscribeInstrumentStatus {
+                instrument_id,
+                client_id: None,
+                venue: Some(venue),
+                command_id: UUID4::new(),
+                ts_init,
+                correlation_id: None,
+                params: None,
+            }),
+        ));
     }
 
     /// Pushes deferred unsubscribe commands (quotes + greeks) for a single instrument.
@@ -552,6 +574,17 @@ impl OptionChainManager {
         )));
         queue.push_back(DeferredCommand::Unsubscribe(
             UnsubscribeCommand::OptionGreeks(UnsubscribeOptionGreeks {
+                instrument_id,
+                client_id: None,
+                venue: Some(venue),
+                command_id: UUID4::new(),
+                ts_init,
+                correlation_id: None,
+                params: None,
+            }),
+        ));
+        queue.push_back(DeferredCommand::Unsubscribe(
+            UnsubscribeCommand::InstrumentStatus(UnsubscribeInstrumentStatus {
                 instrument_id,
                 client_id: None,
                 venue: Some(venue),
@@ -597,6 +630,17 @@ impl OptionChainManager {
             correlation_id: None,
             params: None,
         }));
+        client.execute_subscribe(&SubscribeCommand::InstrumentStatus(
+            SubscribeInstrumentStatus {
+                instrument_id,
+                client_id: None,
+                venue: Some(venue),
+                command_id: UUID4::new(),
+                ts_init,
+                correlation_id: None,
+                params: None,
+            },
+        ));
     }
 
     /// Checks if ATM has shifted and rebalances msgbus subscriptions if needed.
@@ -665,6 +709,14 @@ impl OptionChainManager {
 
     /// Takes the accumulated snapshot and publishes it to the msgbus.
     pub fn publish_slice(&mut self, ts: nautilus_core::UnixNanos) {
+        // Proactive expiry safeguard
+        if self.aggregator.is_expired(ts) {
+            self.deferred_cmd_queue
+                .borrow_mut()
+                .push_back(DeferredCommand::ExpireSeries(self.aggregator.series_id()));
+            return;
+        }
+
         self.maybe_rebalance(ts);
 
         let series_id = self.aggregator.series_id();
@@ -868,8 +920,8 @@ mod tests {
         assert!(manager.bootstrapped);
         assert_eq!(manager.aggregator.instrument_ids().len(), 6); // 3 strikes × 2
 
-        // Deferred queue should contain subscribe commands (6 instruments × 2 = 12 commands)
-        assert_eq!(queue.borrow().len(), 12);
+        // Deferred queue should contain subscribe commands (6 instruments × 3 = 18 commands)
+        assert_eq!(queue.borrow().len(), 18);
 
         // publish_slice should still work normally after bootstrap
         manager.publish_slice(UnixNanos::from(100u64));
@@ -917,8 +969,8 @@ mod tests {
 
         assert!(manager.bootstrapped);
         assert_eq!(manager.aggregator.instrument_ids().len(), 6); // 3 strikes × 2
-        // 6 instruments × 2 commands each (quotes + greeks) = 12 deferred commands
-        assert_eq!(queue.borrow().len(), 12);
+        // 6 instruments × 3 commands each (quotes + greeks + instrument_status) = 18 deferred commands
+        assert_eq!(queue.borrow().len(), 18);
 
         // All commands should be Subscribe variants
         assert!(
@@ -1018,9 +1070,9 @@ mod tests {
         let expired_id = InstrumentId::from("BTC-20240101-50000-C.DERIBIT");
         manager.handle_instrument_expired(&expired_id);
 
-        // Should push 2 unsubscribe commands (quotes + greeks)
+        // Should push 3 unsubscribe commands (quotes + greeks + instrument_status)
         let cmds: Vec<_> = queue.borrow().iter().cloned().collect();
-        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds.len(), 3);
         assert!(
             cmds.iter()
                 .all(|c| matches!(c, DeferredCommand::Unsubscribe(_)))
@@ -1074,5 +1126,43 @@ mod tests {
         // Empty manager returns true (catalog was already empty)
         assert!(is_empty);
         assert!(queue.borrow().is_empty()); // no deferred commands pushed
+    }
+
+    #[rstest]
+    fn test_publish_slice_pushes_expire_series_when_expired() {
+        let (mut manager, queue) = make_option_chain_manager();
+        bootstrap_via_greeks(&mut manager);
+        queue.borrow_mut().clear();
+
+        // Publish at the expiration timestamp — should push ExpireSeries, not publish
+        let expiry_ns = manager.aggregator.series_id().expiration_ns;
+        manager.publish_slice(expiry_ns);
+
+        let cmds: Vec<_> = queue.borrow().iter().cloned().collect();
+        assert_eq!(cmds.len(), 1);
+        assert!(matches!(cmds[0], DeferredCommand::ExpireSeries(_)));
+    }
+
+    #[rstest]
+    fn test_expired_instrument_unsubscribes_include_instrument_status() {
+        let (mut manager, queue) = make_option_chain_manager();
+        bootstrap_via_greeks(&mut manager);
+        queue.borrow_mut().clear();
+
+        let expired_id = InstrumentId::from("BTC-20240101-50000-C.DERIBIT");
+        manager.handle_instrument_expired(&expired_id);
+
+        let cmds: Vec<_> = queue.borrow().iter().cloned().collect();
+        // Should have exactly one InstrumentStatus unsubscribe among the 3
+        let status_unsubs = cmds
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c,
+                    DeferredCommand::Unsubscribe(UnsubscribeCommand::InstrumentStatus(_))
+                )
+            })
+            .count();
+        assert_eq!(status_unsubs, 1);
     }
 }
