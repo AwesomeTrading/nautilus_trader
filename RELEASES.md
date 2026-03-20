@@ -78,6 +78,7 @@ Released on TBD (UTC).
 - Added Python strategy support to v2 `LiveNode` with `add_strategy_from_config`
 - Added backtest margin models, `FXRolloverInterestModule`, `PerContractFeeModel`, and `SimulationModule` trait in Rust
 - Added `subscribe_option_greeks` support to `DataTester` in Rust
+- Added `WebSocketClient.notify_closed()` for stream-mode callers to signal reader EOF to the controller
 - Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek

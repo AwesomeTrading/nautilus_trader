@@ -1178,6 +1178,29 @@ impl WebSocketClient {
         .map_err(|()| SendError::Closed)
     }
 
+    /// Signals that the caller's reader has observed EOF or a fatal error.
+    ///
+    /// In stream mode the controller has no visibility into the caller-owned reader.
+    /// Call this method when `reader.next().await` returns `None` or an unrecoverable
+    /// error so the controller transitions to `Closed` and dependent tasks shut down.
+    ///
+    /// For peer-initiated close frames (`Message::Close`), use [`disconnect`](Self::disconnect)
+    /// instead so the writer can send the close reply before shutting down.
+    ///
+    /// This is a no-op if the connection is already closed or disconnecting.
+    pub fn notify_closed(&self) {
+        let mode = self.connection_mode();
+        if mode.is_disconnect() || mode.is_closed() {
+            return;
+        }
+
+        log::debug!("Stream reader signalled EOF, transitioning to CLOSED");
+
+        self.connection_mode
+            .store(ConnectionMode::Closed.as_u8(), Ordering::SeqCst);
+        self.state_notify.notify_waiters();
+    }
+
     /// Set disconnect mode to true.
     ///
     /// Controller task will periodically check the disconnect mode
@@ -2101,15 +2124,20 @@ mod rust_tests {
             }
         }
 
-        // In stream mode, the controller cannot detect disconnection (reader is owned by caller)
-        // The client remains ACTIVE - it's the caller's responsibility to call disconnect()
+        // Controller cannot detect reader EOF (reader is owned by caller),
+        // so the client stays ACTIVE until the caller signals.
         sleep(Duration::from_millis(200)).await;
-
-        // Client should still be ACTIVE (not RECONNECTING or CLOSED)
-        // This is correct behavior - stream mode doesn't auto-detect disconnection
         assert!(
-            client.is_active() || client.is_closed(),
-            "Stream mode client stays ACTIVE (caller owns reader) or caller disconnected"
+            client.is_active(),
+            "Stream mode client stays ACTIVE before notify_closed()"
+        );
+
+        // Caller signals EOF via notify_closed()
+        client.notify_closed();
+
+        assert!(
+            client.is_closed(),
+            "Stream mode client should be CLOSED after notify_closed()"
         );
         assert!(
             !client.is_reconnecting(),
