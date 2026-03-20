@@ -182,7 +182,7 @@ impl BinanceSpotWsTradingClient {
     }
 
     /// Generates the next request ID.
-    fn next_request_id(&self) -> String {
+    pub fn next_request_id(&self) -> String {
         let id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
         format!("req-{id}")
     }
@@ -309,12 +309,22 @@ impl BinanceSpotWsTradingClient {
     /// Returns an error if the handler is unavailable.
     pub async fn place_order(&self, params: NewOrderParams) -> BinanceWsApiResult<String> {
         let id = self.next_request_id();
-        let cmd = BinanceSpotWsTradingCommand::PlaceOrder {
-            id: id.clone(),
-            params,
-        };
-        self.send_cmd(cmd).await?;
+        self.place_order_with_id(id.clone(), params).await?;
         Ok(id)
+    }
+
+    /// Places a new order via WebSocket API using a pre-generated request ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler is unavailable.
+    pub async fn place_order_with_id(
+        &self,
+        id: String,
+        params: NewOrderParams,
+    ) -> BinanceWsApiResult<()> {
+        let cmd = BinanceSpotWsTradingCommand::PlaceOrder { id, params };
+        self.send_cmd(cmd).await
     }
 
     /// Cancels an order via WebSocket API.

@@ -258,5 +258,21 @@ pub static BINANCE_WS_CONNECTION_QUOTA: LazyLock<Quota> = LazyLock::new(|| {
 pub static BINANCE_RATE_LIMIT_KEY_SUBSCRIPTION: LazyLock<[Ustr; 1]> =
     LazyLock::new(|| [Ustr::from("subscription")]);
 
+/// Binance error code for GTX (post-only) order rejection.
+///
+/// Returned when a GTX order would immediately match as taker.
+pub const BINANCE_GTX_ORDER_REJECT_CODE: i64 = -5022;
+
+/// Binance error code for new order rejected.
+///
+/// For spot LIMIT_MAKER orders, this code is returned with the message
+/// "Order would immediately match and take." to indicate a post-only rejection.
+pub const BINANCE_NEW_ORDER_REJECTED_CODE: i64 = -2010;
+
+/// Binance Spot LIMIT_MAKER rejection message.
+///
+/// This message is specific to post-only (LIMIT_MAKER) orders that would match immediately.
+pub const BINANCE_SPOT_POST_ONLY_REJECT_MSG: &str = "Order would immediately match and take.";
+
 /// Valid order book depth levels for Binance.
 pub const BINANCE_BOOK_DEPTHS: [u32; 7] = [5, 10, 20, 50, 100, 500, 1000];

@@ -96,7 +96,7 @@ use crate::{
     common::{
         consts::{
             BINANCE_FUTURES_USD_WS_API_TESTNET_URL, BINANCE_FUTURES_USD_WS_API_URL,
-            BINANCE_NAUTILUS_FUTURES_BROKER_ID, BINANCE_VENUE,
+            BINANCE_GTX_ORDER_REJECT_CODE, BINANCE_NAUTILUS_FUTURES_BROKER_ID, BINANCE_VENUE,
         },
         credential::resolve_credentials,
         dispatch::{
@@ -504,35 +504,38 @@ impl BinanceFuturesExecutionClient {
                 self_trade_prevention_mode: None,
             };
 
+            // Pre-register before sending to avoid response racing the insert
+            let request_id = ws_client.next_request_id();
+            dispatch_state.pending_requests.insert(
+                request_id.clone(),
+                PendingRequest {
+                    client_order_id,
+                    venue_order_id: None,
+                    operation: PendingOperation::Place,
+                },
+            );
+
             self.spawn_task("submit_order_ws", async move {
-                match ws_client.place_order(params).await {
-                    Ok(request_id) => {
-                        dispatch_state.pending_requests.insert(
-                            request_id,
-                            PendingRequest {
-                                client_order_id,
-                                venue_order_id: None,
-                                operation: PendingOperation::Place,
-                            },
-                        );
-                    }
-                    Err(e) => {
-                        let rejected = OrderRejected::new(
-                            trader_id,
-                            strategy_id,
-                            instrument_id,
-                            client_order_id,
-                            account_id,
-                            format!("ws-submit-order-error: {e}").into(),
-                            UUID4::new(),
-                            ts_init,
-                            clock.get_time_ns(),
-                            false,
-                            false,
-                        );
-                        emitter.send_order_event(OrderEventAny::Rejected(rejected));
-                        anyhow::bail!("WS submit order failed: {e}");
-                    }
+                if let Err(e) = ws_client
+                    .place_order_with_id(request_id.clone(), params)
+                    .await
+                {
+                    dispatch_state.pending_requests.remove(&request_id);
+                    let rejected = OrderRejected::new(
+                        trader_id,
+                        strategy_id,
+                        instrument_id,
+                        client_order_id,
+                        account_id,
+                        format!("ws-submit-order-error: {e}").into(),
+                        UUID4::new(),
+                        ts_init,
+                        clock.get_time_ns(),
+                        false,
+                        false,
+                    );
+                    emitter.send_order_event(OrderEventAny::Rejected(rejected));
+                    anyhow::bail!("WS submit order failed: {e}");
                 }
                 Ok(())
             });
@@ -593,6 +596,15 @@ impl BinanceFuturesExecutionClient {
                     // Keep order registered - if HTTP failed due to timeout but order
                     // reached Binance, WebSocket updates will still arrive. The order
                     // will be cleaned up via WebSocket rejection or reconciliation.
+                    let due_post_only =
+                        e.downcast_ref::<BinanceFuturesHttpError>()
+                            .is_some_and(|be| {
+                                matches!(
+                                    be,
+                                    BinanceFuturesHttpError::BinanceError { code, .. }
+                                        if *code == BINANCE_GTX_ORDER_REJECT_CODE
+                                )
+                            });
                     let ts_now = clock.get_time_ns();
                     let rejected_event = OrderRejected::new(
                         trader_id,
@@ -605,7 +617,7 @@ impl BinanceFuturesExecutionClient {
                         ts_now,
                         ts_now,
                         false,
-                        false,
+                        due_post_only,
                     );
 
                     emitter.send_order_event(OrderEventAny::Rejected(rejected_event));
@@ -2549,28 +2561,40 @@ fn dispatch_ws_trading_message(
             code,
             msg,
         } => {
-            log::warn!("WS order rejected: request_id={request_id}, code={code}, msg={msg}");
-            if let Some((_, pending)) = dispatch_state.pending_requests.remove(&request_id)
-                && let Some(identity) = dispatch_state
+            log::debug!("WS order rejected: request_id={request_id}, code={code}, msg={msg}");
+            if let Some((_, pending)) = dispatch_state.pending_requests.remove(&request_id) {
+                // Clone to drop the DashMap read guard before cleanup_terminal
+                let identity = dispatch_state
                     .order_identities
                     .get(&pending.client_order_id)
-            {
-                let ts_now = clock.get_time_ns();
-                let rejected = OrderRejected::new(
-                    emitter.trader_id(),
-                    identity.strategy_id,
-                    identity.instrument_id,
-                    pending.client_order_id,
-                    account_id,
-                    ustr::Ustr::from(&format!("code={code}: {msg}")),
-                    UUID4::new(),
-                    ts_now,
-                    ts_now,
-                    false,
-                    false,
-                );
-                dispatch_state.cleanup_terminal(pending.client_order_id);
-                emitter.send_order_event(OrderEventAny::Rejected(rejected));
+                    .map(|r| r.clone());
+
+                if let Some(identity) = identity {
+                    let due_post_only = i64::from(code) == BINANCE_GTX_ORDER_REJECT_CODE;
+                    let ts_now = clock.get_time_ns();
+                    let rejected = OrderRejected::new(
+                        emitter.trader_id(),
+                        identity.strategy_id,
+                        identity.instrument_id,
+                        pending.client_order_id,
+                        account_id,
+                        ustr::Ustr::from(&format!("code={code}: {msg}")),
+                        UUID4::new(),
+                        ts_now,
+                        ts_now,
+                        false,
+                        due_post_only,
+                    );
+                    dispatch_state.cleanup_terminal(pending.client_order_id);
+                    emitter.send_order_event(OrderEventAny::Rejected(rejected));
+                } else {
+                    log::warn!(
+                        "No order identity for {}, cannot emit OrderRejected",
+                        pending.client_order_id
+                    );
+                }
+            } else {
+                log::warn!("No pending request for {request_id}, cannot emit OrderRejected");
             }
         }
         BinanceFuturesWsTradingMessage::OrderCanceled {

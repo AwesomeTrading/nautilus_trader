@@ -51,7 +51,9 @@ use crate::{
     spot::{
         http::{models::BinanceCancelOrderResponse, parse},
         sbe::spot::{
-            ReadBuf, message_header_codec,
+            ReadBuf,
+            error_response_codec::ErrorResponseDecoder,
+            message_header_codec,
             web_socket_response_codec::{SBE_TEMPLATE_ID, WebSocketResponseDecoder},
         },
     },
@@ -652,12 +654,11 @@ impl BinanceSpotWsTradingHandler {
 
         // Check for error status (non-200)
         if status != 200 {
-            return Ok(self.create_rejection(
-                request_id,
+            let (code, msg) = Self::try_decode_sbe_error(&result_data).unwrap_or((
                 status as i32,
                 format!("Request failed with status {status}"),
-                meta,
             ));
+            return Ok(self.create_rejection(request_id, code, msg, meta));
         }
 
         // Decode the inner payload based on request type
@@ -822,5 +823,30 @@ impl BinanceSpotWsTradingHandler {
                 BinanceSpotWsTradingMessage::Error(format!("code={code}: {msg}"))
             }
         }
+    }
+
+    // Decodes the SBE error response to extract the Binance error code and message
+    fn try_decode_sbe_error(data: &[u8]) -> Option<(i32, String)> {
+        const HEADER_LEN: usize = 8;
+
+        if data.len()
+            < HEADER_LEN + crate::spot::sbe::spot::error_response_codec::SBE_BLOCK_LENGTH as usize
+        {
+            return None;
+        }
+
+        let buf = ReadBuf::new(data);
+        let header = message_header_codec::MessageHeaderDecoder::default().wrap(buf, 0);
+        if header.template_id() != crate::spot::sbe::spot::error_response_codec::SBE_TEMPLATE_ID {
+            return None;
+        }
+
+        let mut decoder = ErrorResponseDecoder::default().header(header, 0);
+        let code = i32::from(decoder.code());
+        let msg_coords = decoder.msg_decoder();
+        let msg_bytes = decoder.msg_slice(msg_coords);
+        let msg = String::from_utf8_lossy(msg_bytes).into_owned();
+
+        Some((code, msg))
     }
 }

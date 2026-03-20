@@ -70,14 +70,17 @@ use super::websocket::trading::{
 };
 use crate::{
     common::{
-        consts::{BINANCE_NAUTILUS_SPOT_BROKER_ID, BINANCE_VENUE},
+        consts::{
+            BINANCE_GTX_ORDER_REJECT_CODE, BINANCE_NAUTILUS_SPOT_BROKER_ID,
+            BINANCE_NEW_ORDER_REJECTED_CODE, BINANCE_SPOT_POST_ONLY_REJECT_MSG, BINANCE_VENUE,
+        },
         credential::resolve_credentials,
         dispatch::{
             OrderIdentity, PendingOperation, PendingRequest, WsDispatchState,
             ensure_accepted_emitted,
         },
         encoder::{decode_broker_id, encode_broker_id},
-        enums::{BinanceProductType, BinanceSide},
+        enums::{BinanceProductType, BinanceSide, BinanceTimeInForce},
     },
     config::BinanceExecClientConfig,
     spot::{
@@ -154,6 +157,7 @@ pub struct BinanceSpotExecutionClient {
     http_client: BinanceSpotHttpClient,
     ws_trading_client: Option<BinanceSpotWsTradingClient>,
     ws_trading_handle: Mutex<Option<JoinHandle<()>>>,
+    ws_authenticated: Arc<tokio::sync::Notify>,
     pending_tasks: Mutex<Vec<JoinHandle<()>>>,
 }
 
@@ -218,6 +222,7 @@ impl BinanceSpotExecutionClient {
             http_client,
             ws_trading_client,
             ws_trading_handle: Mutex::new(None),
+            ws_authenticated: Arc::new(tokio::sync::Notify::new()),
             pending_tasks: Mutex::new(Vec::new()),
         })
     }
@@ -293,35 +298,38 @@ impl BinanceSpotExecutionClient {
             let params =
                 build_new_order_params(&order, client_order_id, is_post_only, is_quote_quantity)?;
 
+            // Pre-register before sending to avoid response racing the insert
+            let request_id = ws_client.next_request_id();
+            dispatch_state.pending_requests.insert(
+                request_id.clone(),
+                PendingRequest {
+                    client_order_id,
+                    venue_order_id: None,
+                    operation: PendingOperation::Place,
+                },
+            );
+
             self.spawn_task("submit_order_ws", async move {
-                match ws_client.place_order(params).await {
-                    Ok(request_id) => {
-                        dispatch_state.pending_requests.insert(
-                            request_id,
-                            PendingRequest {
-                                client_order_id,
-                                venue_order_id: None,
-                                operation: PendingOperation::Place,
-                            },
-                        );
-                    }
-                    Err(e) => {
-                        let rejected = OrderRejected::new(
-                            trader_id,
-                            strategy_id,
-                            instrument_id,
-                            client_order_id,
-                            account_id,
-                            format!("ws-submit-order-error: {e}").into(),
-                            UUID4::new(),
-                            ts_init,
-                            clock.get_time_ns(),
-                            false,
-                            false,
-                        );
-                        event_emitter.send_order_event(OrderEventAny::Rejected(rejected));
-                        anyhow::bail!("WS submit order failed: {e}");
-                    }
+                if let Err(e) = ws_client
+                    .place_order_with_id(request_id.clone(), params)
+                    .await
+                {
+                    dispatch_state.pending_requests.remove(&request_id);
+                    let rejected = OrderRejected::new(
+                        trader_id,
+                        strategy_id,
+                        instrument_id,
+                        client_order_id,
+                        account_id,
+                        format!("ws-submit-order-error: {e}").into(),
+                        UUID4::new(),
+                        ts_init,
+                        clock.get_time_ns(),
+                        false,
+                        false,
+                    );
+                    event_emitter.send_order_event(OrderEventAny::Rejected(rejected));
+                    anyhow::bail!("WS submit order failed: {e}");
                 }
                 Ok(())
             });
@@ -346,8 +354,7 @@ impl BinanceSpotExecutionClient {
                         is_quote_quantity,
                         display_qty,
                     )
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Submit order failed: {e}"));
+                    .await;
 
                 match result {
                     Ok(report) => {
@@ -367,6 +374,9 @@ impl BinanceSpotExecutionClient {
                         event_emitter.send_order_event(OrderEventAny::Accepted(accepted));
                     }
                     Err(e) => {
+                        let due_post_only = e
+                            .downcast_ref::<crate::spot::http::BinanceSpotHttpError>()
+                            .is_some_and(is_spot_post_only_rejection);
                         dispatch_state.cleanup_terminal(client_order_id);
                         let rejected = OrderRejected::new(
                             trader_id,
@@ -379,7 +389,7 @@ impl BinanceSpotExecutionClient {
                             ts_init,
                             clock.get_time_ns(),
                             false,
-                            false,
+                            due_post_only,
                         );
                         event_emitter.send_order_event(OrderEventAny::Rejected(rejected));
                         return Err(e);
@@ -628,6 +638,7 @@ impl ExecutionClient for BinanceSpotExecutionClient {
                     let clock = self.clock;
                     let http_client = self.http_client.clone();
                     let dispatch_state = self.dispatch_state.clone();
+                    let ws_authenticated = self.ws_authenticated.clone();
                     let seen_trade_ids =
                         std::sync::Arc::new(Mutex::new(BoundedDedup::<(Ustr, i64)>::new(10_000)));
 
@@ -642,6 +653,7 @@ impl ExecutionClient for BinanceSpotExecutionClient {
                                         account_id,
                                         clock,
                                         &dispatch_state,
+                                        &ws_authenticated,
                                         &seen_trade_ids,
                                     );
                                 }
@@ -655,11 +667,32 @@ impl ExecutionClient for BinanceSpotExecutionClient {
 
                     *self.ws_trading_handle.lock().expect(MUTEX_POISONED) = Some(handle);
 
-                    // Authenticate session and subscribe to user data stream
+                    // Block until session is authenticated before signaling connected
                     if let Err(e) = ws_trading.session_logon().await {
                         log::error!("WS session logon failed: {e}");
-                    } else if let Err(e) = ws_trading.subscribe_user_data().await {
-                        log::error!("WS user data subscribe failed: {e}");
+                    } else {
+                        let auth_result = tokio::time::timeout(
+                            Duration::from_secs(10),
+                            self.ws_authenticated.notified(),
+                        )
+                        .await;
+
+                        if auth_result.is_err() {
+                            log::error!(
+                                "WS session authentication timed out, \
+                                 order operations will use HTTP fallback"
+                            );
+
+                            if let Some(handle) =
+                                self.ws_trading_handle.lock().expect(MUTEX_POISONED).take()
+                            {
+                                handle.abort();
+                            }
+                            ws_trading.disconnect().await;
+                            self.ws_trading_client = None;
+                        } else if let Err(e) = ws_trading.subscribe_user_data().await {
+                            log::error!("WS user data subscribe failed: {e}");
+                        }
                     }
                 }
                 Err(e) => {
@@ -1330,6 +1363,7 @@ fn dispatch_ws_trading_message(
     account_id: AccountId,
     clock: &'static AtomicTime,
     dispatch_state: &WsDispatchState,
+    ws_authenticated: &tokio::sync::Notify,
     seen_trade_ids: &std::sync::Arc<Mutex<BoundedDedup<(Ustr, i64)>>>,
 ) {
     match msg {
@@ -1349,28 +1383,43 @@ fn dispatch_ws_trading_message(
             code,
             msg,
         } => {
-            log::warn!("WS order rejected: request_id={request_id}, code={code}, msg={msg}");
-            if let Some((_, pending)) = dispatch_state.pending_requests.remove(&request_id)
-                && let Some(identity) = dispatch_state
+            log::debug!("WS order rejected: request_id={request_id}, code={code}, msg={msg}");
+            if let Some((_, pending)) = dispatch_state.pending_requests.remove(&request_id) {
+                // Clone to drop the DashMap read guard before cleanup_terminal
+                let identity = dispatch_state
                     .order_identities
                     .get(&pending.client_order_id)
-            {
-                let ts_now = clock.get_time_ns();
-                let rejected = OrderRejected::new(
-                    emitter.trader_id(),
-                    identity.strategy_id,
-                    identity.instrument_id,
-                    pending.client_order_id,
-                    account_id,
-                    Ustr::from(&format!("code={code}: {msg}")),
-                    UUID4::new(),
-                    ts_now,
-                    ts_now,
-                    false,
-                    false,
-                );
-                dispatch_state.cleanup_terminal(pending.client_order_id);
-                emitter.send_order_event(OrderEventAny::Rejected(rejected));
+                    .map(|r| r.clone());
+
+                if let Some(identity) = identity {
+                    let code_i64 = i64::from(code);
+                    let due_post_only = code_i64 == BINANCE_GTX_ORDER_REJECT_CODE
+                        || (code_i64 == BINANCE_NEW_ORDER_REJECTED_CODE
+                            && msg == BINANCE_SPOT_POST_ONLY_REJECT_MSG);
+                    let ts_now = clock.get_time_ns();
+                    let rejected = OrderRejected::new(
+                        emitter.trader_id(),
+                        identity.strategy_id,
+                        identity.instrument_id,
+                        pending.client_order_id,
+                        account_id,
+                        Ustr::from(&format!("code={code}: {msg}")),
+                        UUID4::new(),
+                        ts_now,
+                        ts_now,
+                        false,
+                        due_post_only,
+                    );
+                    dispatch_state.cleanup_terminal(pending.client_order_id);
+                    emitter.send_order_event(OrderEventAny::Rejected(rejected));
+                } else {
+                    log::warn!(
+                        "No order identity for {}, cannot emit OrderRejected",
+                        pending.client_order_id
+                    );
+                }
+            } else {
+                log::warn!("No pending request for {request_id}, cannot emit OrderRejected");
             }
         }
         BinanceSpotWsTradingMessage::OrderCanceled {
@@ -1510,6 +1559,7 @@ fn dispatch_ws_trading_message(
         }
         BinanceSpotWsTradingMessage::Authenticated => {
             log::info!("WS trading API authenticated");
+            ws_authenticated.notify_one();
         }
         BinanceSpotWsTradingMessage::Reconnected => {
             log::info!("WS trading API reconnected");
@@ -1879,6 +1929,9 @@ fn dispatch_tracked_execution_report(
             } else {
                 Ustr::from(&report.reject_reason)
             };
+            let due_post_only = report.time_in_force == BinanceTimeInForce::Gtx
+                || (report.order_type == "LIMIT_MAKER"
+                    && (report.reject_reason.is_empty() || report.reject_reason == "NONE"));
             state.cleanup_terminal(client_order_id);
             emitter.emit_order_rejected_event(
                 identity.strategy_id,
@@ -1886,7 +1939,7 @@ fn dispatch_tracked_execution_report(
                 client_order_id,
                 reason.as_str(),
                 ts_init,
-                false,
+                due_post_only,
             );
         }
     }
@@ -1964,5 +2017,17 @@ fn dispatch_untracked_execution_report(
                 Err(e) => log::error!("Failed to parse order status report: {e}"),
             }
         }
+    }
+}
+
+// Checks for GTX (-5022) and spot LIMIT_MAKER (-2010 + specific message)
+fn is_spot_post_only_rejection(error: &crate::spot::http::BinanceSpotHttpError) -> bool {
+    match error {
+        crate::spot::http::BinanceSpotHttpError::BinanceError { code, message } => {
+            *code == BINANCE_GTX_ORDER_REJECT_CODE
+                || (*code == BINANCE_NEW_ORDER_REJECTED_CODE
+                    && message == BINANCE_SPOT_POST_ONLY_REJECT_MSG)
+        }
+        _ => false,
     }
 }

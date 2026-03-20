@@ -266,7 +266,7 @@ class ExecTester(Strategy):
             return
 
         if not self.buy_order or not self.is_order_active(self.buy_order):
-            if self.config.use_post_only and self.config.test_reject_post_only:
+            if self.config.test_reject_post_only:
                 price = instrument.make_price(best_ask + self.price_offset)
 
             self.submit_limit_order(OrderSide.BUY, price)
@@ -297,7 +297,7 @@ class ExecTester(Strategy):
             return
 
         if not self.sell_order or not self.is_order_active(self.sell_order):
-            if self.config.use_post_only and self.config.test_reject_post_only:
+            if self.config.test_reject_post_only:
                 price = instrument.make_price(best_bid - self.price_offset)
 
             self.submit_limit_order(OrderSide.SELL, price)
@@ -412,7 +412,7 @@ class ExecTester(Strategy):
             price=price,
             time_in_force=time_in_force,
             expire_time=expire_time,
-            post_only=self.config.use_post_only,
+            post_only=self.config.use_post_only or self.config.test_reject_post_only,
             quote_quantity=self.config.use_quote_quantity,
             display_qty=display_qty,
             emulation_trigger=emulation_trigger,
@@ -494,10 +494,10 @@ class ExecTester(Strategy):
             entry_price=price,
             time_in_force=entry_tif,
             expire_time=entry_expire,
-            entry_post_only=self.config.use_post_only,
+            entry_post_only=self.config.use_post_only or self.config.test_reject_post_only,
             tp_price=tp_price,
             tp_time_in_force=entry_tif,
-            tp_post_only=self.config.use_post_only,
+            tp_post_only=self.config.use_post_only or self.config.test_reject_post_only,
             sl_trigger_price=sl_trigger_price,
             sl_trigger_type=trigger_type,
             sl_time_in_force=sl_tif,

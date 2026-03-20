@@ -909,7 +909,7 @@ impl ExecTester {
         };
 
         // test_reject_post_only places order on wrong side of spread to trigger rejection
-        let price = if self.config.use_post_only && self.config.test_reject_post_only {
+        let price = if self.config.test_reject_post_only {
             instrument.make_price(best_ask.as_f64() + price_offset)
         } else {
             instrument.make_price(best_bid.as_f64() - price_offset)
@@ -964,7 +964,7 @@ impl ExecTester {
         };
 
         // test_reject_post_only places order on wrong side of spread to trigger rejection
-        let price = if self.config.use_post_only && self.config.test_reject_post_only {
+        let price = if self.config.test_reject_post_only {
             instrument.make_price(best_bid.as_f64() - price_offset)
         } else {
             instrument.make_price(best_ask.as_f64() + price_offset)
@@ -1044,7 +1044,7 @@ impl ExecTester {
             buy_price,
             Some(time_in_force),
             expire_time,
-            Some(self.config.use_post_only),
+            Some(self.config.use_post_only || self.config.test_reject_post_only),
             None,
             Some(self.config.use_quote_quantity),
             self.config.order_display_qty,
@@ -1063,7 +1063,7 @@ impl ExecTester {
             sell_price,
             Some(time_in_force),
             expire_time,
-            Some(self.config.use_post_only),
+            Some(self.config.use_post_only || self.config.test_reject_post_only),
             None,
             Some(self.config.use_quote_quantity),
             self.config.order_display_qty,
@@ -1273,7 +1273,7 @@ impl ExecTester {
             price,
             Some(time_in_force),
             expire_time,
-            Some(self.config.use_post_only),
+            Some(self.config.use_post_only || self.config.test_reject_post_only),
             None, // reduce_only
             Some(self.config.use_quote_quantity),
             self.config.order_display_qty,
@@ -1527,7 +1527,7 @@ impl ExecTester {
             Some(time_in_force),
             expire_time,
             Some(sl_time_in_force),
-            Some(self.config.use_post_only),
+            Some(self.config.use_post_only || self.config.test_reject_post_only),
             None, // reduce_only
             Some(self.config.use_quote_quantity),
             self.config.emulation_trigger,
@@ -2392,6 +2392,24 @@ mod tests {
         instrument: InstrumentAny,
     ) {
         config.use_post_only = true;
+        let cache = create_cache_with_instrument(&instrument);
+        let mut tester = ExecTester::new(config);
+        register_exec_tester(&mut tester, cache);
+        tester.instrument = Some(instrument);
+
+        let result = tester.submit_limit_order(OrderSide::Buy, Price::from("3000.0"));
+
+        assert!(result.is_ok());
+        let order = tester.buy_order.unwrap();
+        assert!(order.is_post_only());
+    }
+
+    #[rstest]
+    fn test_submit_limit_order_with_test_reject_post_only_implies_post_only(
+        mut config: ExecTesterConfig,
+        instrument: InstrumentAny,
+    ) {
+        config.test_reject_post_only = true;
         let cache = create_cache_with_instrument(&instrument);
         let mut tester = ExecTester::new(config);
         register_exec_tester(&mut tester, cache);

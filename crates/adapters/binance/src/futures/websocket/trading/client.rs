@@ -145,7 +145,7 @@ impl BinanceFuturesWsTradingClient {
         mode_u8 == ConnectionMode::Closed as u8
     }
 
-    fn next_request_id(&self) -> String {
+    pub fn next_request_id(&self) -> String {
         let id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
         format!("req-{id}")
     }
@@ -276,12 +276,22 @@ impl BinanceFuturesWsTradingClient {
         params: BinanceNewOrderParams,
     ) -> BinanceFuturesWsApiResult<String> {
         let id = self.next_request_id();
-        let cmd = BinanceFuturesWsTradingCommand::PlaceOrder {
-            id: id.clone(),
-            params,
-        };
-        self.send_cmd(cmd).await?;
+        self.place_order_with_id(id.clone(), params).await?;
         Ok(id)
+    }
+
+    /// Places a new order via the WebSocket Trading API using a pre-generated request ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler is unavailable.
+    pub async fn place_order_with_id(
+        &self,
+        id: String,
+        params: BinanceNewOrderParams,
+    ) -> BinanceFuturesWsApiResult<()> {
+        let cmd = BinanceFuturesWsTradingCommand::PlaceOrder { id, params };
+        self.send_cmd(cmd).await
     }
 
     /// Cancels an order via the WebSocket Trading API.

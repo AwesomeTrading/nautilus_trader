@@ -24,6 +24,7 @@ from nautilus_trader.adapters.binance.common.constants import BINANCE_MIN_CALLBA
 from nautilus_trader.adapters.binance.common.constants import BINANCE_PRICE_MATCH_ORDER_TYPES
 from nautilus_trader.adapters.binance.common.constants import BINANCE_PRICE_MATCH_VALUES
 from nautilus_trader.adapters.binance.common.constants import BINANCE_RETRY_WARNINGS
+from nautilus_trader.adapters.binance.common.constants import BINANCE_SPOT_POST_ONLY_REJECT_MSG
 from nautilus_trader.adapters.binance.common.credentials import is_ed25519_private_key
 from nautilus_trader.adapters.binance.common.enums import BinanceAccountType
 from nautilus_trader.adapters.binance.common.enums import BinanceEnumParser
@@ -319,16 +320,14 @@ class BinanceCommonExecutionClient(LiveExecutionClient):
 
     def _log_retry_error(self, message: str, exception: BaseException | None) -> None:
         error_code = get_binance_error_code(exception) if exception else None
+        is_post_only = isinstance(exception, BinanceError) and _is_post_only_rejection(exception)
 
-        match error_code:
-            case BinanceErrorCode.GTX_ORDER_REJECT if (
-                not self._log_rejected_due_post_only_as_warning
-            ):
-                self._log.info(message)
-            case code if code in BINANCE_RETRY_WARNINGS:
-                self._log.warning(message)
-            case _:
-                self._log.error(message)
+        if is_post_only and not self._log_rejected_due_post_only_as_warning:
+            self._log.info(message)
+        elif is_post_only or error_code in BINANCE_RETRY_WARNINGS:
+            self._log.warning(message)
+        else:
+            self._log.error(message)
 
     async def _connect(self) -> None:
         await self._instrument_provider.initialize()
@@ -1488,4 +1487,24 @@ class BinanceCommonExecutionClient(LiveExecutionClient):
 
 def _is_post_only_rejection(error: BinanceError) -> bool:
     error_code = get_binance_error_code(error)
-    return error_code == BinanceErrorCode.GTX_ORDER_REJECT
+    if error_code == BinanceErrorCode.GTX_ORDER_REJECT:
+        return True
+    if error_code == BinanceErrorCode.NEW_ORDER_REJECTED:
+        msg = _get_error_msg(error)
+        return msg == BINANCE_SPOT_POST_ONLY_REJECT_MSG
+    return False
+
+
+def _get_error_msg(error: BinanceError) -> str:
+    if isinstance(error.message, dict):
+        return error.message.get("msg", "")
+    if isinstance(error.message, str):
+        import json
+
+        try:
+            parsed = json.loads(error.message)
+            if isinstance(parsed, dict):
+                return parsed.get("msg", "")
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return ""

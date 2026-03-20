@@ -1825,8 +1825,7 @@ impl BinanceSpotHttpClient {
                 stop_price_str.as_deref(),
                 iceberg_qty_str.as_deref(),
             )
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+            .await?;
 
         parse_new_order_response_sbe(&response, account_id, &instrument, ts_init)
     }
