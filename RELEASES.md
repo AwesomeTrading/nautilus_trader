@@ -18,6 +18,8 @@ Released on TBD (UTC).
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
 - Added OKX `subscribe_option_greeks` for venue-provided Greeks via the `opt-summary` WebSocket channel
 - Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
+- Added OKX `fwdPx` (forward price) to `OKXOptionSummaryMsg` and mapped to `underlying_price` on `OptionGreeks` for ATM tracking
+- Added OKX missing WebSocket message fields across all channel structs
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
 - Added Tardis raw provider metadata to `Instrument.info` (#3730), thanks for reporting @volemont
 - Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
@@ -66,6 +68,7 @@ Released on TBD (UTC).
 - Added Python strategy support to v2 `LiveNode` with `add_strategy_from_config`
 - Added backtest margin models, `FXRolloverInterestModule`, `PerContractFeeModel`, and `SimulationModule` trait in Rust
 - Added `subscribe_option_greeks` support to `DataTester` in Rust
+- Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Improved socket clients reconnect and shutdown reliability

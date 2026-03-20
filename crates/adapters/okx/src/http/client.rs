@@ -3988,6 +3988,11 @@ fn parse_http_algo_order(
         callback_ratio: order.callback_ratio.clone(),
         callback_spread: order.callback_spread.clone(),
         active_px: order.active_px.clone(),
+        ccy: None,
+        tgt_ccy: None,
+        fee: None,
+        fee_ccy: None,
+        advance_ord_type: None,
     };
 
     parse_algo_order_status_report(&msg, instrument, account_id, ts_init)

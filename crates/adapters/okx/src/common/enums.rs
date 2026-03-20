@@ -557,6 +557,7 @@ pub enum OKXPositionSide {
     Copy,
     Clone,
     Debug,
+    Default,
     Display,
     PartialEq,
     Eq,
@@ -569,6 +570,7 @@ pub enum OKXPositionSide {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum OKXSelfTradePreventionMode {
+    #[default]
     #[serde(rename = "")]
     None,
     CancelMaker,
@@ -1152,4 +1154,92 @@ pub enum OKXBarSize {
     Month1,
     #[serde(rename = "3M")]
     Month3,
+}
+
+/// Options price type for order pricing.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Display,
+    PartialEq,
+    Eq,
+    Hash,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OKXPriceType {
+    /// No price type specified.
+    #[default]
+    #[serde(rename = "")]
+    None,
+    /// Standard price.
+    Px,
+    /// Price in USD.
+    Usd,
+    /// Price in implied volatility.
+    Vol,
+}
+
+/// Funding rate settlement state.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Display,
+    PartialEq,
+    Eq,
+    Hash,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OKXSettlementState {
+    /// No settlement state.
+    #[default]
+    #[serde(rename = "")]
+    None,
+    /// Settlement in progress.
+    Processing,
+    /// Settlement completed.
+    Settled,
+}
+
+/// Quick margin type for order margin management.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Display,
+    PartialEq,
+    Eq,
+    Hash,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OKXQuickMarginType {
+    /// No quick margin type.
+    #[default]
+    #[serde(rename = "")]
+    None,
+    /// Manual margin management.
+    Manual,
+    /// Auto borrow margin.
+    AutoBorrow,
+    /// Auto repay margin.
+    AutoRepay,
 }
