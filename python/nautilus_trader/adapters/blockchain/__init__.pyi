@@ -23,9 +23,9 @@ class BlockchainDataClientConfig:
         multicall_calls_per_rpc_request: int | None,
         wss_rpc_url: str | None,
         use_hypersync_for_live_data: bool,
-        from_block: int | None,
-        pool_filters: DexPoolFilters | None,
-        postgres_cache_database_config: infrastructure.PostgresConnectOptions | None,
+        from_block: int | None = ...,
+        pool_filters: DexPoolFilters | None = ...,
+        postgres_cache_database_config: infrastructure.PostgresConnectOptions | None = ...,
     ) -> None: ...
     @property
     def chain(self) -> model.Chain: ...
@@ -48,4 +48,4 @@ class BlockchainExecutionClientFactory: ...
 
 @typing.final
 class DexPoolFilters:
-    def __init__(self, remove_pools_with_empty_erc20_fields: bool | None) -> None: ...
+    def __init__(self, remove_pools_with_empty_erc20_fields: bool | None = ...) -> None: ...

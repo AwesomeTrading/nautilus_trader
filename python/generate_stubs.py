@@ -261,6 +261,9 @@ def post_process_stubs(root: Path) -> None:
         # Remove imports extracted from doc comment examples
         content = remove_docstring_imports(content)
 
+        # Add = None default to Optional parameters that lack one
+        content = add_optional_defaults(content)
+
         # Import model symbols used without a module qualifier
         content = add_missing_model_imports(content)
 
@@ -1090,12 +1093,18 @@ def rename_methods(content: str) -> str:
     # Fix __init__ return type to be None
     content = re.sub(r"(def __init__\([^)]*\))\s*->\s*[^:]+:", r"\1 -> None:", content)
 
-    # Strip py_ prefix from remaining methods (project convention: Rust methods use
-    # py_ prefix with #[pyo3(name = "...")] to expose without the prefix to Python).
+    # Strip py_ prefix from function definitions and __all__ entries (project convention:
+    # Rust uses py_ prefix with #[pyo3(name = "...")] to expose without the prefix).
+    # pyo3-stub-gen picks up the rename for def lines but uses the Rust name in __all__.
     # Skip stripping when the result would be a Python keyword.
     content = re.sub(
         r"\bdef py_(\w+)\s*\(",
         lambda m: f"def {m.group(1)}(" if not keyword.iskeyword(m.group(1)) else m.group(0),
+        content,
+    )
+    content = re.sub(
+        r'"py_(\w+)"',
+        lambda m: f'"{m.group(1)}"' if not keyword.iskeyword(m.group(1)) else m.group(0),
         content,
     )
 
@@ -1229,6 +1238,135 @@ def remove_docstring_imports(content: str) -> str:
     lines = content.split("\n")
     lines = [line for line in lines if line.strip() not in _DOCSTRING_IMPORTS]
     return "\n".join(lines)
+
+
+def _split_params(params_str: str) -> list[str]:
+    """
+    Split a parameter string on commas, respecting nested brackets.
+    """
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for i, ch in enumerate(params_str):
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(params_str[start:i].strip())
+            start = i + 1
+    tail = params_str[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _is_optional_param(param: str) -> bool:
+    """
+    Check if a parameter has an Optional type annotation at the top level.
+    """
+    colon = param.find(":")
+    if colon < 0:
+        return False
+    type_part = param[colon + 1 :].split("=")[0].strip()
+    if "Optional[" in type_part:
+        return True
+    # Check for `| None` only at bracket depth 0
+    depth = 0
+    for i, ch in enumerate(type_part):
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "|" and depth == 0 and "None" in type_part[i + 1 : i + 7].strip():
+            return True
+    return False
+
+
+def _has_default(param: str) -> bool:
+    """
+    Check if a parameter has a default value (respecting brackets).
+    """
+    depth = 0
+    for ch in param:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "=" and depth == 0 and ":" in param[: param.index(ch)]:
+            return True
+    return False
+
+
+def _find_matching_paren(line: str, start: int) -> int:
+    """
+    Return the index of the closing paren matching the open paren at *start*.
+    """
+    depth = 0
+    for i in range(start, len(line)):
+        if line[i] == "(":
+            depth += 1
+        elif line[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _fix_optional_defaults_in_line(line: str) -> str:
+    """
+    Add ``= ...`` to trailing Optional params in a single def line.
+    """
+    paren_start = line.find("(")
+    if paren_start < 0:
+        return line
+
+    paren_end = _find_matching_paren(line, paren_start)
+    if paren_end < 0:
+        return line
+
+    params = _split_params(line[paren_start + 1 : paren_end])
+    if not params:
+        return line
+
+    changed = False
+    for i in range(len(params) - 1, -1, -1):
+        p = params[i]
+        if _has_default(p):
+            continue
+        if _is_optional_param(p):
+            params[i] = p + " = ..."
+            changed = True
+        else:
+            break
+
+    if not changed:
+        return line
+    return line[: paren_start + 1] + ", ".join(params) + line[paren_end:]
+
+
+def add_optional_defaults(content: str) -> str:
+    """
+    Add ``= ...`` to trailing Optional parameters that lack a default value.
+
+    pyo3-stub-gen omits defaults for ``Option<T>`` parameters declared in
+    ``#[pyo3(signature)]`` when the ``infer_signature`` feature is off.
+    Using ``...`` (ellipsis) rather than ``None`` because the actual default
+    may be a non-None value like ``Some(true)`` or ``Some(30)``.
+
+    Only adds defaults to trailing Optional params (right-to-left from the end
+    of the parameter list) to avoid placing a defaulted parameter before a
+    required one.
+
+    """
+    lines = content.split("\n")
+    result = []
+    for line in lines:
+        if "def " in line and ("Optional" in line or "| None" in line):
+            result.append(_fix_optional_defaults_in_line(line))
+        else:
+            result.append(line)
+    return "\n".join(result)
 
 
 def add_missing_model_imports(content: str) -> str:
@@ -1396,6 +1534,10 @@ def normalize_stub_content(content: str) -> str:
         content = re.sub(r"\bnautilus_trader\.model\.", "model.", content)
     if "from nautilus_trader import infrastructure" in content:
         content = re.sub(r"\bnautilus_trader\.infrastructure\.", "infrastructure.", content)
+
+    # Fix malformed defaults where module prefix is prepended to ellipsis
+    # e.g. "model...." -> "..." (pyo3-stub-gen adds prefix to "..." repr)
+    content = re.sub(r"= \w+\.\.\.\.", "= ...", content)
 
     # Normalize multiple blank lines to maximum of two
     content = re.sub(r"\n{4,}", "\n\n\n", content)

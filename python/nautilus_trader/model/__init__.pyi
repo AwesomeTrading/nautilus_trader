@@ -43,7 +43,7 @@ class AccountState:
         event_id: core.UUID4,
         ts_event: int,
         ts_init: int,
-        base_currency: Currency | None,
+        base_currency: Currency | None = ...,
     ) -> None: ...
     @property
     def account_id(self) -> AccountId: ...
@@ -210,17 +210,17 @@ class BettingInstrument:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -315,19 +315,19 @@ class BinaryOption:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        outcome: str | None,
-        description: str | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        outcome: str | None = ...,
+        description: str | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -495,11 +495,11 @@ class CashAccount:
     def events(self) -> list[AccountState]: ...
     @property
     def calculate_account_state(self) -> bool: ...
-    def balance_total(self, currency: Currency | None) -> Money | None: ...
+    def balance_total(self, currency: Currency | None = ...) -> Money | None: ...
     def balances_total(self) -> dict[Currency, Money]: ...
-    def balance_free(self, currency: Currency | None) -> Money | None: ...
+    def balance_free(self, currency: Currency | None = ...) -> Money | None: ...
     def balances_free(self) -> dict[Currency, Money]: ...
-    def balance_locked(self, currency: Currency | None) -> Money | None: ...
+    def balance_locked(self, currency: Currency | None = ...) -> Money | None: ...
     def balances_locked(self) -> dict[Currency, Money]: ...
     def apply(self, event: AccountState) -> None: ...
     def calculate_balance_locked(
@@ -508,7 +508,7 @@ class CashAccount:
         side: OrderSide,
         quantity: Quantity,
         price: Price,
-        use_quote_for_inverse: bool | None,
+        use_quote_for_inverse: bool | None = ...,
     ) -> Money: ...
     def calculate_commission(
         self,
@@ -516,10 +516,10 @@ class CashAccount:
         last_qty: Quantity,
         last_px: Price,
         liquidity_side: LiquiditySide,
-        use_quote_for_inverse: bool | None,
+        use_quote_for_inverse: bool | None = ...,
     ) -> Money: ...
     def calculate_pnls(
-        self, instrument: typing.Any, fill: OrderFilled, position: Position | None
+        self, instrument: typing.Any, fill: OrderFilled, position: Position | None = ...
     ) -> list[Money]: ...
     def to_dict(self) -> typing.Any: ...
 
@@ -537,19 +537,19 @@ class Cfd:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        base_currency: Currency | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        base_currency: Currency | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -642,18 +642,18 @@ class Commodity:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -736,19 +736,19 @@ class CryptoFuture:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        multiplier: Quantity | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        multiplier: Quantity | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -831,19 +831,19 @@ class CryptoOption:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        multiplier: Quantity | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        multiplier: Quantity | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -926,19 +926,19 @@ class CryptoPerpetual:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        multiplier: Quantity | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        multiplier: Quantity | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1042,19 +1042,19 @@ class CurrencyPair:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        multiplier: Quantity | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        multiplier: Quantity | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1124,7 +1124,9 @@ class CustomData:
 
 @typing.final
 class DataType:
-    def __init__(self, type_name: str, metadata: dict | None, identifier: str | None) -> None: ...
+    def __init__(
+        self, type_name: str, metadata: dict | None = ..., identifier: str | None = ...
+    ) -> None: ...
     @property
     def type_name(self) -> str: ...
     @property
@@ -1150,17 +1152,17 @@ class Equity:
         price_increment: Price,
         ts_event: int,
         ts_init: int,
-        isin: str | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        isin: str | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1229,7 +1231,7 @@ class ExecutionMassStatus:
         account_id: AccountId,
         venue: Venue,
         ts_init: int,
-        report_id: core.UUID4 | None,
+        report_id: core.UUID4 | None = ...,
     ) -> None: ...
     @property
     def client_id(self) -> ClientId: ...
@@ -1269,9 +1271,9 @@ class FillReport:
         liquidity_side: LiquiditySide,
         ts_event: int,
         ts_init: int,
-        client_order_id: ClientOrderId | None,
-        venue_position_id: PositionId | None,
-        report_id: core.UUID4 | None,
+        client_order_id: ClientOrderId | None = ...,
+        venue_position_id: PositionId | None = ...,
+        report_id: core.UUID4 | None = ...,
     ) -> None: ...
     @property
     def account_id(self) -> AccountId: ...
@@ -1334,8 +1336,8 @@ class FundingRateUpdate:
         rate: decimal.Decimal,
         ts_event: int,
         ts_init: int,
-        interval: int | None,
-        next_funding_ns: int | None,
+        interval: int | None = ...,
+        next_funding_ns: int | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1386,16 +1388,16 @@ class FuturesContract:
         lot_size: Quantity,
         ts_event: int,
         ts_init: int,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        exchange: str | None,
-        info: dict | None,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        exchange: str | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1472,16 +1474,16 @@ class FuturesSpread:
         lot_size: Quantity,
         ts_event: int,
         ts_init: int,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        exchange: str | None,
-        info: dict | None,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        exchange: str | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1555,7 +1557,7 @@ class IndexInstrument:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        info: dict | None,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1679,11 +1681,11 @@ class InstrumentStatus:
         action: MarketStatusAction,
         ts_event: int,
         ts_init: int,
-        reason: str | None,
-        trading_event: str | None,
-        is_trading: bool | None,
-        is_quoting: bool | None,
-        is_short_sell_restricted: bool | None,
+        reason: str | None = ...,
+        trading_event: str | None = ...,
+        is_trading: bool | None = ...,
+        is_quoting: bool | None = ...,
+        is_short_sell_restricted: bool | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -1741,18 +1743,18 @@ class LimitIfTouchedOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> LimitIfTouchedOrder: ...
@@ -1787,18 +1789,18 @@ class LimitOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> LimitOrder: ...
@@ -1938,14 +1940,14 @@ class MarginAccount:
         instrument: typing.Any,
         quantity: Quantity,
         price: Price,
-        use_quote_for_inverse: bool | None,
+        use_quote_for_inverse: bool | None = ...,
     ) -> Money: ...
     def calculate_maintenance_margin(
         self,
         instrument: typing.Any,
         quantity: Quantity,
         price: Price,
-        use_quote_for_inverse: bool | None,
+        use_quote_for_inverse: bool | None = ...,
     ) -> Money: ...
     def to_dict(self) -> typing.Any: ...
 
@@ -2006,17 +2008,17 @@ class MarketIfTouchedOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> MarketIfTouchedOrder: ...
@@ -2049,14 +2051,14 @@ class MarketOrder:
         time_in_force: TimeInForce,
         reduce_only: bool,
         quote_quantity: bool,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> MarketOrder: ...
@@ -2137,16 +2139,16 @@ class MarketToLimitOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> MarketToLimitOrder: ...
@@ -2186,7 +2188,7 @@ class Money:
     def __abs__(self) -> Money: ...
     def __int__(self) -> int: ...
     def __float__(self) -> float: ...
-    def __round__(self, ndigits: int | None) -> decimal.Decimal: ...
+    def __round__(self, ndigits: int | None = ...) -> decimal.Decimal: ...
     @property
     def raw(self) -> int: ...
     @property
@@ -2248,16 +2250,16 @@ class OptionContract:
         lot_size: Quantity,
         ts_event: int,
         ts_init: int,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        exchange: str | None,
-        info: dict | None,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        exchange: str | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -2406,16 +2408,16 @@ class OptionSpread:
         lot_size: Quantity,
         ts_event: int,
         ts_init: int,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        exchange: str | None,
-        info: dict | None,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        exchange: str | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -2478,7 +2480,7 @@ class OptionSpread:
 
 @typing.final
 class OptionStrikeData:
-    def __init__(self, quote: QuoteTick, greeks: OptionGreeks | None) -> None: ...
+    def __init__(self, quote: QuoteTick, greeks: OptionGreeks | None = ...) -> None: ...
     @property
     def quote(self) -> QuoteTick: ...
     @property
@@ -2547,62 +2549,62 @@ class OrderBook:
     def clear(self, sequence: int, ts_event: int) -> None: ...
     def clear_bids(self, sequence: int, ts_event: int) -> None: ...
     def clear_asks(self, sequence: int, ts_event: int) -> None: ...
-    def clear_stale_levels(self, side: OrderSide | None) -> list[BookLevel] | None: ...
+    def clear_stale_levels(self, side: OrderSide | None = ...) -> list[BookLevel] | None: ...
     def apply_delta(self, delta: OrderBookDelta) -> None: ...
     def apply_deltas(self, deltas: OrderBookDeltas) -> None: ...
     def apply_depth(self, depth: OrderBookDepth10) -> None: ...
     def check_integrity(self) -> None: ...
-    def bids(self, depth: int | None) -> list[BookLevel]: ...
-    def asks(self, depth: int | None) -> list[BookLevel]: ...
-    def bids_to_dict(self, depth: int | None) -> dict[decimal.Decimal, decimal.Decimal]: ...
-    def asks_to_dict(self, depth: int | None) -> dict[decimal.Decimal, decimal.Decimal]: ...
+    def bids(self, depth: int | None = ...) -> list[BookLevel]: ...
+    def asks(self, depth: int | None = ...) -> list[BookLevel]: ...
+    def bids_to_dict(self, depth: int | None = ...) -> dict[decimal.Decimal, decimal.Decimal]: ...
+    def asks_to_dict(self, depth: int | None = ...) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def group_bids(
-        self, group_size: decimal.Decimal, depth: int | None
+        self, group_size: decimal.Decimal, depth: int | None = ...
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def group_asks(
-        self, group_size: decimal.Decimal, depth: int | None
+        self, group_size: decimal.Decimal, depth: int | None = ...
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def bids_filtered_to_dict(
         self,
-        depth: int | None,
-        own_book: OwnOrderBook | None,
-        status: set[OrderStatus] | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        depth: int | None = ...,
+        own_book: OwnOrderBook | None = ...,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def asks_filtered_to_dict(
         self,
-        depth: int | None,
-        own_book: OwnOrderBook | None,
-        status: set[OrderStatus] | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        depth: int | None = ...,
+        own_book: OwnOrderBook | None = ...,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def group_bids_filtered(
         self,
         group_size: decimal.Decimal,
-        depth: int | None,
-        own_book: OwnOrderBook | None,
-        status: set[OrderStatus] | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        depth: int | None = ...,
+        own_book: OwnOrderBook | None = ...,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def group_asks_filtered(
         self,
         group_size: decimal.Decimal,
-        depth: int | None,
-        own_book: OwnOrderBook | None,
-        status: set[OrderStatus] | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        depth: int | None = ...,
+        own_book: OwnOrderBook | None = ...,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def filtered_view(
         self,
-        own_book: OwnOrderBook | None,
-        depth: int | None,
-        status: set[OrderStatus] | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        own_book: OwnOrderBook | None = ...,
+        depth: int | None = ...,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> OrderBook: ...
     def best_bid_price(self) -> Price | None: ...
     def best_ask_price(self) -> Price | None: ...
@@ -2620,7 +2622,7 @@ class OrderBook:
         self, price: Price, order_side: OrderSide, size_precision: int
     ) -> Quantity: ...
     def simulate_fills(self, order: BookOrder) -> list[tuple[Price, Quantity]]: ...
-    def pprint(self, num_levels: int, group_size: decimal.Decimal | None) -> str: ...
+    def pprint(self, num_levels: int, group_size: decimal.Decimal | None = ...) -> str: ...
 
 @typing.final
 class OrderBookDelta:
@@ -2759,8 +2761,8 @@ class OrderCancelRejected:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
-        account_id: AccountId | None,
+        venue_order_id: VenueOrderId | None = ...,
+        account_id: AccountId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderCancelRejected: ...
@@ -2800,8 +2802,8 @@ class OrderCanceled:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
-        account_id: AccountId | None,
+        venue_order_id: VenueOrderId | None = ...,
+        account_id: AccountId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderCanceled: ...
@@ -2902,8 +2904,8 @@ class OrderExpired:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
-        account_id: AccountId | None,
+        venue_order_id: VenueOrderId | None = ...,
+        account_id: AccountId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderExpired: ...
@@ -2950,8 +2952,8 @@ class OrderFilled:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        position_id: PositionId | None,
-        commission: Money | None,
+        position_id: PositionId | None = ...,
+        commission: Money | None = ...,
     ) -> None: ...
     @property
     def is_buy(self) -> bool: ...
@@ -3018,24 +3020,24 @@ class OrderInitialized:
         event_id: core.UUID4,
         ts_event: int,
         ts_init: int,
-        price: Price | None,
-        trigger_price: Price | None,
-        trigger_type: TriggerType | None,
-        limit_offset: decimal.Decimal | None,
-        trailing_offset: decimal.Decimal | None,
-        trailing_offset_type: TrailingOffsetType | None,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        price: Price | None = ...,
+        trigger_price: Price | None = ...,
+        trigger_type: TriggerType | None = ...,
+        limit_offset: decimal.Decimal | None = ...,
+        trailing_offset: decimal.Decimal | None = ...,
+        trailing_offset_type: TrailingOffsetType | None = ...,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @property
     def order_type(self) -> OrderType: ...
@@ -3068,8 +3070,8 @@ class OrderModifyRejected:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
-        account_id: AccountId | None,
+        venue_order_id: VenueOrderId | None = ...,
+        account_id: AccountId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderModifyRejected: ...
@@ -3110,7 +3112,7 @@ class OrderPendingCancel:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
+        venue_order_id: VenueOrderId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderPendingCancel: ...
@@ -3149,7 +3151,7 @@ class OrderPendingUpdate:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
+        venue_order_id: VenueOrderId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderPendingUpdate: ...
@@ -3288,8 +3290,8 @@ class OrderStatusReport:
         display_qty: Quantity | None,
         post_only: bool,
         reduce_only: bool,
-        cancel_reason: str | None,
-        ts_triggered: int | None,
+        cancel_reason: str | None = ...,
+        ts_triggered: int | None = ...,
     ) -> None: ...
     @property
     def account_id(self) -> AccountId: ...
@@ -3406,8 +3408,8 @@ class OrderTriggered:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
-        account_id: AccountId | None,
+        venue_order_id: VenueOrderId | None = ...,
+        account_id: AccountId | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderTriggered: ...
@@ -3446,11 +3448,11 @@ class OrderUpdated:
         ts_event: int,
         ts_init: int,
         reconciliation: bool,
-        venue_order_id: VenueOrderId | None,
-        account_id: AccountId | None,
-        price: Price | None,
-        trigger_price: Price | None,
-        protection_price: Price | None,
+        venue_order_id: VenueOrderId | None = ...,
+        account_id: AccountId | None = ...,
+        price: Price | None = ...,
+        trigger_price: Price | None = ...,
+        protection_price: Price | None = ...,
     ) -> None: ...
     @staticmethod
     def from_dict(values: dict) -> OrderUpdated: ...
@@ -3498,7 +3500,7 @@ class OwnBookOrder:
         ts_accepted: int,
         ts_submitted: int,
         ts_init: int,
-        venue_order_id: VenueOrderId | None,
+        venue_order_id: VenueOrderId | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -3543,30 +3545,36 @@ class OwnOrderBook:
     def bids_to_list(self) -> list[OwnBookOrder]: ...
     def asks_to_list(self) -> list[OwnBookOrder]: ...
     def bids_to_dict(
-        self, status: set[OrderStatus] | None, accepted_buffer_ns: int | None, ts_now: int | None
+        self,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, list[OwnBookOrder]]: ...
     def asks_to_dict(
-        self, status: set[OrderStatus] | None, accepted_buffer_ns: int | None, ts_now: int | None
+        self,
+        status: set[OrderStatus] | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, list[OwnBookOrder]]: ...
     def bid_quantity(
         self,
-        status: set[OrderStatus] | None,
-        depth: int | None,
-        group_size: decimal.Decimal | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        status: set[OrderStatus] | None = ...,
+        depth: int | None = ...,
+        group_size: decimal.Decimal | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def ask_quantity(
         self,
-        status: set[OrderStatus] | None,
-        depth: int | None,
-        group_size: decimal.Decimal | None,
-        accepted_buffer_ns: int | None,
-        ts_now: int | None,
+        status: set[OrderStatus] | None = ...,
+        depth: int | None = ...,
+        group_size: decimal.Decimal | None = ...,
+        accepted_buffer_ns: int | None = ...,
+        ts_now: int | None = ...,
     ) -> dict[decimal.Decimal, decimal.Decimal]: ...
     def combined_with_opposite(self, opposite: OwnOrderBook) -> OwnOrderBook: ...
     def audit_open_orders(self, open_order_ids: set[ClientOrderId]) -> None: ...
-    def pprint(self, num_levels: int, group_size: decimal.Decimal | None) -> str: ...
+    def pprint(self, num_levels: int, group_size: decimal.Decimal | None = ...) -> str: ...
 
 @typing.final
 class PerpetualContract:
@@ -3585,20 +3593,20 @@ class PerpetualContract:
         size_increment: Quantity,
         ts_event: int,
         ts_init: int,
-        base_currency: Currency | None,
-        multiplier: Quantity | None,
-        lot_size: Quantity | None,
-        max_quantity: Quantity | None,
-        min_quantity: Quantity | None,
-        max_notional: Money | None,
-        min_notional: Money | None,
-        max_price: Price | None,
-        min_price: Price | None,
-        margin_init: decimal.Decimal | None,
-        margin_maint: decimal.Decimal | None,
-        maker_fee: decimal.Decimal | None,
-        taker_fee: decimal.Decimal | None,
-        info: dict | None,
+        base_currency: Currency | None = ...,
+        multiplier: Quantity | None = ...,
+        lot_size: Quantity | None = ...,
+        max_quantity: Quantity | None = ...,
+        min_quantity: Quantity | None = ...,
+        max_notional: Money | None = ...,
+        min_notional: Money | None = ...,
+        max_price: Price | None = ...,
+        min_price: Price | None = ...,
+        margin_init: decimal.Decimal | None = ...,
+        margin_maint: decimal.Decimal | None = ...,
+        maker_fee: decimal.Decimal | None = ...,
+        taker_fee: decimal.Decimal | None = ...,
+        info: dict | None = ...,
     ) -> None: ...
     def __hash__(self) -> int: ...
     @property
@@ -3903,10 +3911,10 @@ class PoolProfiler:
     def get_total_liquidity(self) -> str: ...
     def liquidity_utilization_rate(self) -> float: ...
     def swap_exact_in(
-        self, amount_in: str, zero_for_one: bool, sqrt_price_limit_x96: str | None
+        self, amount_in: str, zero_for_one: bool, sqrt_price_limit_x96: str | None = ...
     ) -> SwapQuote: ...
     def swap_exact_out(
-        self, amount_out: str, zero_for_one: bool, sqrt_price_limit_x96: str | None
+        self, amount_out: str, zero_for_one: bool, sqrt_price_limit_x96: str | None = ...
     ) -> SwapQuote: ...
     def size_for_impact_bps(self, impact_bps: int, zero_for_one: bool) -> str: ...
     def size_for_impact_bps_detailed(
@@ -4278,9 +4286,9 @@ class PositionStatusReport:
         quantity: Quantity,
         ts_last: int,
         ts_init: int,
-        report_id: core.UUID4 | None,
-        venue_position_id: PositionId | None,
-        avg_px_open: decimal.Decimal | None,
+        report_id: core.UUID4 | None = ...,
+        venue_position_id: PositionId | None = ...,
+        avg_px_open: decimal.Decimal | None = ...,
     ) -> None: ...
     @property
     def account_id(self) -> AccountId: ...
@@ -4334,7 +4342,7 @@ class Price:
     def __abs__(self) -> Price: ...
     def __int__(self) -> int: ...
     def __float__(self) -> float: ...
-    def __round__(self, ndigits: int | None) -> decimal.Decimal: ...
+    def __round__(self, ndigits: int | None = ...) -> decimal.Decimal: ...
     @property
     def raw(self) -> int: ...
     @property
@@ -4389,7 +4397,7 @@ class Quantity:
     def __abs__(self) -> Quantity: ...
     def __int__(self) -> int: ...
     def __float__(self) -> float: ...
-    def __round__(self, ndigits: int | None) -> decimal.Decimal: ...
+    def __round__(self, ndigits: int | None = ...) -> decimal.Decimal: ...
     @property
     def raw(self) -> int: ...
     @property
@@ -4528,18 +4536,18 @@ class StopLimitOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> StopLimitOrder: ...
@@ -4645,18 +4653,18 @@ class StopMarketOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> StopMarketOrder: ...
@@ -4875,18 +4883,18 @@ class TrailingStopLimitOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> TrailingStopLimitOrder: ...
@@ -4923,18 +4931,18 @@ class TrailingStopMarketOrder:
         quote_quantity: bool,
         init_id: core.UUID4,
         ts_init: int,
-        expire_time: int | None,
-        display_qty: Quantity | None,
-        emulation_trigger: TriggerType | None,
-        trigger_instrument_id: InstrumentId | None,
-        contingency_type: ContingencyType | None,
-        order_list_id: OrderListId | None,
-        linked_order_ids: typing.Sequence[ClientOrderId] | None,
-        parent_order_id: ClientOrderId | None,
-        exec_algorithm_id: ExecAlgorithmId | None,
-        exec_algorithm_params: typing.Mapping[str, str] | None,
-        exec_spawn_id: ClientOrderId | None,
-        tags: typing.Sequence[str] | None,
+        expire_time: int | None = ...,
+        display_qty: Quantity | None = ...,
+        emulation_trigger: TriggerType | None = ...,
+        trigger_instrument_id: InstrumentId | None = ...,
+        contingency_type: ContingencyType | None = ...,
+        order_list_id: OrderListId | None = ...,
+        linked_order_ids: typing.Sequence[ClientOrderId] | None = ...,
+        parent_order_id: ClientOrderId | None = ...,
+        exec_algorithm_id: ExecAlgorithmId | None = ...,
+        exec_algorithm_params: typing.Mapping[str, str] | None = ...,
+        exec_spawn_id: ClientOrderId | None = ...,
+        tags: typing.Sequence[str] | None = ...,
     ) -> None: ...
     @staticmethod
     def create(init: OrderInitialized) -> TrailingStopMarketOrder: ...
@@ -5658,15 +5666,18 @@ class TriggerType(Enum):
     @classmethod
     def from_str(cls, data: typing.Any) -> TriggerType: ...
 
+def cash_account_from_account_events(
+    events: typing.Sequence[dict], calculate_account_state: bool, allow_borrowing: bool
+) -> CashAccount: ...
+def custom_data_backend_kind(custom: CustomData) -> str: ...
+def drop_cvec_pycapsule(capsule: typing.Any) -> None: ...
+def margin_account_from_account_events(
+    events: typing.Sequence[dict], calculate_account_state: bool
+) -> MarginAccount: ...
 def black_scholes_greeks(
     s: float, r: float, b: float, vol: float, is_call: bool, k: float, t: float
 ) -> BlackScholesGreeksResult: ...
 def calc_bets_pnl(bets: typing.Sequence[Bet]) -> decimal.Decimal: ...
-def cash_account_from_account_events(
-    events: typing.Sequence[dict], calculate_account_state: bool, allow_borrowing: bool = False
-) -> CashAccount: ...
-def custom_data_backend_kind(custom: CustomData) -> str: ...
-def drop_cvec_pycapsule(capsule: typing.Any) -> None: ...
 def imply_vol(
     s: float, r: float, b: float, is_call: bool, k: float, t: float, price: float
 ) -> float: ...
@@ -5676,9 +5687,6 @@ def imply_vol_and_greeks(
 def inverse_probability_to_bet(
     probability: decimal.Decimal, volume: decimal.Decimal, side: OrderSide
 ) -> Bet: ...
-def margin_account_from_account_events(
-    events: typing.Sequence[dict], calculate_account_state: bool
-) -> MarginAccount: ...
 def probability_to_bet(
     probability: decimal.Decimal, volume: decimal.Decimal, side: OrderSide
 ) -> Bet: ...

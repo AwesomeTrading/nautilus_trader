@@ -353,7 +353,7 @@ repos:
     rev: 0.10.12 # Must match uv-version file
     hooks:
       - id: uv-lock
-        files: ^python/uv\.lock$
+        files: ^(uv\.lock|python/uv\.lock)$
 
   - repo: https://github.com/kynan/nbstripout
     rev: 0.9.1

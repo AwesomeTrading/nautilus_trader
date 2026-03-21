@@ -21,6 +21,7 @@ use crate::factories::{PolymarketDataClientFactory, PolymarketExecutionClientFac
 
 #[pymethods]
 impl PolymarketDataClientFactory {
+    /// Factory for creating Polymarket data clients.
     #[new]
     fn py_new() -> Self {
         Self
@@ -34,6 +35,7 @@ impl PolymarketDataClientFactory {
 
 #[pymethods]
 impl PolymarketExecutionClientFactory {
+    /// Factory for creating Polymarket execution clients.
     #[new]
     fn py_new() -> Self {
         Self

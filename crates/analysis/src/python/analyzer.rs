@@ -65,7 +65,7 @@ impl PortfolioAnalyzer {
         self.get_performance_stats_returns().into_iter().collect()
     }
 
-    /// Calculates performance statistics from position returns.
+    /// Gets all position-return-based performance statistics.
     #[pyo3(name = "get_performance_stats_position_returns")]
     fn py_get_performance_stats_position_returns(&self) -> HashMap<String, f64> {
         self.get_performance_stats_position_returns()
@@ -73,7 +73,7 @@ impl PortfolioAnalyzer {
             .collect()
     }
 
-    /// Calculates performance statistics from portfolio returns.
+    /// Gets all portfolio-return-based performance statistics.
     #[pyo3(name = "get_performance_stats_portfolio_returns")]
     fn py_get_performance_stats_portfolio_returns(&self) -> HashMap<String, f64> {
         self.get_performance_stats_portfolio_returns()
@@ -98,13 +98,15 @@ impl PortfolioAnalyzer {
         self.get_performance_stats_general().into_iter().collect()
     }
 
-    /// Records a return at a specific timestamp.
+    /// Records a position return at a specific timestamp.
     #[pyo3(name = "add_position_return")]
     fn py_add_position_return(&mut self, timestamp: u64, value: f64) {
         self.add_position_return(UnixNanos::from(timestamp), value);
     }
 
     /// Records a return at a specific timestamp.
+    ///
+    /// This is a backward-compatible alias for `Self.add_position_return`.
     #[pyo3(name = "add_return")]
     fn py_add_return(&mut self, timestamp: u64, value: f64) {
         self.add_return(UnixNanos::from(timestamp), value);
@@ -333,7 +335,10 @@ impl PortfolioAnalyzer {
         self.statistic(name).map(|s| s.name())
     }
 
-    /// Returns all calculated returns.
+    /// Returns the primary calculated returns.
+    ///
+    /// This returns portfolio returns when available, otherwise it falls back
+    /// to position returns for backward compatibility.
     #[pyo3(name = "returns")]
     fn py_returns(&self, py: Python) -> PyResult<Py<PyAny>> {
         // Convert BTreeMap<UnixNanos, f64> to Python dict
@@ -344,7 +349,7 @@ impl PortfolioAnalyzer {
         Ok(dict.into())
     }
 
-    /// Returns all calculated position returns.
+    /// Returns the per-position calculated returns.
     #[pyo3(name = "position_returns")]
     fn py_position_returns(&self, py: Python) -> PyResult<Py<PyAny>> {
         let dict = pyo3::types::PyDict::new(py);
@@ -354,7 +359,7 @@ impl PortfolioAnalyzer {
         Ok(dict.into())
     }
 
-    /// Returns all calculated portfolio returns.
+    /// Returns the portfolio calculated returns.
     #[pyo3(name = "portfolio_returns")]
     fn py_portfolio_returns(&self, py: Python) -> PyResult<Py<PyAny>> {
         let dict = pyo3::types::PyDict::new(py);

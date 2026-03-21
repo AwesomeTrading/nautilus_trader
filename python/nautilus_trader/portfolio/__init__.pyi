@@ -10,12 +10,12 @@ __all__ = [
 class PortfolioConfig:
     def __init__(
         self,
-        use_mark_prices: bool | None,
-        use_mark_xrates: bool | None,
-        bar_updates: bool | None,
-        convert_to_account_base_currency: bool | None,
-        min_account_state_logging_interval_ms: int | None,
-        debug: bool | None,
+        use_mark_prices: bool | None = None,
+        use_mark_xrates: bool | None = None,
+        bar_updates: bool | None = None,
+        convert_to_account_base_currency: bool | None = None,
+        min_account_state_logging_interval_ms: int | None = None,
+        debug: bool | None = None,
     ) -> None: ...
     @property
     def use_mark_prices(self) -> bool: ...

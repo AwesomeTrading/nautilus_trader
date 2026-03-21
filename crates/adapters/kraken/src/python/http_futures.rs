@@ -502,7 +502,8 @@ impl KrakenFuturesHttpClient {
 impl KrakenFuturesHttpClient {
     /// Submits multiple orders in a single batch request.
     ///
-    /// Returns a list of per-item status strings aligned with the input order.
+    /// Builds batch send items from order parameters, chunks at the batch limit,
+    /// and returns per-item send statuses.
     #[pyo3(name = "submit_orders_batch")]
     #[allow(clippy::type_complexity)]
     fn py_submit_orders_batch<'py>(

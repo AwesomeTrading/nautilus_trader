@@ -28,7 +28,7 @@ __all__ = [
 @typing.final
 class BestPriceFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
@@ -44,17 +44,19 @@ class CompetitionAwareFillModel:
 @typing.final
 class DefaultFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
 class FixedFeeModel:
-    def __init__(self, commission: model.Money, change_commission_once: bool | None) -> None: ...
+    def __init__(
+        self, commission: model.Money, change_commission_once: bool | None = ...
+    ) -> None: ...
 
 @typing.final
 class LimitOrderPartialFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
@@ -64,13 +66,13 @@ class MakerTakerFeeModel:
 @typing.final
 class MarketHoursFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
 class OneTickSlippageFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
@@ -80,13 +82,13 @@ class PerContractFeeModel:
 @typing.final
 class ProbabilisticFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
 class SizeAwareFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
@@ -102,27 +104,27 @@ class StaticLatencyModel:
 @typing.final
 class ThreeTierFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
 class TwoTierFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 @typing.final
 class VolumeSensitiveFillModel:
     def __init__(
-        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None
+        self, prob_fill_on_limit: float, prob_slippage: float, random_seed: int | None = ...
     ) -> None: ...
 
 def adjust_fills_for_partial_window(
-    mass_status: typing.Any, instrument: typing.Any, tolerance: str | None = None
+    mass_status: typing.Any, instrument: typing.Any, tolerance: str | None = ...
 ) -> tuple: ...
 def calculate_reconciliation_price(
     current_position_qty: decimal.Decimal,
     current_position_avg_px: decimal.Decimal | None,
     target_position_qty: decimal.Decimal,
-    target_position_avg_px: decimal.Decimal | None,
+    target_position_avg_px: decimal.Decimal | None = ...,
 ) -> decimal.Decimal | None: ...

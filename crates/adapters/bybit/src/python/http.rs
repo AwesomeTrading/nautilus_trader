@@ -483,9 +483,11 @@ impl BybitHttpClient {
         })
     }
 
-    /// Request instrument statuses for a given product type.
+    /// Fetches instrument info and returns the current status of each symbol.
     ///
-    /// Returns a dict mapping InstrumentId to MarketStatusAction.
+    /// Paginates through the instruments endpoint collecting only
+    /// `(InstrumentId, MarketStatusAction)` pairs. This avoids fee-rate
+    /// fetching and full instrument parsing.
     #[pyo3(name = "request_instrument_statuses")]
     fn py_request_instrument_statuses<'py>(
         &self,

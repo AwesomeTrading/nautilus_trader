@@ -1383,7 +1383,7 @@ impl Cache {
         self.is_order_active_local(&client_order_id)
     }
 
-    /// Returns all locally active orders matching the optional filter parameters.
+    /// Returns references to all locally active orders matching the optional filter parameters.
     ///
     /// Locally active orders are in the `INITIALIZED`, `EMULATED`, or `RELEASED` state
     /// (a superset of emulated orders).
@@ -1748,7 +1748,7 @@ impl Cache {
         self.synthetic_ids().into_iter().copied().collect()
     }
 
-    /// Returns all client order IDs matching the optional filter parameters.
+    /// Returns the `ClientOrderId`s of all orders.
     #[pyo3(name = "client_order_ids")]
     fn py_client_order_ids(
         &self,
@@ -1767,7 +1767,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all open client order IDs matching the optional filter parameters.
+    /// Returns the `ClientOrderId`s of all open orders.
     #[pyo3(name = "client_order_ids_open")]
     fn py_client_order_ids_open(
         &self,
@@ -1786,7 +1786,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all closed client order IDs matching the optional filter parameters.
+    /// Returns the `ClientOrderId`s of all closed orders.
     #[pyo3(name = "client_order_ids_closed")]
     fn py_client_order_ids_closed(
         &self,
@@ -1805,7 +1805,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all emulated client order IDs matching the optional filter parameters.
+    /// Returns the `ClientOrderId`s of all emulated orders.
     #[pyo3(name = "client_order_ids_emulated")]
     fn py_client_order_ids_emulated(
         &self,
@@ -1824,7 +1824,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all in-flight client order IDs matching the optional filter parameters.
+    /// Returns the `ClientOrderId`s of all in-flight orders.
     #[pyo3(name = "client_order_ids_inflight")]
     fn py_client_order_ids_inflight(
         &self,
@@ -1843,7 +1843,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all position IDs matching the optional filter parameters.
+    /// Returns `PositionId`s of all positions.
     #[pyo3(name = "position_ids")]
     fn py_position_ids(
         &self,
@@ -1862,7 +1862,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all open position IDs matching the optional filter parameters.
+    /// Returns the `PositionId`s of all open positions.
     #[pyo3(name = "position_open_ids")]
     fn py_position_open_ids(
         &self,
@@ -1881,7 +1881,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all closed position IDs matching the optional filter parameters.
+    /// Returns the `PositionId`s of all closed positions.
     #[pyo3(name = "position_closed_ids")]
     fn py_position_closed_ids(
         &self,
@@ -1900,43 +1900,43 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all registered actor IDs.
+    /// Returns the `ComponentId`s of all actors.
     #[pyo3(name = "actor_ids")]
     fn py_actor_ids(&self) -> Vec<ComponentId> {
         self.actor_ids().into_iter().collect()
     }
 
-    /// Returns all registered strategy IDs.
+    /// Returns the `StrategyId`s of all strategies.
     #[pyo3(name = "strategy_ids")]
     fn py_strategy_ids(&self) -> Vec<StrategyId> {
         self.strategy_ids().into_iter().collect()
     }
 
-    /// Returns all registered execution algorithm IDs.
+    /// Returns the `ExecAlgorithmId`s of all execution algorithms.
     #[pyo3(name = "exec_algorithm_ids")]
     fn py_exec_algorithm_ids(&self) -> Vec<ExecAlgorithmId> {
         self.exec_algorithm_ids().into_iter().collect()
     }
 
-    /// Returns the client order ID for the given `venue_order_id` (if found).
+    /// Gets a reference to the client order ID for the `venue_order_id` (if found).
     #[pyo3(name = "client_order_id")]
     fn py_client_order_id(&self, venue_order_id: VenueOrderId) -> Option<ClientOrderId> {
         self.client_order_id(&venue_order_id).copied()
     }
 
-    /// Returns the venue order ID for the given `client_order_id` (if found).
+    /// Gets a reference to the venue order ID for the `client_order_id` (if found).
     #[pyo3(name = "venue_order_id")]
     fn py_venue_order_id(&self, client_order_id: ClientOrderId) -> Option<VenueOrderId> {
         self.venue_order_id(&client_order_id).copied()
     }
 
-    /// Returns the client ID for the given `client_order_id` (if found).
+    /// Gets a reference to the client ID indexed for then `client_order_id` (if found).
     #[pyo3(name = "client_id")]
     fn py_client_id(&self, client_order_id: ClientOrderId) -> Option<ClientId> {
         self.client_id(&client_order_id).copied()
     }
 
-    /// Returns all orders matching the optional filter parameters.
+    /// Returns references to all orders matching the optional filter parameters.
     #[pyo3(name = "orders")]
     #[allow(clippy::too_many_arguments)]
     fn py_orders(
@@ -1960,7 +1960,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all open orders matching the optional filter parameters.
+    /// Returns references to all open orders matching the optional filter parameters.
     #[pyo3(name = "orders_open")]
     #[allow(clippy::too_many_arguments)]
     fn py_orders_open(
@@ -1984,7 +1984,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all closed orders matching the optional filter parameters.
+    /// Returns references to all closed orders matching the optional filter parameters.
     #[pyo3(name = "orders_closed")]
     #[allow(clippy::too_many_arguments)]
     fn py_orders_closed(
@@ -2008,7 +2008,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all emulated orders matching the optional filter parameters.
+    /// Returns references to all emulated orders matching the optional filter parameters.
     #[pyo3(name = "orders_emulated")]
     #[allow(clippy::too_many_arguments)]
     fn py_orders_emulated(
@@ -2032,7 +2032,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all in-flight orders matching the optional filter parameters.
+    /// Returns references to all in-flight orders matching the optional filter parameters.
     #[pyo3(name = "orders_inflight")]
     #[allow(clippy::too_many_arguments)]
     fn py_orders_inflight(
@@ -2056,7 +2056,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all orders for the given `position_id`.
+    /// Returns references to all orders for the `position_id`.
     #[pyo3(name = "orders_for_position")]
     fn py_orders_for_position(
         &self,
@@ -2069,19 +2069,19 @@ impl Cache {
             .collect()
     }
 
-    /// Returns whether the order with the `client_order_id` is emulated.
+    /// Returns whether an order with the `client_order_id` is emulated.
     #[pyo3(name = "is_order_emulated")]
     fn py_is_order_emulated(&self, client_order_id: ClientOrderId) -> bool {
         self.is_order_emulated(&client_order_id)
     }
 
-    /// Returns whether the order with the `client_order_id` is in-flight.
+    /// Returns whether an order with the `client_order_id` is in-flight.
     #[pyo3(name = "is_order_inflight")]
     fn py_is_order_inflight(&self, client_order_id: ClientOrderId) -> bool {
         self.is_order_inflight(&client_order_id)
     }
 
-    /// Returns whether the order with the `client_order_id` is pending cancel locally.
+    /// Returns whether an order with the `client_order_id` is `PENDING_CANCEL` locally.
     #[pyo3(name = "is_order_pending_cancel_local")]
     fn py_is_order_pending_cancel_local(&self, client_order_id: ClientOrderId) -> bool {
         self.is_order_pending_cancel_local(&client_order_id)
@@ -2125,7 +2125,7 @@ impl Cache {
         )
     }
 
-    /// Returns the order list for the given `order_list_id` (if found).
+    /// Returns the order list for the `order_list_id`.
     #[pyo3(name = "order_list")]
     fn py_order_list(&self, order_list_id: OrderListId) -> Option<OrderList> {
         self.order_list(&order_list_id).cloned()
@@ -2157,7 +2157,8 @@ impl Cache {
         self.order_list_exists(&order_list_id)
     }
 
-    /// Returns all orders for the given execution algorithm.
+    /// Returns references to all orders associated with the `exec_algorithm_id` matching the
+    /// optional filter parameters.
     #[pyo3(name = "orders_for_exec_algorithm")]
     #[allow(clippy::too_many_arguments)]
     fn py_orders_for_exec_algorithm(
@@ -2183,7 +2184,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all orders for the given execution spawn ID.
+    /// Returns references to all orders with the `exec_spawn_id`.
     #[pyo3(name = "orders_for_exec_spawn")]
     fn py_orders_for_exec_spawn(
         &self,
@@ -2196,7 +2197,7 @@ impl Cache {
             .collect()
     }
 
-    /// Returns the total quantity for the execution spawn.
+    /// Returns the total order quantity for the `exec_spawn_id`.
     #[pyo3(name = "exec_spawn_total_quantity")]
     fn py_exec_spawn_total_quantity(
         &self,
@@ -2206,7 +2207,7 @@ impl Cache {
         self.exec_spawn_total_quantity(&exec_spawn_id, active_only)
     }
 
-    /// Returns the total filled quantity for the execution spawn.
+    /// Returns the total filled quantity for all orders with the `exec_spawn_id`.
     #[pyo3(name = "exec_spawn_total_filled_qty")]
     fn py_exec_spawn_total_filled_qty(
         &self,
@@ -2216,7 +2217,7 @@ impl Cache {
         self.exec_spawn_total_filled_qty(&exec_spawn_id, active_only)
     }
 
-    /// Returns the total leaves quantity for the execution spawn.
+    /// Returns the total leaves quantity for all orders with the `exec_spawn_id`.
     #[pyo3(name = "exec_spawn_total_leaves_qty")]
     fn py_exec_spawn_total_leaves_qty(
         &self,
@@ -2226,7 +2227,7 @@ impl Cache {
         self.exec_spawn_total_leaves_qty(&exec_spawn_id, active_only)
     }
 
-    /// Returns the position for the given `client_order_id` (if found).
+    /// Returns a reference to the position for the `client_order_id` (if found).
     #[pyo3(name = "position_for_order")]
     fn py_position_for_order(
         &self,
@@ -2239,13 +2240,13 @@ impl Cache {
         }
     }
 
-    /// Returns the position ID for the given `client_order_id` (if found).
+    /// Returns a reference to the position ID for the `client_order_id` (if found).
     #[pyo3(name = "position_id")]
     fn py_position_id(&self, client_order_id: ClientOrderId) -> Option<PositionId> {
         self.position_id(&client_order_id).copied()
     }
 
-    /// Returns all positions matching the optional filter parameters.
+    /// Returns a reference to all positions matching the optional filter parameters.
     #[pyo3(name = "positions")]
     #[allow(clippy::too_many_arguments)]
     fn py_positions(
@@ -2269,7 +2270,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all open positions matching the optional filter parameters.
+    /// Returns a reference to all open positions matching the optional filter parameters.
     #[pyo3(name = "positions_open")]
     #[allow(clippy::too_many_arguments)]
     fn py_positions_open(
@@ -2293,7 +2294,7 @@ impl Cache {
         .collect()
     }
 
-    /// Returns all closed positions matching the optional filter parameters.
+    /// Returns a reference to all closed positions matching the optional filter parameters.
     #[pyo3(name = "positions_closed")]
     #[allow(clippy::too_many_arguments)]
     fn py_positions_closed(
@@ -2317,25 +2318,25 @@ impl Cache {
         .collect()
     }
 
-    /// Returns the strategy ID for the given `client_order_id` (if found).
+    /// Gets a reference to the strategy ID for the `client_order_id` (if found).
     #[pyo3(name = "strategy_id_for_order")]
     fn py_strategy_id_for_order(&self, client_order_id: ClientOrderId) -> Option<StrategyId> {
         self.strategy_id_for_order(&client_order_id).copied()
     }
 
-    /// Returns the strategy ID for the given `position_id` (if found).
+    /// Gets a reference to the strategy ID for the `position_id` (if found).
     #[pyo3(name = "strategy_id_for_position")]
     fn py_strategy_id_for_position(&self, position_id: PositionId) -> Option<StrategyId> {
         self.strategy_id_for_position(&position_id).copied()
     }
 
-    /// Returns the position snapshot bytes for the given `position_id` (if found).
+    /// Gets position snapshot bytes for the `position_id`.
     #[pyo3(name = "position_snapshot_bytes")]
     fn py_position_snapshot_bytes(&self, position_id: PositionId) -> Option<Vec<u8>> {
         self.position_snapshot_bytes(&position_id)
     }
 
-    /// Returns the account for the given `account_id` (if found).
+    /// Returns a reference to the account for the `account_id` (if found).
     #[pyo3(name = "account")]
     fn py_account(&self, py: Python, account_id: AccountId) -> PyResult<Option<Py<PyAny>>> {
         match self.account(&account_id) {
@@ -2344,7 +2345,7 @@ impl Cache {
         }
     }
 
-    /// Returns the account for the given `venue` (if found).
+    /// Returns a reference to the account for the `venue` (if found).
     #[pyo3(name = "account_for_venue")]
     fn py_account_for_venue(&self, py: Python, venue: Venue) -> PyResult<Option<Py<PyAny>>> {
         match self.account_for_venue(&venue) {
@@ -2353,13 +2354,17 @@ impl Cache {
         }
     }
 
-    /// Returns the account ID for the given `venue` (if found).
+    /// Returns a reference to the account ID for the `venue` (if found).
     #[pyo3(name = "account_id")]
     fn py_account_id(&self, venue: Venue) -> Option<AccountId> {
         self.account_id(&venue).copied()
     }
 
-    /// Gets a general value from the cache for the given `key`.
+    /// Gets a reference to the general value for the `key` (if found).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `key` is invalid.
     #[pyo3(name = "get")]
     fn py_get(&self, key: &str) -> PyResult<Option<Vec<u8>>> {
         match self.get(key).map_err(to_pyvalue_err)? {
@@ -2374,7 +2379,7 @@ impl Cache {
         self.add(key, Bytes::from(value)).map_err(to_pyvalue_err)
     }
 
-    /// Returns the price for the `instrument_id` and `price_type`.
+    /// Returns the price for the `instrument_id` and `price_type` (if found).
     #[pyo3(name = "price")]
     fn py_price(&self, instrument_id: InstrumentId, price_type: PriceType) -> Option<Price> {
         self.price(&instrument_id, price_type)
@@ -2392,13 +2397,13 @@ impl Cache {
         self.get_xrate(venue, from_currency, to_currency, price_type)
     }
 
-    /// Returns the mark exchange rate for the given currency pair.
+    /// Returns the mark exchange rate for the given currency pair, or `None` if not set.
     #[pyo3(name = "get_mark_xrate")]
     fn py_get_mark_xrate(&self, from_currency: Currency, to_currency: Currency) -> Option<f64> {
         self.get_mark_xrate(from_currency, to_currency)
     }
 
-    /// Sets the mark exchange rate for the given currency pair.
+    /// Sets the mark exchange rate for the given currency pair and automatically sets the inverse rate.
     #[pyo3(name = "set_mark_xrate")]
     fn py_set_mark_xrate(&mut self, from_currency: Currency, to_currency: Currency, xrate: f64) {
         self.set_mark_xrate(from_currency, to_currency, xrate);
@@ -2428,13 +2433,19 @@ impl Cache {
         Ok(self.calculate_unrealized_pnl(&position))
     }
 
-    /// Returns the own order book for the `instrument_id` (if found).
+    /// Gets a reference to the own order book for the `instrument_id`.
     #[pyo3(name = "own_order_book")]
     fn py_own_order_book(&self, instrument_id: InstrumentId) -> Option<OwnOrderBook> {
         self.own_order_book(&instrument_id).cloned()
     }
 
-    /// Updates the own order book with the given order.
+    /// Updates the own order book with an order.
+    ///
+    /// This method adds, updates, or removes an order from the own order book
+    /// based on the order's current state.
+    ///
+    /// Orders without prices (MARKET, etc.) are skipped as they cannot be
+    /// represented in own books.
     #[pyo3(name = "update_own_order_book")]
     fn py_update_own_order_book(&mut self, py: Python, order: Py<PyAny>) -> PyResult<()> {
         let order_any = pyobject_to_order_any(py, order)?;
@@ -2442,13 +2453,22 @@ impl Cache {
         Ok(())
     }
 
-    /// Removes the order from the own order book by `client_order_id`.
+    /// Force removal of an order from own order books and clean up all indexes.
+    ///
+    /// This method is used when order event application fails and we need to ensure
+    /// terminal orders are properly cleaned up from own books and all relevant indexes.
+    /// Replicates the index cleanup that update_order performs for closed orders.
     #[pyo3(name = "force_remove_from_own_order_book")]
     fn py_force_remove_from_own_order_book(&mut self, client_order_id: ClientOrderId) {
         self.force_remove_from_own_order_book(&client_order_id);
     }
 
-    /// Audits all own order books for integrity.
+    /// Audit all own order books against open and inflight order indexes.
+    ///
+    /// Ensures closed orders are removed from own order books. This includes both
+    /// orders tracked in `orders_open` (ACCEPTED, TRIGGERED, PENDING_*, PARTIALLY_FILLED)
+    /// and `orders_inflight` (INITIALIZED, SUBMITTED) to prevent false positives
+    /// during venue latency windows.
     #[pyo3(name = "audit_own_order_books")]
     fn py_audit_own_order_books(&mut self) {
         self.audit_own_order_books();
