@@ -49,7 +49,7 @@ jobs:
       - name: Run pre-commit
         run: pre-commit run --all-files
 
-  build:
+  rust-tests:
     needs:
       - pre-commit
     strategy:
@@ -64,10 +64,10 @@ jobs:
     defaults:
       run:
         shell: bash
+    name: rust-tests (ubuntu-22.04, ${{ matrix.python-version }})
     env:
       BUILD_MODE: release
       RUST_BACKTRACE: 1
-      # Keep v2 Cargo artifacts separate from the legacy build and per-Python ABI.
       CARGO_TARGET_DIR: ${{ github.workspace }}/target-v2/py${{ matrix.python-version }}
     # yamllint disable rule:line-length
     services:
@@ -119,6 +119,7 @@ jobs:
           free-disk-space: "true"
           rust-cache-key: build-v2-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
+          rust-cache-on-failure: "false"
 
       - name: Install Nautilus CLI
         env:
@@ -139,6 +140,52 @@ jobs:
 
       - name: Run Rust tests
         run: make cargo-test HYPERSYNC=true
+
+  build:
+    needs:
+      - rust-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04]
+        python-version:
+          - "3.12"
+          - "3.13"
+          - "3.14"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILD_MODE: release
+      RUST_BACKTRACE: 1
+      # Keep v2 Cargo artifacts separate from the legacy build and per-Python ABI.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target-v2/py${{ matrix.python-version }}
+    steps:
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
+        with:
+          egress-policy: ${{ vars.STEP_SECURITY_EGRESS_POLICY || 'block' }}
+          allowed-endpoints: >-
+            ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
+            ${{ vars.CI_ALLOWED_ENDPOINTS }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
+
+      - name: Common setup
+        uses: ./.github/actions/common-setup
+        with:
+          python-version: ${{ matrix.python-version }}
+          free-disk-space: "true"
+          rust-cache-key: build-v2-${{ matrix.python-version }}
+          rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
+          rust-cache-on-failure: "false"
 
       # Update version for dev/nightly branches
       - name: Update version in pyproject.toml

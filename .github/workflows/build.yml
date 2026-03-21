@@ -396,6 +396,7 @@ jobs:
         run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
 
       - name: Build and install wheel
+        id: build-wheel
         uses: ./.github/actions/common-wheel-build
         env:
           CARGO_BUILD_JOBS: 1
@@ -404,6 +405,66 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           github_ref: ${{ github.ref }}
+
+      - name: Diagnose failed macOS wheel build
+        if: failure() && steps.build-wheel.outcome == 'failure'
+        env:
+          # yamllint disable-line rule:line-length
+          MACOS_WHEEL_TARGET_DIR: ${{ github.workspace }}/target/build-macos-wheel-py${{ matrix.python-version }}/release
+        run: |
+          set +e
+
+          echo "::group::macOS runner and toolchain"
+          uname -a
+          sw_vers
+          rustc -Vv || true
+          cargo -Vv || true
+          python --version || true
+          which python || true
+          env | rg '^(ARCHFLAGS|CARGO|DYLD_LIBRARY_PATH|LD_LIBRARY_PATH|LIBRARY_PATH|PYO3|RUST)=' || true
+          echo "::endgroup::"
+
+          if [ ! -d "$MACOS_WHEEL_TARGET_DIR" ]; then
+            echo "Wheel target dir not found: $MACOS_WHEEL_TARGET_DIR"
+            exit 0
+          fi
+
+          build_scripts="$(find "$MACOS_WHEEL_TARGET_DIR/build" -type f -name build-script-build | sort)"
+
+          echo "::group::macOS build-script artifacts"
+          if [ -z "$build_scripts" ]; then
+            echo "No build-script-build artifacts found"
+          else
+            while IFS= read -r build_script; do
+              [ -z "$build_script" ] && continue
+              echo "--- $build_script"
+              ls -l "$build_script"
+              shasum -a 256 "$build_script" || true
+              file "$build_script" || true
+              otool -hv "$build_script" || true
+            done <<< "$build_scripts"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::macOS Rust archives"
+          for archive in \
+            "$MACOS_WHEEL_TARGET_DIR/libnautilus_backtest.a" \
+            "$MACOS_WHEEL_TARGET_DIR/libnautilus_common.a" \
+            "$MACOS_WHEEL_TARGET_DIR/libnautilus_core.a" \
+            "$MACOS_WHEEL_TARGET_DIR/libnautilus_model.a" \
+            "$MACOS_WHEEL_TARGET_DIR/libnautilus_persistence.a"; do
+            if [ ! -f "$archive" ]; then
+              echo "Missing archive: $archive"
+              continue
+            fi
+
+            echo "--- $archive"
+            ls -l "$archive"
+            shasum -a 256 "$archive" || true
+            file "$archive" || true
+            ar -t "$archive" | head -n 20 || true
+          done
+          echo "::endgroup::"
 
       - name: Run tests
         run: |
