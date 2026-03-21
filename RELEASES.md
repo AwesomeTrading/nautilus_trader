@@ -31,6 +31,7 @@ Released on TBD (UTC).
 - Added `TieredTickScheme` and `TickScheme::Tiered` in Rust for price-dependent tick sizes
 
 ### Breaking Changes
+- Removed deprecated `convert_quote_qty_to_base` from `ExecEngineConfig` and `LiveExecEngineConfig`; adapters now handle quote-to-base conversion directly
 - Removed `TARDIS_BASE_URL` constant from `nautilus_tardis::http` - use `nautilus_tardis::common::urls::TARDIS_HTTP_BASE_URL`
 - Changed Tardis HTTP client from `reqwest::Client` to `nautilus_network::http::HttpClient` with rate limiting
 - Changed `ExecutionEngine.register_client` to error when a venue is already routed to another client (Rust)
@@ -95,6 +96,7 @@ Released on TBD (UTC).
 - Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
 - Added Tardis HTTP and WebSocket mock server integration tests
 - Added `LiveNode` stop-handle timeout test for shutdown reliability
+- Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Refactored Tardis adapter module organization to align with adapter spec (`common/`, `machine/cache.rs`)

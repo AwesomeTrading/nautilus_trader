@@ -179,26 +179,16 @@ When using spot margin trading (`use_spot_margin=True`), OKX interprets order qu
 - **Market BUY** orders interpret `quantity` as quote notional (e.g., USDT).
 
 :::warning
-**When submitting spot margin market BUY orders, you must**:
+**When submitting spot margin market BUY orders**, set `quote_quantity=True` on the order (or
+pre-compute the quote-denominated amount). The OKX execution client denies base-denominated
+market buy orders for spot margin to prevent unintended fills.
 
-1. Set `quote_quantity=True` on the order (or pre-compute the quote-denominated amount).
-2. Configure the execution engine with `convert_quote_qty_to_base=False` so the quote amount reaches the adapter unchanged.
-
-The OKX execution client will deny base-denominated market buy orders for spot margin to prevent unintended fills.
-
-**On the first fill**, the order quantity will be automatically updated from the quote quantity to the actual base quantity received,
-reflecting the executed trade.
+**On the first fill**, the order quantity is automatically updated from the quote quantity to the
+actual base quantity received, reflecting the executed trade.
 :::
 
 ```python
-from nautilus_trader.execution.config import ExecEngineConfig
-from nautilus_trader.execution.engine import ExecutionEngine
-
-# Disable automatic conversion for quote quantities
-config = ExecEngineConfig(convert_quote_qty_to_base=False)
-engine = ExecutionEngine(msgbus=msgbus, cache=cache, clock=clock, config=config)
-
-# Correct: Spot margin market BUY with quote quantity (spend $100 USDT)
+# Spot margin market BUY with quote quantity (spend $100 USDT)
 order = strategy.order_factory.market(
     instrument_id=instrument_id,
     order_side=OrderSide.BUY,

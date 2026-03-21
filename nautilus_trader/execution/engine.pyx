@@ -71,8 +71,6 @@ from nautilus_trader.execution.messages cimport SubmitOrder
 from nautilus_trader.execution.messages cimport SubmitOrderList
 from nautilus_trader.execution.messages cimport TradingCommand
 from nautilus_trader.model.book cimport should_handle_own_book_order
-from nautilus_trader.model.data cimport QuoteTick
-from nautilus_trader.model.data cimport TradeTick
 from nautilus_trader.model.events.order cimport OrderAccepted
 from nautilus_trader.model.events.order cimport OrderCanceled
 from nautilus_trader.model.events.order cimport OrderDenied
@@ -167,7 +165,6 @@ cdef class ExecutionEngine(Component):
         # Configuration
         self.debug: bool = config.debug
         self.allow_overfills = config.allow_overfills
-        self.convert_quote_qty_to_base = config.convert_quote_qty_to_base
         self.manage_own_order_books = config.manage_own_order_books
         self.snapshot_orders = config.snapshot_orders
         self.snapshot_positions = config.snapshot_positions
@@ -407,17 +404,6 @@ cdef class ExecutionEngine(Component):
 
         """
         self.manage_own_order_books = value
-
-    cpdef void set_convert_quote_qty_to_base(self, bint value):
-        """
-        Set the `convert_quote_qty_to_base` flag with the given `value`.
-
-        Parameters
-        ----------
-        value : bool
-            The value to set.
-        """
-        self.convert_quote_qty_to_base = value
 
 # -- REGISTRATION ---------------------------------------------------------------------------------
 
@@ -917,55 +903,6 @@ cdef class ExecutionEngine(Component):
             self._pos_id_generator.set_count(strategy_id, count)
             self._log.info(f"Set PositionId count for {strategy_id!r} to {count}")
 
-    cpdef Price _last_px_for_conversion(self, InstrumentId instrument_id, OrderSide order_side):
-        cdef Price last_px = None
-        cdef QuoteTick last_quote = self._cache.quote_tick(instrument_id)
-        cdef TradeTick last_trade = self._cache.trade_tick(instrument_id)
-        if last_quote is not None:
-            last_px = last_quote.ask_price if order_side == OrderSide.BUY else last_quote.bid_price
-        else:
-            if last_trade is not None:
-                last_px = last_trade.price
-
-        return last_px
-
-    cpdef void _set_order_base_qty(self, Order order, Quantity base_qty):
-        self._log.info(
-            f"Setting {order.instrument_id} order quote quantity {order.quantity} to base quantity {base_qty}",
-        )
-        cdef Quantity original_qty = order.quantity
-        order.quantity = base_qty
-        order.leaves_qty = base_qty
-        order.is_quote_quantity = False
-
-        if order.contingency_type != ContingencyType.OTO:
-            return
-
-        # Set base quantity for all OTO contingent orders
-        cdef ClientOrderId client_order_id
-        cdef Order contingent_order
-        for client_order_id in order.linked_order_ids or []:
-            contingent_order = self._cache.order(client_order_id)
-            if contingent_order is None:
-                self._log.error(f"Contingency order {client_order_id!r} not found")
-                continue
-            elif not contingent_order.is_quote_quantity:
-                continue  # Already base quantity
-            elif contingent_order.quantity != original_qty:
-                self._log.warning(
-                    f"Contingent order quantity {contingent_order.quantity} "
-                    f"was not equal to the OTO parent original quantity {original_qty} "
-                    f"when setting to base quantity of {base_qty}"
-                )
-
-            self._log.info(
-                f"Setting {contingent_order.instrument_id} order quote quantity "
-                f"{contingent_order.quantity} to base quantity {base_qty}",
-            )
-            contingent_order.quantity = base_qty
-            contingent_order.leaves_qty = base_qty
-            contingent_order.is_quote_quantity = False
-
     cpdef void _deny_order(self, Order order, str reason):
         # Generate event
         cdef OrderDenied denied = OrderDenied(
@@ -1131,22 +1068,6 @@ cdef class ExecutionEngine(Component):
             )
             return
 
-        # Check if converting quote quantity
-        cdef Price last_px = None
-        cdef Quantity base_qty = None
-        if self.convert_quote_qty_to_base and not instrument.is_inverse and order.is_quote_quantity:
-            self._log.warning(
-                "`convert_quote_qty_to_base is deprecated`; set `convert_quote_qty_to_base=False` to maintain consistent behavior.",
-                LogColor.YELLOW,
-            )
-            last_px = self._last_px_for_conversion(order.instrument_id, order.side)
-            if last_px is None:
-                self._deny_order(order, f"no-price-to-convert-quote-qty {order.instrument_id}")
-                return  # Denied
-
-            base_qty = instrument.calculate_base_quantity(order.quantity, last_px)
-            self._set_order_base_qty(order, base_qty)
-
         if self.manage_own_order_books and should_handle_own_book_order(order):
             self._add_own_book_order(order)
 
@@ -1170,29 +1091,6 @@ cdef class ExecutionEngine(Component):
                 f"no instrument found for {command.instrument_id}, {command}"
             )
             return
-
-        # Check if converting quote quantity
-        cdef Price last_px = None
-        cdef Quantity base_qty = None
-        if self.convert_quote_qty_to_base and not instrument.is_inverse:
-            for order in command.order_list.orders:
-                if not order.is_quote_quantity:
-                    continue  # Base quantity already set
-
-                self._log.warning(
-                    "`convert_quote_qty_to_base` is deprecated; set `convert_quote_qty_to_base=False` to maintain consistent behavior",
-                    LogColor.YELLOW,
-                )
-
-                last_px = self._last_px_for_conversion(order.instrument_id, order.side)
-                if last_px is None:
-                    for order in command.order_list.orders:
-                        self._deny_order(order, f"no-price-to-convert-quote-qty {order.instrument_id}")
-
-                    return  # Denied
-
-                base_qty = instrument.calculate_base_quantity(order.quantity, last_px)
-                self._set_order_base_qty(order, base_qty)
 
         if self.manage_own_order_books:
             for order in command.order_list.orders:

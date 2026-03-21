@@ -222,24 +222,13 @@ Polymarket interprets order quantities differently depending on the order type *
 
 As a result, a market buy order submitted with a base-denominated quantity will execute far more size than intended.
 
-:::warning
-When submitting market BUY orders, set `quote_quantity=True` (or pre-compute the quote-denominated amount)
-and configure the execution engine with `convert_quote_qty_to_base=False` so the quote amount reaches the adapter unchanged.
-The Polymarket execution client denies base-denominated market buys to prevent unintended fills.
-
-**NautilusTrader now forwards market orders to Polymarket's native market-order endpoint, so the
-quote amount you specify for a BUY is executed directly (no more synthetic max-price limits).**
-:::
+When submitting market BUY orders, set `quote_quantity=True` on the order. The adapter converts
+the quote amount (USDC.e) to base units (shares) using the crossing price from the order book
+before submitting to the CLOB. The Polymarket execution client denies base-denominated market
+buys to prevent unintended fills.
 
 ```python
-from nautilus_trader.execution.config import ExecEngineConfig
-from nautilus_trader.execution.engine import ExecutionEngine
-
-# Temporary: disable automatic conversion until the behaviour is fully removed in a future release
-config = ExecEngineConfig(convert_quote_qty_to_base=False)
-engine = ExecutionEngine(msgbus=msgbus, cache=cache, clock=clock, config=config)
-
-# Correct: Market BUY with quote quantity (spend $10 USDC)
+# Market BUY with quote quantity (spend $10 USDC)
 order = strategy.order_factory.market(
     instrument_id=instrument_id,
     order_side=OrderSide.BUY,

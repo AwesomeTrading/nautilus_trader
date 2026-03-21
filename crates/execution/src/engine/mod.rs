@@ -55,7 +55,7 @@ use nautilus_common::{
 };
 use nautilus_core::{UUID4, UnixNanos, WeakCell};
 use nautilus_model::{
-    enums::{ContingencyType, OmsType, OrderSide, PositionSide},
+    enums::{ContingencyType, OmsType, PositionSide},
     events::{
         OrderDenied, OrderEvent, OrderEventAny, OrderFilled, PositionChanged, PositionClosed,
         PositionEvent, PositionOpened,
@@ -68,7 +68,7 @@ use nautilus_model::{
     orders::{Order, OrderAny, OrderError},
     position::Position,
     reports::{ExecutionMassStatus, FillReport, OrderStatusReport, PositionStatusReport},
-    types::{Money, Price, Quantity},
+    types::{Money, Quantity},
 };
 use rust_decimal::Decimal;
 
@@ -591,11 +591,6 @@ impl ExecutionEngine {
         self.config.manage_own_order_books = value;
     }
 
-    /// Sets the `convert_quote_qty_to_base` configuration option.
-    pub fn set_convert_quote_qty_to_base(&mut self, value: bool) {
-        self.config.convert_quote_qty_to_base = value;
-    }
-
     /// Starts the position snapshot timer if configured.
     ///
     /// Timer functionality requires a live execution context with an active clock.
@@ -1016,7 +1011,7 @@ impl ExecutionEngine {
     fn handle_submit_order(&self, client: &dyn ExecutionClient, cmd: &SubmitOrder) {
         let client_order_id = cmd.client_order_id;
 
-        let mut order = {
+        let order = {
             let cache = self.cache.borrow();
             match cache.order(&client_order_id) {
                 Some(order) => order.clone(),
@@ -1045,35 +1040,11 @@ impl ExecutionEngine {
             self.create_order_state_snapshot(&order);
         }
 
-        let instrument = {
+        {
             let cache = self.cache.borrow();
-            if let Some(instrument) = cache.instrument(&instrument_id) {
-                instrument.clone()
-            } else {
+            if cache.instrument(&instrument_id).is_none() {
                 log::error!(
                     "Cannot handle submit order: no instrument found for {instrument_id}, {cmd}",
-                );
-                return;
-            }
-        };
-
-        // Handle quote quantity conversion
-        if self.config.convert_quote_qty_to_base
-            && !instrument.is_inverse()
-            && order.is_quote_quantity()
-        {
-            log::warn!(
-                "`convert_quote_qty_to_base` is deprecated; set `convert_quote_qty_to_base=false` to maintain consistent behavior"
-            );
-            let last_px = self.last_px_for_conversion(&instrument_id, order.order_side());
-
-            if let Some(price) = last_px {
-                let base_qty = instrument.get_base_quantity(order.quantity(), price);
-                self.set_order_base_qty(&mut order, base_qty);
-            } else {
-                self.deny_order(
-                    &order,
-                    &format!("no-price-to-convert-quote-qty {instrument_id}"),
                 );
                 return;
             }
@@ -1123,56 +1094,14 @@ impl ExecutionEngine {
             }
         }
 
-        let instrument = {
+        {
             let cache = self.cache.borrow();
-            if let Some(instrument) = cache.instrument(&cmd.instrument_id) {
-                instrument.clone()
-            } else {
+            if cache.instrument(&cmd.instrument_id).is_none() {
                 log::error!(
                     "Cannot handle submit order list: no instrument found for {}, {cmd}",
                     cmd.instrument_id,
                 );
                 return;
-            }
-        };
-
-        // Handle quote quantity conversion
-        if self.config.convert_quote_qty_to_base && !instrument.is_inverse() {
-            let mut conversions: Vec<(ClientOrderId, Quantity)> = Vec::with_capacity(orders.len());
-
-            for order in &orders {
-                if !order.is_quote_quantity() {
-                    continue; // Base quantity already set
-                }
-
-                let last_px =
-                    self.last_px_for_conversion(&order.instrument_id(), order.order_side());
-
-                if let Some(px) = last_px {
-                    let base_qty = instrument.get_base_quantity(order.quantity(), px);
-                    conversions.push((order.client_order_id(), base_qty));
-                } else {
-                    for order in &orders {
-                        self.deny_order(
-                            order,
-                            &format!("no-price-to-convert-quote-qty {}", order.instrument_id()),
-                        );
-                    }
-                    return; // Denied
-                }
-            }
-
-            if !conversions.is_empty() {
-                log::warn!(
-                    "`convert_quote_qty_to_base` is deprecated; set `convert_quote_qty_to_base=false` to maintain consistent behavior"
-                );
-
-                let mut cache = self.cache.borrow_mut();
-                for (client_order_id, base_qty) in conversions {
-                    if let Some(mut_order) = cache.mut_order(&client_order_id) {
-                        self.set_order_base_qty(mut_order, base_qty);
-                    }
-                }
             }
         }
 
@@ -1866,88 +1795,6 @@ impl ExecutionEngine {
         for (strategy_id, count) in counts {
             self.pos_id_generator.set_count(count, strategy_id);
             log::info!("Set PositionId count for {strategy_id} to {count}");
-        }
-    }
-
-    fn last_px_for_conversion(
-        &self,
-        instrument_id: &InstrumentId,
-        side: OrderSide,
-    ) -> Option<Price> {
-        let cache = self.cache.borrow();
-
-        // Try to get last trade price
-        if let Some(trade) = cache.trade(instrument_id) {
-            return Some(trade.price);
-        }
-
-        // Fall back to quote if available
-        if let Some(quote) = cache.quote(instrument_id) {
-            match side {
-                OrderSide::Buy => Some(quote.ask_price),
-                OrderSide::Sell => Some(quote.bid_price),
-                OrderSide::NoOrderSide => None,
-            }
-        } else {
-            None
-        }
-    }
-
-    fn set_order_base_qty(&self, order: &mut OrderAny, base_qty: Quantity) {
-        log::info!(
-            "Setting {} order quote quantity {} to base quantity {}",
-            order.instrument_id(),
-            order.quantity(),
-            base_qty
-        );
-
-        let original_qty = order.quantity();
-        order.set_quantity(base_qty);
-        order.set_leaves_qty(base_qty);
-        order.set_is_quote_quantity(false);
-
-        if matches!(order.contingency_type(), Some(ContingencyType::Oto)) {
-            return;
-        }
-
-        if let Some(linked_order_ids) = order.linked_order_ids() {
-            for client_order_id in linked_order_ids {
-                match self.cache.borrow_mut().mut_order(client_order_id) {
-                    Some(contingent_order) => {
-                        if !contingent_order.is_quote_quantity() {
-                            continue; // Already base quantity
-                        }
-
-                        if contingent_order.quantity() != original_qty {
-                            log::warn!(
-                                "Contingent order quantity {} was not equal to the OTO parent original quantity {} when setting to base quantity of {}",
-                                contingent_order.quantity(),
-                                original_qty,
-                                base_qty
-                            );
-                        }
-
-                        log::info!(
-                            "Setting {} order quote quantity {} to base quantity {}",
-                            contingent_order.instrument_id(),
-                            contingent_order.quantity(),
-                            base_qty
-                        );
-
-                        contingent_order.set_quantity(base_qty);
-                        contingent_order.set_leaves_qty(base_qty);
-                        contingent_order.set_is_quote_quantity(false);
-                    }
-                    None => {
-                        log::error!("Contingency order {client_order_id} not found");
-                    }
-                }
-            }
-        } else {
-            log::warn!(
-                "No linked order IDs found for order {}",
-                order.client_order_id()
-            );
         }
     }
 

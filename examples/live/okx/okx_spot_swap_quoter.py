@@ -414,7 +414,6 @@ config_node = TradingNodeConfig(
         use_pyo3=True,
     ),
     exec_engine=LiveExecEngineConfig(
-        convert_quote_qty_to_base=False,
         reconciliation=True,
         reconciliation_instrument_ids=reconciliation_instrument_ids,
         open_check_interval_secs=5.0,

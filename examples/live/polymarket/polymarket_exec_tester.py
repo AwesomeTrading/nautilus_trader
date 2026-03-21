@@ -74,7 +74,6 @@ config_node = TradingNodeConfig(
         use_pyo3=True,
     ),
     exec_engine=LiveExecEngineConfig(
-        convert_quote_qty_to_base=False,  # Required for submitting market BUY orders
         reconciliation=True,
         reconciliation_instrument_ids=[instrument_id],  # Only reconcile these instruments
         open_check_interval_secs=5.0,
