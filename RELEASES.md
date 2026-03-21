@@ -114,7 +114,7 @@ Released on TBD (UTC).
 - Optimized network client performance and add benchmarks
 - Upgraded Rust (MSRV) to 1.94.0
 - Upgraded `databento` crate to v0.44.0
-- Upgraded `redis` crate to v1.0.5
+- Upgraded `redis` crate to v1.1.0
 - Upgraded `tokio` crate to v1.50.0
 - Upgraded `tokio-tungstenite` crate to v0.29.0
 
