@@ -829,6 +829,7 @@ pub fn parse_order_update_msg(
         price,
         trigger_price,
         protection_price,
+        false, // is_quote_quantity
     ))
 }
 

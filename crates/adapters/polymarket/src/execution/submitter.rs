@@ -29,6 +29,7 @@ use nautilus_model::{
     types::{Price, Quantity},
 };
 use nautilus_network::retry::{RetryConfig, RetryManager};
+use rust_decimal::Decimal;
 
 use super::{order_builder::PolymarketOrderBuilder, parse::calculate_market_price};
 use crate::{
@@ -111,6 +112,7 @@ impl OrderSubmitter {
             .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         let http_client = self.http_client.clone();
+
         self.retry_manager
             .execute_with_retry(
                 "submit_limit_order",
@@ -135,6 +137,7 @@ impl OrderSubmitter {
     /// Converts Nautilus side to Polymarket side, walks the appropriate book side
     /// to find the crossing price, then builds and submits a FOK order.
     /// The book fetch is not retried (stale on retry); only the final POST is retried.
+    /// Returns `(OrderResponse, crossing_price)` on success.
     pub async fn submit_market_order(
         &self,
         token_id: &str,
@@ -142,7 +145,7 @@ impl OrderSubmitter {
         amount: Quantity,
         neg_risk: bool,
         tick_decimals: u32,
-    ) -> anyhow::Result<OrderResponse> {
+    ) -> anyhow::Result<(OrderResponse, Decimal)> {
         let poly_side = PolymarketOrderSide::try_from(side)
             .map_err(|e| anyhow::anyhow!("Invalid order side: {e}"))?;
         let amount_dec = amount.as_decimal();
@@ -174,7 +177,9 @@ impl OrderSubmitter {
             .map_err(|e| anyhow::anyhow!("Failed to build market order: {e}"))?;
 
         let http_client = self.http_client.clone();
-        self.retry_manager
+
+        let response = self
+            .retry_manager
             .execute_with_retry(
                 "submit_market_order",
                 || {
@@ -190,7 +195,9 @@ impl OrderSubmitter {
                 Error::transport,
             )
             .await
-            .map_err(|e| anyhow::anyhow!("{e}"))
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        Ok((response, price))
     }
 
     /// Cancels a single order with retry on transient failures.
@@ -216,6 +223,7 @@ impl OrderSubmitter {
     pub async fn cancel_orders(&self, venue_order_ids: &[&str]) -> anyhow::Result<CancelResponse> {
         let http_client = self.http_client.clone();
         let order_ids: Vec<String> = venue_order_ids.iter().map(|s| s.to_string()).collect();
+
         self.retry_manager
             .execute_with_retry(
                 "cancel_orders",

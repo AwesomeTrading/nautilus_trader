@@ -789,6 +789,8 @@ impl OrderCore {
             self.venue_order_id = Some(*venue_order_id);
             self.venue_order_ids.push(*venue_order_id);
         }
+
+        self.is_quote_quantity = event.is_quote_quantity;
     }
 
     fn filled(&mut self, event: &OrderFilled) {
@@ -1583,5 +1585,58 @@ mod tests {
 
         assert_eq!(order.status(), OrderStatus::Triggered);
         assert_eq!(order.quantity(), Quantity::from(80_000));
+    }
+
+    #[rstest]
+    fn test_order_updated_with_is_quote_quantity_clears_flag() {
+        let init = OrderInitializedBuilder::default()
+            .quantity(Quantity::new(10.0, 6))
+            .quote_quantity(true)
+            .build()
+            .unwrap();
+        let submitted = OrderSubmittedBuilder::default().build().unwrap();
+        let accepted = OrderAcceptedBuilder::default().build().unwrap();
+        let updated = OrderUpdatedBuilder::default()
+            .quantity(Quantity::new(47.393_365, 6))
+            .is_quote_quantity(false)
+            .build()
+            .unwrap();
+
+        let mut order: MarketOrder = init.into();
+        assert!(order.is_quote_quantity());
+
+        order.apply(OrderEventAny::Submitted(submitted)).unwrap();
+        order.apply(OrderEventAny::Accepted(accepted)).unwrap();
+        order.apply(OrderEventAny::Updated(updated)).unwrap();
+
+        assert!(!order.is_quote_quantity());
+        assert_eq!(order.quantity(), Quantity::new(47.393_365, 6));
+        assert_eq!(order.leaves_qty(), Quantity::new(47.393_365, 6));
+    }
+
+    #[rstest]
+    fn test_order_updated_default_is_quote_quantity_clears_flag() {
+        let init = OrderInitializedBuilder::default()
+            .quantity(Quantity::new(10.0, 6))
+            .quote_quantity(true)
+            .build()
+            .unwrap();
+        let submitted = OrderSubmittedBuilder::default().build().unwrap();
+        let accepted = OrderAcceptedBuilder::default().build().unwrap();
+        // Builder defaults is_quote_quantity to false
+        let updated = OrderUpdatedBuilder::default()
+            .quantity(Quantity::new(8.0, 6))
+            .build()
+            .unwrap();
+
+        let mut order: MarketOrder = init.into();
+        assert!(order.is_quote_quantity());
+
+        order.apply(OrderEventAny::Submitted(submitted)).unwrap();
+        order.apply(OrderEventAny::Accepted(accepted)).unwrap();
+        order.apply(OrderEventAny::Updated(updated)).unwrap();
+
+        assert!(!order.is_quote_quantity());
+        assert_eq!(order.quantity(), Quantity::new(8.0, 6));
     }
 }

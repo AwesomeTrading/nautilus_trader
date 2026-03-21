@@ -1609,8 +1609,8 @@ async def test_spot_margin_market_buy_quote_quantity_converts_on_first_fill(
     filled_event = next(event for event in emitted_events if isinstance(event, OrderFilled))
     assert filled_event.last_qty == Quantity.from_str("0.005225")
 
-    # Order should no longer be quote_quantity
-    assert not order.is_quote_quantity
+    # OrderUpdated should signal conversion from quote to base quantity
+    assert not updated_event.is_quote_quantity
 
 
 @pytest.mark.asyncio
@@ -1792,6 +1792,9 @@ async def test_spot_margin_market_buy_quote_quantity_handles_partial_fills(
 
     def _capture(event):
         emitted_events.append(event)
+        # Apply events so the order state transitions for subsequent fills
+        if isinstance(event, OrderUpdated):
+            order.apply(event)
 
     monkeypatch.setattr(client, "_send_order_event", _capture)
 

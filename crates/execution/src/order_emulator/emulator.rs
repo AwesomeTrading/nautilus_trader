@@ -598,6 +598,7 @@ impl OrderEmulator {
                 price,
                 trigger_price,
                 None,
+                order.is_quote_quantity(),
             );
 
             self.manager.send_exec_event(OrderEventAny::Updated(event));
@@ -711,6 +712,7 @@ impl OrderEmulator {
             None,
             None,
             None,
+            order.is_quote_quantity(),
         );
 
         if let Err(e) = order.apply(OrderEventAny::Updated(event)) {
@@ -1317,6 +1319,7 @@ impl OrderEmulator {
             new_limit_px,
             new_trigger_px,
             None,
+            order.is_quote_quantity(),
         );
         let wrapped = OrderEventAny::Updated(update);
         if let Err(e) = order.apply(wrapped.clone()) {

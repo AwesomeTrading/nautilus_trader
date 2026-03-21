@@ -99,6 +99,7 @@ from nautilus_trader.model.enums import OrderType
 from nautilus_trader.model.enums import PositionSide
 from nautilus_trader.model.enums import TimeInForce
 from nautilus_trader.model.enums import order_side_to_str
+from nautilus_trader.model.events import OrderUpdated
 from nautilus_trader.model.identifiers import AccountId
 from nautilus_trader.model.identifiers import ClientId
 from nautilus_trader.model.identifiers import ClientOrderId
@@ -1498,7 +1499,20 @@ class PolymarketExecutionClient(LiveExecutionClient):
             ts_event=self._clock.timestamp_ns(),
         )
 
-        await self._post_signed_order(order, signed_order, order_type_override=PolyOrderType.FOK)
+        # Compute base quantity from the signed order for BUY quote-quantity orders
+        base_quantity = None
+
+        if order.is_quote_quantity and order.side == OrderSide.BUY:
+            taker_amount = int(signed_order.order["takerAmount"])
+            base_qty_value = taker_amount / 1e6
+            base_quantity = Quantity(base_qty_value, instrument.size_precision)
+
+        await self._post_signed_order(
+            order,
+            signed_order,
+            order_type_override=PolyOrderType.FOK,
+            base_quantity=base_quantity,
+        )
 
     async def _submit_limit_order(self, command: SubmitOrder, instrument) -> None:
         self._log.debug("Creating Polymarket order", LogColor.MAGENTA)
@@ -1554,6 +1568,7 @@ class PolymarketExecutionClient(LiveExecutionClient):
         signed_order,
         post_only: bool = False,
         order_type_override=None,
+        base_quantity: Quantity | None = None,
     ) -> None:
         retry_manager = await self._retry_manager_pool.acquire()
         try:
@@ -1582,12 +1597,36 @@ class PolymarketExecutionClient(LiveExecutionClient):
                 venue_order_id = VenueOrderId(response["orderID"])
                 self._cache.add_venue_order_id(order.client_order_id, venue_order_id)
 
+                # Emit quote-to-base conversion after successful submission
+                if base_quantity is not None:
+                    self._log.info(
+                        f"Converted {order.instrument_id} quote quantity {order.quantity} "
+                        f"to base quantity {base_quantity}",
+                    )
+                    ts_now = self._clock.timestamp_ns()
+                    updated = OrderUpdated(
+                        trader_id=self.trader_id,
+                        strategy_id=order.strategy_id,
+                        instrument_id=order.instrument_id,
+                        client_order_id=order.client_order_id,
+                        venue_order_id=venue_order_id,
+                        account_id=self.account_id,
+                        quantity=base_quantity,
+                        price=None,
+                        trigger_price=None,
+                        event_id=UUID4(),
+                        ts_event=ts_now,
+                        ts_init=ts_now,
+                        is_quote_quantity=False,
+                    )
+                    self._send_order_event(updated)
+
                 # Register with fill tracker for dust detection
                 instrument = self._cache.instrument(order.instrument_id)
                 if instrument is not None:
                     self._fill_tracker.register(
                         venue_order_id=venue_order_id,
-                        submitted_qty=order.quantity,
+                        submitted_qty=base_quantity or order.quantity,
                         order_side=order.side,
                         instrument_id=order.instrument_id,
                         size_precision=instrument.size_precision,

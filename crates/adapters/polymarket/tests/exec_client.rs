@@ -784,7 +784,110 @@ async fn test_submit_market_order_buy_accepted() {
         .unwrap();
     assert_order_event(event, "Submitted");
 
+    // Updated (quote-to-base conversion for BUY quote_quantity orders)
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Updated");
+
     // Accepted (async, after HTTP post)
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Accepted");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_submit_market_order_buy_quote_to_base_conversion() {
+    let state = TestServerState::default();
+    // Book with a single ask at 0.50 so crossing price is exactly 0.50
+    *state.book_response.lock().await = Some(json!({
+        "bids": [{"price": "0.48", "size": "100.00"}],
+        "asks": [{"price": "0.50", "size": "100.00"}]
+    }));
+    let addr = start_mock_server(state.clone()).await;
+    let (mut client, mut rx, cache) = create_test_execution_client(addr);
+    client.start().unwrap();
+
+    let instrument_id = InstrumentId::from("TEST-TOKEN.POLYMARKET");
+    add_instrument_to_cache(&cache, instrument_id);
+
+    // BUY 10 USDC worth with quote_quantity=true
+    let order = make_market_order("O-MKT-QTY", instrument_id, OrderSide::Buy, true);
+    cache
+        .borrow_mut()
+        .add_order(order.clone(), None, None, false)
+        .unwrap();
+    let cmd = make_submit_cmd(&order, instrument_id);
+
+    client.submit_order(&cmd).unwrap();
+
+    // Submitted
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Submitted");
+
+    // Updated: quote-to-base conversion
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let updated = assert_order_event(event, "Updated");
+
+    // Verify the Updated event has the correct base quantity and is_quote_quantity=false
+    if let OrderEventAny::Updated(ref u) = updated {
+        // 10 USDC / 0.50 price = 20 shares (instrument has size_precision=0)
+        assert_eq!(u.quantity, Quantity::from(20));
+        assert!(
+            !u.is_quote_quantity,
+            "is_quote_quantity should be false after conversion"
+        );
+    } else {
+        panic!("Expected Updated event");
+    }
+
+    // Accepted
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Accepted");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_submit_market_order_sell_no_updated_event() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state.clone()).await;
+    let (mut client, mut rx, cache) = create_test_execution_client(addr);
+    client.start().unwrap();
+
+    let instrument_id = InstrumentId::from("TEST-TOKEN.POLYMARKET");
+    add_instrument_to_cache(&cache, instrument_id);
+
+    // SELL 10 shares with quote_quantity=false (no conversion needed)
+    let order = make_market_order("O-MKT-SELL", instrument_id, OrderSide::Sell, false);
+    cache
+        .borrow_mut()
+        .add_order(order.clone(), None, None, false)
+        .unwrap();
+    let cmd = make_submit_cmd(&order, instrument_id);
+
+    client.submit_order(&cmd).unwrap();
+
+    // Submitted
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Submitted");
+
+    // Accepted (no Updated event for SELL orders)
     let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
         .await
         .unwrap()

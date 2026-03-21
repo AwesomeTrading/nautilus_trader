@@ -1197,6 +1197,7 @@ fn handle_order_messages(
                             event.price,
                             event.trigger_price,
                             event.protection_price,
+                            false, // is_quote_quantity
                         );
                         let venue_order_id = enriched
                             .venue_order_id

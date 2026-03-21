@@ -1101,7 +1101,8 @@ pub fn parse_order_updated(
         Some(account_id),
         price,
         trigger_price,
-        None, // protection_price
+        None,  // protection_price
+        false, // is_quote_quantity
     )
 }
 

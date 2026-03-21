@@ -1189,6 +1189,7 @@ pub fn create_reconciliation_updated(
         report.price,
         trigger_price,
         None, // protection_price
+        order.is_quote_quantity(),
     ))
 }
 

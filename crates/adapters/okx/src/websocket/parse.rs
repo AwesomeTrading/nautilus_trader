@@ -205,8 +205,9 @@ pub fn parse_order_event(
             Some(venue_order_id),
             Some(account_id),
             price,
-            None, // trigger_price
-            None, // protection_price
+            None,  // trigger_price
+            None,  // protection_price
+            false, // is_quote_quantity
         )));
     }
 

@@ -302,6 +302,7 @@ pub fn order_updated(
         Some(Price::from("22000")),
         None,
         None,
+        false, // is_quote_quantity
     )
 }
 
@@ -838,6 +839,7 @@ impl TestDefault for OrderUpdated {
             price: None,
             trigger_price: None,
             protection_price: None,
+            is_quote_quantity: false,
             event_id: UUID4::default(),
             ts_event: UnixNanos::default(),
             ts_init: UnixNanos::default(),

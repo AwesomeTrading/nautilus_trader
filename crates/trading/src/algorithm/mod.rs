@@ -504,6 +504,7 @@ pub trait ExecutionAlgorithm: DataActor {
             None, // price
             None, // trigger_price
             None, // protection_price
+            primary.is_quote_quantity(),
         );
 
         primary
@@ -577,6 +578,7 @@ pub trait ExecutionAlgorithm: DataActor {
             None, // price
             None, // trigger_price
             None, // protection_price
+            primary.is_quote_quantity(),
         );
 
         if let Err(e) = primary.apply(OrderEventAny::Updated(updated)) {
@@ -816,6 +818,7 @@ pub trait ExecutionAlgorithm: DataActor {
             price,
             trigger_price,
             None, // protection_price
+            order.is_quote_quantity(),
         );
 
         order

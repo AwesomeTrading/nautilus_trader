@@ -4145,8 +4145,9 @@ fn test_handle_updated_order_event(mut execution_engine: ExecutionEngine) {
         Some(new_venue_id),
         Some(account_id),
         order.price(),
-        None, // trigger_price
-        None, // protection_price
+        None,  // trigger_price
+        None,  // protection_price
+        false, // is_quote_quantity
     ));
     execution_engine.process(&order_updated_event);
 
@@ -5304,6 +5305,7 @@ fn test_order_updates_in_own_book() {
         Some(new_bid_price),               // new price
         None,                              // trigger_price
         None,                              // protection_price
+        false,                             // is_quote_quantity
     ));
 
     let order_updated_ask = OrderEventAny::Updated(OrderUpdated::new(
@@ -5321,6 +5323,7 @@ fn test_order_updates_in_own_book() {
         Some(new_ask_price),               // new price
         None,                              // trigger_price
         None,                              // protection_price
+        false,                             // is_quote_quantity
     ));
 
     execution_engine.process(&order_updated_bid);

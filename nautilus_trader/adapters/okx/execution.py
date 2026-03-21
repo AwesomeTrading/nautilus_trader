@@ -2699,8 +2699,8 @@ class OKXExecutionClient(LiveExecutionClient):
                 trigger_price=order.trigger_price if order.has_trigger_price else None,
                 ts_event=report.ts_event,
                 venue_order_id_modified=venue_id_changed,
+                is_quote_quantity=False,
             )
-            order.set_quote_quantity(False)
         elif (
             order.venue_order_id is not None
             and report.venue_order_id is not None

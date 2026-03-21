@@ -50,6 +50,7 @@ use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
     enums::{AccountType, CurrencyType, OmsType, OrderSide, OrderStatus, OrderType, TimeInForce},
+    events::{OrderEventAny, OrderUpdated},
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, Venue, VenueOrderId,
     },
@@ -76,7 +77,7 @@ use self::{
 };
 use crate::{
     common::{
-        consts::{POLYMARKET_VENUE, USDC},
+        consts::{LOT_SIZE_SCALE, POLYMARKET_VENUE, USDC},
         credential::Secrets,
         enums::{
             PolymarketLiquiditySide, PolymarketOrderStatus, PolymarketTradeStatus, SignatureType,
@@ -556,6 +557,7 @@ impl PolymarketExecutionClient {
                                 let commission_value =
                                     compute_commission(fee_bps, size, price_dec);
                                 let usdc = get_usdc_currency();
+
                                 let fill_report = FillReport {
                                     account_id,
                                     instrument_id: instrument.id(),
@@ -572,6 +574,7 @@ impl PolymarketExecutionClient {
                                     client_order_id: None,
                                     venue_position_id: None,
                                 };
+
                                 let is_accepted = fill_tracker.contains(&venue_order_id);
                                 if is_accepted {
                                     fill_tracker.record_fill(
@@ -621,6 +624,7 @@ impl PolymarketExecutionClient {
 
     fn build_neg_risk_index(&mut self) {
         self.neg_risk_index.clear();
+
         for instrument in self.provider.store().list_all() {
             if let InstrumentAny::BinaryOption(inst) = instrument {
                 let neg_risk = inst
@@ -720,6 +724,7 @@ impl PolymarketExecutionClient {
         let tick_decimals = instrument.price_precision() as u32;
         let side = order.order_side();
         let amount = order.quantity();
+        let is_quote_qty = order.is_quote_quantity();
 
         let submitter = self.submitter.clone();
         let emitter = self.emitter.clone();
@@ -736,8 +741,59 @@ impl PolymarketExecutionClient {
                 .submit_market_order(&token_id, side, amount, neg_risk, tick_decimals)
                 .await
             {
-                Ok(response) => {
+                Ok((response, crossing_price)) => {
+                    let mut order = order;
                     emitter.emit_order_submitted(&order);
+
+                    // Convert quote quantity to base only after successful submission
+                    if response.success
+                        && is_quote_qty
+                        && side == OrderSide::Buy
+                        && !crossing_price.is_zero()
+                    {
+                        let amt = amount.as_decimal().trunc_with_scale(LOT_SIZE_SCALE);
+                        let base_qty_dec =
+                            (amt / crossing_price).trunc_with_scale(tick_decimals + LOT_SIZE_SCALE);
+
+                        if let Ok(base_qty) =
+                            Quantity::from_decimal_dp(base_qty_dec, size_precision)
+                        {
+                            log::info!(
+                                "Converted {} quote quantity {} to base quantity {} \
+                                 at crossing price {crossing_price}",
+                                order.instrument_id(),
+                                amount,
+                                base_qty,
+                            );
+
+                            let ts_now = clock.get_time_ns();
+                            let updated = OrderUpdated::new(
+                                order.trader_id(),
+                                order.strategy_id(),
+                                order.instrument_id(),
+                                order.client_order_id(),
+                                base_qty,
+                                UUID4::new(),
+                                ts_now,
+                                ts_now,
+                                false,
+                                order.venue_order_id(),
+                                order.account_id(),
+                                order.price(),
+                                None,
+                                None,
+                                false, // is_quote_quantity
+                            );
+
+                            let event = OrderEventAny::Updated(updated);
+                            emitter.send_order_event(event.clone());
+
+                            if let Err(e) = order.apply(event) {
+                                log::error!("Failed to apply quote-to-base OrderUpdated: {e}");
+                            }
+                        }
+                    }
+
                     handle_order_response(
                         Ok(response),
                         &order,
@@ -1353,10 +1409,6 @@ impl ExecutionClient for PolymarketExecutionClient {
         .await
     }
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 fn process_cancel_result(
     response: &CancelResponse,

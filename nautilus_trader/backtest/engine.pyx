@@ -3759,6 +3759,7 @@ cdef class SimulatedExchange:
             event_id=UUID4(),
             ts_event=ts_now,
             ts_init=ts_now,
+            is_quote_quantity=order.is_quote_quantity,
         )
         self.msgbus.send(endpoint="ExecEngine.process", msg=event)
 
@@ -7979,6 +7980,7 @@ cdef class OrderMatchingEngine:
             event_id=UUID4(),
             ts_event=ts_now,
             ts_init=ts_now,
+            is_quote_quantity=order.is_quote_quantity,
         )
         self.msgbus.send(endpoint="ExecEngine.process", msg=event)
 

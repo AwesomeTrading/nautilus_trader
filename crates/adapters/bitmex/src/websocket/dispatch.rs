@@ -377,6 +377,7 @@ fn dispatch_order_messages(
                             event.price,
                             event.trigger_price,
                             event.protection_price,
+                            false, // is_quote_quantity
                         );
                         ensure_accepted_emitted(
                             cid,

@@ -1193,8 +1193,10 @@ class TestPolymarketExecutionClient:
         mock_create_market_order = mocker.patch.object(self.http_client, "create_market_order")
         mock_post_order = mocker.patch.object(self.http_client, "post_order")
 
-        # Mock successful responses
-        mock_create_market_order.return_value = {"signed_order": "mock_signed_market"}
+        # Mock signed order with takerAmount (20.00 shares = 20000000 in fixed-point)
+        mock_signed = MagicMock()
+        mock_signed.order = {"takerAmount": 20_000_000}
+        mock_create_market_order.return_value = mock_signed
         mock_post_order.return_value = {"success": True, "orderID": "test_market_order_id"}
 
         market_order = self.strategy.order_factory.market(
@@ -1233,6 +1235,64 @@ class TestPolymarketExecutionClient:
         venue_order_id = VenueOrderId("test_market_order_id")
         cached_client_order_id = self.cache.client_order_id(venue_order_id)
         assert cached_client_order_id == market_order.client_order_id
+
+    @pytest.mark.asyncio
+    async def test_submit_market_buy_quote_to_base_conversion(self, mocker):
+        """
+        Market BUY with quote_quantity=True emits OrderUpdated converting the order from
+        quote (USDC) to base (shares) units.
+
+        Uses the same values as the Rust test
+        test_submit_market_order_buy_quote_to_base_conversion:
+        - Quote amount: 10 USDC
+        - takerAmount: 20_000_000 (= 20.00 shares at 0.50 crossing price)
+        - Expected base quantity: 20.00 (instrument size_precision=2)
+        - is_quote_quantity flips from True to False
+
+        """
+        mock_create_market_order = mocker.patch.object(self.http_client, "create_market_order")
+        mock_post_order = mocker.patch.object(self.http_client, "post_order")
+        send_spy = mocker.spy(self.exec_client, "_send_order_event")
+
+        # 20.00 shares * 10^6 fixed-point (matches 10 USDC / 0.50 crossing price)
+        mock_signed = MagicMock()
+        mock_signed.order = {"takerAmount": 20_000_000}
+        mock_create_market_order.return_value = mock_signed
+        mock_post_order.return_value = {"success": True, "orderID": "test_qty_order_id"}
+
+        order = self.strategy.order_factory.market(
+            instrument_id=ELECTION_INSTRUMENT.id,
+            order_side=OrderSide.BUY,
+            quantity=Quantity.from_str("10.00"),
+            quote_quantity=True,
+            time_in_force=TimeInForce.FOK,
+        )
+        self.cache.add_order(order, None)
+
+        submit_order = SubmitOrder(
+            trader_id=self.trader_id,
+            strategy_id=self.strategy.id,
+            position_id=None,
+            order=order,
+            command_id=UUID4(),
+            ts_init=0,
+        )
+
+        assert order.is_quote_quantity
+
+        await self.exec_client._submit_order(submit_order)
+
+        # Verify OrderUpdated was sent via _send_order_event
+        updated_calls = [
+            call
+            for call in send_spy.call_args_list
+            if type(call.args[0]).__name__ == "OrderUpdated"
+        ]
+        assert len(updated_calls) == 1, f"Expected 1 OrderUpdated, found {len(updated_calls)}"
+
+        updated_event = updated_calls[0].args[0]
+        assert updated_event.quantity == Quantity.from_str("20.00")
+        assert not updated_event.is_quote_quantity
 
     @pytest.mark.asyncio
     async def test_submit_market_order_with_fok(self, mocker):

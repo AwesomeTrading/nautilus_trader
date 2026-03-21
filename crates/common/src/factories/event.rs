@@ -315,6 +315,7 @@ impl OrderEventFactory {
             price,
             trigger_price,
             protection_price,
+            false, // is_quote_quantity
         );
         OrderEventAny::Updated(event)
     }

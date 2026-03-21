@@ -1808,6 +1808,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                         Some(price),
                         None,
                         None,
+                        false, // is_quote_quantity
                     );
 
                     emitter.send_order_event(OrderEventAny::Updated(updated_event));
@@ -2289,6 +2290,7 @@ fn dispatch_order_update(
                     Some(Price::new(price, price_precision)),
                     None,
                     None,
+                    false, // is_quote_quantity
                 );
                 emitter.send_order_event(OrderEventAny::Updated(updated));
             }

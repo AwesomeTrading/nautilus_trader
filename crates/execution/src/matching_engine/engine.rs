@@ -4369,6 +4369,7 @@ impl OrderMatchingEngine {
             price,
             trigger_price,
             protection_price,
+            order.is_quote_quantity(),
         ));
 
         self.dispatch_order_event(event);

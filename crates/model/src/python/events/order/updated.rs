@@ -31,7 +31,7 @@ impl OrderUpdated {
     /// Creates a new `OrderUpdated` instance.
     #[allow(clippy::too_many_arguments)]
     #[new]
-    #[pyo3(signature = (trader_id, strategy_id, instrument_id, client_order_id, quantity, event_id, ts_event, ts_init, reconciliation, venue_order_id=None, account_id=None, price=None, trigger_price=None, protection_price=None))]
+    #[pyo3(signature = (trader_id, strategy_id, instrument_id, client_order_id, quantity, event_id, ts_event, ts_init, reconciliation, venue_order_id=None, account_id=None, price=None, trigger_price=None, protection_price=None, is_quote_quantity=false))]
     fn py_new(
         trader_id: TraderId,
         strategy_id: StrategyId,
@@ -47,6 +47,7 @@ impl OrderUpdated {
         price: Option<Price>,
         trigger_price: Option<Price>,
         protection_price: Option<Price>,
+        is_quote_quantity: bool,
     ) -> Self {
         Self::new(
             trader_id,
@@ -63,6 +64,7 @@ impl OrderUpdated {
             price,
             trigger_price,
             protection_price,
+            is_quote_quantity,
         )
     }
 
@@ -161,6 +163,12 @@ impl OrderUpdated {
     }
 
     #[getter]
+    #[pyo3(name = "is_quote_quantity")]
+    fn py_is_quote_quantity(&self) -> bool {
+        self.is_quote_quantity
+    }
+
+    #[getter]
     #[pyo3(name = "reconciliation")]
     fn py_reconciliation(&self) -> bool {
         self.reconciliation != 0
@@ -195,6 +203,7 @@ impl OrderUpdated {
             Some(trigger_price) => dict.set_item("trigger_price", trigger_price.to_string())?,
             None => dict.set_item("trigger_price", py.None())?,
         }
+        dict.set_item("is_quote_quantity", self.is_quote_quantity)?;
         Ok(dict.into())
     }
 }

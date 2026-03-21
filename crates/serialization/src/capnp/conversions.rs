@@ -3373,6 +3373,7 @@ impl<'a> ToCapnp<'a> for OrderUpdated {
         ts_init_builder.set_value(*self.ts_init);
 
         builder.set_reconciliation(self.reconciliation != 0);
+        builder.set_is_quote_quantity(self.is_quote_quantity);
     }
 }
 
@@ -3446,6 +3447,7 @@ impl<'a> FromCapnp<'a> for OrderUpdated {
             price,
             trigger_price,
             protection_price,
+            is_quote_quantity: reader.get_is_quote_quantity(),
             event_id,
             ts_event: ts_event.into(),
             ts_init: ts_init.into(),
