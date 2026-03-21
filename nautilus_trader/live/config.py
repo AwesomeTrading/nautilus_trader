@@ -161,33 +161,6 @@ class LiveExecEngineConfig(ExecEngineConfig, frozen=True):
         The additional delay (seconds) applied AFTER startup reconciliation
         completes before starting the continuous reconciliation loop. This provides time
         for additional system stabilization after initial reconciliation.
-    purge_closed_orders_interval_mins : PositiveInt, optional
-        The interval (minutes) between purging closed orders from the in-memory cache,
-        **will not purge from the database**. If None, closed orders will **not** be automatically purged.
-        A recommended setting is 10-15 minutes for HFT.
-    purge_closed_orders_buffer_mins : NonNegativeInt, optional
-        The time buffer (minutes) from when an order was closed before it can be purged.
-        Only orders closed for at least this amount of time will be purged.
-        A recommended setting is 60 minutes for HFT.
-    purge_closed_positions_interval_mins : PositiveInt, optional
-        The interval (minutes) between purging closed positions from the in-memory cache,
-        **will not purge from the database**. If None, closed positions will **not** be automatically purged.
-        A recommended setting is 10-15 minutes for HFT.
-    purge_closed_positions_buffer_mins : NonNegativeInt, optional
-        The time buffer (minutes) from when a position was closed before it can be purged.
-        Only positions closed for at least this amount of time will be purged.
-        A recommended setting is 60 minutes for HFT.
-    purge_account_events_interval_mins : PositiveInt, optional
-        The interval (minutes) between purging account events from the in-memory cache,
-        **will not purge from the database**. If None, account events will **not** be automatically purged.
-        A recommended setting is 10-15 minutes for HFT.
-    purge_account_events_lookback_mins : NonNegativeInt, optional
-        The time buffer (minutes) from when an account event occurred before it can be purged.
-        Only events outside the lookback window will be purged.
-        A recommended setting is 60 minutes for HFT.
-    purge_from_database : bool, default False
-        If purging operations will also delete from the backing database, in addition to the in-memory cache.
-        **Note:** Currently account events are not purged from the database - pending reimplementation.
     qsize : PositiveInt, default 100_000
         The queue size for the engines internal queue buffers.
     graceful_shutdown_on_exception : bool, default False
@@ -219,13 +192,6 @@ class LiveExecEngineConfig(ExecEngineConfig, frozen=True):
     position_check_threshold_ms: NonNegativeInt = 5_000
     position_check_retries: NonNegativeInt = 3
     reconciliation_startup_delay_secs: PositiveFloat = 10.0
-    purge_closed_orders_interval_mins: PositiveInt | None = None
-    purge_closed_orders_buffer_mins: NonNegativeInt | None = None
-    purge_closed_positions_interval_mins: PositiveInt | None = None
-    purge_closed_positions_buffer_mins: NonNegativeInt | None = None
-    purge_account_events_interval_mins: PositiveInt | None = None
-    purge_account_events_lookback_mins: NonNegativeInt | None = None
-    purge_from_database: bool = False
     qsize: PositiveInt = 100_000
     graceful_shutdown_on_exception: bool = False
 

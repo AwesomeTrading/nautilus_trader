@@ -629,7 +629,7 @@ impl PortfolioAnalyzer {
 mod tests {
     use std::sync::Arc;
 
-    use ahash::AHashMap;
+    use ahash::{AHashMap, AHashSet};
     use nautilus_core::{UUID4, approx_eq};
     use nautilus_model::{
         enums::{AccountType, InstrumentClass, LiquiditySide, OrderSide, PositionSide},
@@ -719,7 +719,7 @@ mod tests {
             avg_px_close: None,
             realized_return,
             realized_pnl: Some(Money::new(realized_pnl, currency)),
-            trade_ids: Vec::new(),
+            trade_ids: AHashSet::new(),
             buy_qty: Quantity::default(),
             sell_qty: Quantity::default(),
             commissions: AHashMap::new(),

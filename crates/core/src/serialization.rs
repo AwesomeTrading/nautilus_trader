@@ -33,6 +33,35 @@ use serde::{
 };
 use ustr::Ustr;
 
+/// Sorted serialization for `AHashSet<T>` where element order must be deterministic.
+///
+/// Use with `#[serde(with = "nautilus_core::serialization::sorted_hashset")]`.
+pub mod sorted_hashset {
+    use ahash::AHashSet;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    /// Serializes an `AHashSet<T>` as a sorted array for deterministic output.
+    pub fn serialize<T, S>(set: &AHashSet<T>, s: S) -> Result<S::Ok, S::Error>
+    where
+        T: Serialize + Ord,
+        S: Serializer,
+    {
+        let mut sorted: Vec<&T> = set.iter().collect();
+        sorted.sort_unstable();
+        sorted.serialize(s)
+    }
+
+    /// Deserializes an array into an `AHashSet<T>`.
+    pub fn deserialize<'de, T, D>(d: D) -> Result<AHashSet<T>, D::Error>
+    where
+        T: Deserialize<'de> + Eq + std::hash::Hash,
+        D: Deserializer<'de>,
+    {
+        let vec = Vec::<T>::deserialize(d)?;
+        Ok(vec.into_iter().collect())
+    }
+}
+
 struct BoolVisitor;
 
 /// Zero-allocation decimal visitor for maximum deserialization performance.

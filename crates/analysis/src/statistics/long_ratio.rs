@@ -84,7 +84,7 @@ impl PortfolioStatistic for LongRatio {
 
 #[cfg(test)]
 mod tests {
-    use ahash::AHashMap;
+    use ahash::{AHashMap, AHashSet};
     use nautilus_core::{UnixNanos, approx_eq};
     use nautilus_model::{
         enums::{InstrumentClass, PositionSide},
@@ -132,7 +132,7 @@ mod tests {
             avg_px_close: Some(0.0),
             realized_return: 0.0,
             realized_pnl: None,
-            trade_ids: Vec::new(),
+            trade_ids: AHashSet::new(),
             buy_qty: Quantity::default(),
             sell_qty: Quantity::default(),
             commissions: AHashMap::new(),

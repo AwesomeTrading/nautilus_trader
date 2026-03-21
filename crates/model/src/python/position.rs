@@ -460,7 +460,7 @@ impl Position {
             PyList::new(py, self.venue_order_ids().iter().map(ToString::to_string))
                 .expect("Invalid `ExactSizeIterator`");
         dict.set_item("venue_order_ids", venue_order_ids_list)?;
-        let trade_ids_list = PyList::new(py, self.trade_ids.iter().map(ToString::to_string))
+        let trade_ids_list = PyList::new(py, self.trade_ids().iter().map(ToString::to_string))
             .expect("Invalid `ExactSizeIterator`");
         dict.set_item("trade_ids", trade_ids_list)?;
         dict.set_item("buy_qty", self.buy_qty.to_string())?;

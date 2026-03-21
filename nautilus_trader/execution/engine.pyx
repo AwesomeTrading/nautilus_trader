@@ -53,6 +53,7 @@ from nautilus_trader.common.generators cimport PositionIdGenerator
 from nautilus_trader.core.correctness cimport Condition
 from nautilus_trader.core.fsm cimport InvalidStateTrigger
 from nautilus_trader.core.message cimport Command
+from nautilus_trader.core.rust.core cimport SECONDS_IN_MINUTE
 from nautilus_trader.core.rust.core cimport secs_to_nanos
 from nautilus_trader.core.rust.model cimport ContingencyType
 from nautilus_trader.core.rust.model cimport OmsType
@@ -170,6 +171,15 @@ cdef class ExecutionEngine(Component):
         self.snapshot_positions = config.snapshot_positions
         self.snapshot_positions_interval_secs = config.snapshot_positions_interval_secs or 0
         self.snapshot_positions_timer_name = "ExecEngine_SNAPSHOT_POSITIONS"
+
+        # Purge configuration
+        self.purge_closed_orders_interval_mins = config.purge_closed_orders_interval_mins
+        self.purge_closed_orders_buffer_mins = config.purge_closed_orders_buffer_mins
+        self.purge_closed_positions_interval_mins = config.purge_closed_positions_interval_mins
+        self.purge_closed_positions_buffer_mins = config.purge_closed_positions_buffer_mins
+        self.purge_account_events_interval_mins = config.purge_account_events_interval_mins
+        self.purge_account_events_lookback_mins = config.purge_account_events_lookback_mins
+        self.purge_from_database = config.purge_from_database
 
         self._log.info(f"{config.snapshot_orders=}", LogColor.BLUE)
         self._log.info(f"{config.snapshot_positions=}", LogColor.BLUE)
@@ -670,6 +680,47 @@ cdef class ExecutionEngine(Component):
                 callback=self._snapshot_open_position_states,
             )
 
+        cdef uint64_t purge_interval_ns
+
+        if self.purge_closed_orders_interval_mins and "ExecEngine_PURGE_CLOSED_ORDERS" not in self._clock.timer_names:
+            purge_interval_ns = secs_to_nanos(self.purge_closed_orders_interval_mins * SECONDS_IN_MINUTE)
+            self._log.info(
+                f"Starting purge closed orders timer at {self.purge_closed_orders_interval_mins} minute intervals",
+            )
+            self._clock.set_timer_ns(
+                name="ExecEngine_PURGE_CLOSED_ORDERS",
+                interval_ns=purge_interval_ns,
+                start_time_ns=0,
+                stop_time_ns=0,
+                callback=self._purge_closed_orders,
+            )
+
+        if self.purge_closed_positions_interval_mins and "ExecEngine_PURGE_CLOSED_POSITIONS" not in self._clock.timer_names:
+            purge_interval_ns = secs_to_nanos(self.purge_closed_positions_interval_mins * SECONDS_IN_MINUTE)
+            self._log.info(
+                f"Starting purge closed positions timer at {self.purge_closed_positions_interval_mins} minute intervals",
+            )
+            self._clock.set_timer_ns(
+                name="ExecEngine_PURGE_CLOSED_POSITIONS",
+                interval_ns=purge_interval_ns,
+                start_time_ns=0,
+                stop_time_ns=0,
+                callback=self._purge_closed_positions,
+            )
+
+        if self.purge_account_events_interval_mins and "ExecEngine_PURGE_ACCOUNT_EVENTS" not in self._clock.timer_names:
+            purge_interval_ns = secs_to_nanos(self.purge_account_events_interval_mins * SECONDS_IN_MINUTE)
+            self._log.info(
+                f"Starting purge account events timer at {self.purge_account_events_interval_mins} minute intervals",
+            )
+            self._clock.set_timer_ns(
+                name="ExecEngine_PURGE_ACCOUNT_EVENTS",
+                interval_ns=purge_interval_ns,
+                start_time_ns=0,
+                stop_time_ns=0,
+                callback=self._purge_account_events,
+            )
+
         self._on_start()
 
     cpdef void _stop(self):
@@ -680,6 +731,18 @@ cdef class ExecutionEngine(Component):
         if self.snapshot_positions_interval_secs and self.snapshot_positions_timer_name in self._clock.timer_names:
             self._log.info(f"Canceling position snapshots timer")
             self._clock.cancel_timer(self.snapshot_positions_timer_name)
+
+        if "ExecEngine_PURGE_CLOSED_ORDERS" in self._clock.timer_names:
+            self._log.info("Canceling purge closed orders timer")
+            self._clock.cancel_timer("ExecEngine_PURGE_CLOSED_ORDERS")
+
+        if "ExecEngine_PURGE_CLOSED_POSITIONS" in self._clock.timer_names:
+            self._log.info("Canceling purge closed positions timer")
+            self._clock.cancel_timer("ExecEngine_PURGE_CLOSED_POSITIONS")
+
+        if "ExecEngine_PURGE_ACCOUNT_EVENTS" in self._clock.timer_names:
+            self._log.info("Canceling purge account events timer")
+            self._clock.cancel_timer("ExecEngine_PURGE_ACCOUNT_EVENTS")
 
         self._on_stop()
 
@@ -1789,3 +1852,27 @@ cdef class ExecutionEngine(Component):
         cdef Position position
         for position in self._cache.positions_open():
             self._create_position_state_snapshot(position, open_only=True)
+
+    cpdef void _purge_closed_orders(self, TimeEvent event):
+        cdef uint64_t buffer_secs = (self.purge_closed_orders_buffer_mins or 0) * SECONDS_IN_MINUTE
+        self._cache.purge_closed_orders(
+            ts_now=self._clock.timestamp_ns(),
+            buffer_secs=buffer_secs,
+            purge_from_database=self.purge_from_database,
+        )
+
+    cpdef void _purge_closed_positions(self, TimeEvent event):
+        cdef uint64_t buffer_secs = (self.purge_closed_positions_buffer_mins or 0) * SECONDS_IN_MINUTE
+        self._cache.purge_closed_positions(
+            ts_now=self._clock.timestamp_ns(),
+            buffer_secs=buffer_secs,
+            purge_from_database=self.purge_from_database,
+        )
+
+    cpdef void _purge_account_events(self, TimeEvent event):
+        cdef uint64_t lookback_secs = (self.purge_account_events_lookback_mins or 0) * SECONDS_IN_MINUTE
+        self._cache.purge_account_events(
+            ts_now=self._clock.timestamp_ns(),
+            lookback_secs=lookback_secs,
+            purge_from_database=self.purge_from_database,
+        )

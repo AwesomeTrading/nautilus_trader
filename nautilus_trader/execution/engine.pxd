@@ -75,6 +75,20 @@ cdef class ExecutionEngine(Component):
     """If position state snapshots should be persisted.\n\n:returns: `bool`"""
     cdef readonly double snapshot_positions_interval_secs
     """The interval (seconds) at which additional position state snapshots are persisted.\n\n:returns: `double`"""
+    cdef readonly object purge_closed_orders_interval_mins
+    """The interval (minutes) between purging closed orders from the cache.\n\n:returns: `int or None`"""
+    cdef readonly object purge_closed_orders_buffer_mins
+    """The buffer (minutes) from when an order was closed before it can be purged.\n\n:returns: `int or None`"""
+    cdef readonly object purge_closed_positions_interval_mins
+    """The interval (minutes) between purging closed positions from the cache.\n\n:returns: `int or None`"""
+    cdef readonly object purge_closed_positions_buffer_mins
+    """The buffer (minutes) from when a position was closed before it can be purged.\n\n:returns: `int or None`"""
+    cdef readonly object purge_account_events_interval_mins
+    """The interval (minutes) between purging account events from the cache.\n\n:returns: `int or None`"""
+    cdef readonly object purge_account_events_lookback_mins
+    """The lookback window (minutes) for account events before they can be purged.\n\n:returns: `int or None`"""
+    cdef readonly bint purge_from_database
+    """If purging operations will also delete from the backing database.\n\n:returns: `bool`"""
     cdef readonly int command_count
     """The total count of commands received by the engine.\n\n:returns: `int`"""
     cdef readonly int event_count
@@ -162,3 +176,6 @@ cdef class ExecutionEngine(Component):
     cpdef void _create_order_state_snapshot(self, Order order)
     cpdef void _create_position_state_snapshot(self, Position position, bint open_only)
     cpdef void _snapshot_open_position_states(self, TimeEvent event)
+    cpdef void _purge_closed_orders(self, TimeEvent event)
+    cpdef void _purge_closed_positions(self, TimeEvent event)
+    cpdef void _purge_account_events(self, TimeEvent event)

@@ -97,6 +97,7 @@ Released on TBD (UTC).
 - Added Tardis HTTP and WebSocket mock server integration tests
 - Added `LiveNode` stop-handle timeout test for shutdown reliability
 - Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
+- Moved cache purge timers to base `ExecutionEngine` in Python
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Refactored Tardis adapter module organization to align with adapter spec (`common/`, `machine/cache.rs`)
