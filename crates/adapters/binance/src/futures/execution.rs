@@ -1660,7 +1660,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                 cmd.client_order_id,
                 "Order not found in cache for modify".into(),
                 UUID4::new(),
-                ts_init, // TODO: Use proper event timestamp
+                ts_init, // no venue timestamp, rejected locally
                 ts_init,
                 false,
                 cmd.venue_order_id,
@@ -1697,7 +1697,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                 cmd.client_order_id,
                 "Price required for order modification".into(),
                 UUID4::new(),
-                ts_init, // TODO: Use proper event timestamp
+                ts_init, // no venue timestamp, rejected locally
                 ts_init,
                 false,
                 cmd.venue_order_id,
