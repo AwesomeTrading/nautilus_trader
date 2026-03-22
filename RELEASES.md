@@ -14,6 +14,7 @@ Released on TBD (UTC).
 - Added Binance instrument status polling in Rust
 - Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
+- Added Deribit `LimitIfTouched` and `MarketIfTouched` order type support (`take_limit`/`take_market`)
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added Kraken FOK, `LimitIfTouched` orders, and batch submit
 - Added OKX `submit_order_list` via WebSocket batch endpoint for regular GTC orders
@@ -67,6 +68,20 @@ Released on TBD (UTC).
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
 - Fixed Binance SBE price/quantity precision derivation (#3670), thanks @husariancom
 - Fixed Databento price precision truncation for fractional tick sizes (#3696), thanks @pandashark
+- Fixed Deribit cancel event lost during WebSocket reconnection gap when `user.orders` subscription update never arrives
+- Fixed Deribit duplicate `OrderCanceled` events when cancel RPC response and `user.orders` subscription both emit
+- Fixed Deribit `GenerateOrderStatusReport` unable to find closed orders when only `client_order_id` is provided
+- Fixed Deribit `next_8_utc` GTD expiry calculation panicking on edge-case timestamps outside nanosecond range
+- Fixed Deribit historical trade pagination dropping trades when >1000 share a millisecond boundary
+- Fixed Deribit late-listed instruments not propagating to HTTP and WebSocket handler caches
+- Fixed Deribit `request_book_snapshot` silently using default 8/8 precision when instrument not in cache
+- Fixed Deribit `request_bars` ignoring `limit` parameter
+- Fixed Deribit `request_forward_prices` ignoring request `client_id` override
+- Fixed Deribit `reset()` leaking stream tasks by replacing cancellation token without canceling the old one
+- Fixed Deribit `send_auth_request` silently dropping serialization and channel send errors
+- Fixed Deribit `send_subscribe`/`send_unsubscribe` leaving subscription state wedged on command send failure
+- Fixed Deribit `VenueOrderId` comparison via unnecessary string conversion in fill report filtering
+- Fixed Deribit WebSocket `connect()` not clearing subscription state for manual disconnect/reconnect cycles
 - Fixed dYdX WebSocket handler repeatedly emitting `NewInstrumentDiscovered` for uncached instruments on every `v4_markets` update
 - Fixed Interactive Brokers docs `request_ticks` API and add contract example (#3699), thanks @faysou
 - Fixed Interactive Brokers live-session synchronization and reconciliation (#3715), thanks @faysou
@@ -87,6 +102,7 @@ Released on TBD (UTC).
 - Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
 
 ### Internal Improvements
+- Refactored Deribit trade pagination into `TradePaginator` with dedup and cursor logic shared across public trades and fill reports
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
 - Added `BINANCE_GTX_ORDER_REJECT_CODE` and `BINANCE_SPOT_POST_ONLY_REJECT_MSG` constants for reliable post-only rejection detection in Rust
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
