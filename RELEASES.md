@@ -109,6 +109,7 @@ Released on TBD (UTC).
 - Fixed OKX `connect()` not passing `instrument_families` for OPTION instrument requests (HTTP 400 from OKX API)
 - Fixed OKX `base_url_ws` ignored for private and business WebSocket channels (#3727), thanks for reporting @Stamppot82
 - Fixed Polymarket WebSocket initial vs incremental subscribe (#3717), thanks @Javdu10
+- Fixed Polymarket cancel request silently dropped when `venue_order_id` not yet available, causing order to remain open until next reconciliation (Python and Rust)
 - Fixed Tardis data client CTRL+C not responding due to signal starvation in `LiveNode` event loop
 - Fixed Tardis data client `stop()`/`disconnect()` lifecycle leaving tasks alive or `is_connected` stale
 - Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
