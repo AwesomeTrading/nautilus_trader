@@ -96,6 +96,7 @@ Released on TBD (UTC).
 - Fixed Binance Rust WS trading request-response race condition where fast rejections arrived before pending request registration
 - Fixed Binance Rust WS trading `OrderRejected` DashMap deadlock when `cleanup_terminal` ran while holding a read guard
 - Fixed Binance Spot Rust `connect()` not waiting for WS session authentication before signaling connected
+- Fixed Bybit demo exec client failing with error 10001 when `/v5/account/fee-rate` is unavailable (#3742), thanks for reporting @jindrichsirucek
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
 - Fixed OKX duplicate fills after WebSocket reconnect when replayed messages have the same `trade_id`
 - Fixed OKX HTTP algo order helpers ignoring per-item `sCode`, treating venue rejections as success
