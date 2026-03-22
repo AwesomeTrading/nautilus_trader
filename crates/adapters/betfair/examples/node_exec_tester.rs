@@ -114,7 +114,6 @@ async fn main() -> anyhow::Result<()> {
     // Use a BSP market-on-close order so ExecTester can still submit one order on start.
     tester_config.open_position_time_in_force = TimeInForce::AtTheClose;
     tester_config.base.external_order_claims = Some(vec![instrument_id]);
-    tester_config.base.use_uuid_client_order_ids = true;
 
     let tester = ExecTester::new(tester_config);
 

@@ -120,7 +120,6 @@ Released on TBD (UTC).
 - Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
 
 ### Internal Improvements
-- Refactored Deribit trade pagination into `TradePaginator` with dedup and cursor logic shared across public trades and fill reports
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
 - Added `BINANCE_GTX_ORDER_REJECT_CODE` and `BINANCE_SPOT_POST_ONLY_REJECT_MSG` constants for reliable post-only rejection detection in Rust
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
@@ -138,6 +137,7 @@ Released on TBD (UTC).
 - Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
 - Moved cache purge timers to base `ExecutionEngine` in Python
 - Refactored computation of greeks (#3691), thanks @faysou
+- Refactored Deribit trade pagination into `TradePaginator` with dedup and cursor logic shared across public trades and fill reports
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Refactored Tardis adapter module organization to align with adapter spec (`common/`, `machine/cache.rs`)
 - Refactored Tardis `TardisDataClient` with `Credential::resolve()`, centralized URL resolution, and `AHashMap`

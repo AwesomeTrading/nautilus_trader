@@ -87,9 +87,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tester_config.base.external_order_claims = Some(vec![instrument_id]);
 
-    // Use UUIDs for unique client order IDs
-    tester_config.base.use_uuid_client_order_ids = true;
-
     let tester = ExecTester::new(tester_config);
 
     node.add_strategy(tester)?;

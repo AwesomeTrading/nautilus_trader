@@ -119,7 +119,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_test_reject_post_only(true)
     .with_log_data(false);
 
-    // Use UUIDs for unique client order IDs across restarts
+    tester_config.base.external_order_claims = Some(vec![instrument_id]);
+    // Kraken truncates non-UUID client order IDs to 18 chars,
+    // which can cause collisions across sessions at the same time of day.
     tester_config.base.use_uuid_client_order_ids = true;
 
     let tester = ExecTester::new(tester_config);

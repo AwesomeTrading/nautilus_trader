@@ -87,9 +87,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_cancel_orders_on_stop(true)
     .with_close_positions_on_stop(true);
 
-    // Use UUIDs for unique client order IDs across restarts
-    tester_config.base.use_uuid_client_order_ids = true;
-
     tester_config.base.external_order_claims = Some(vec![instrument_id]);
     tester_config.use_post_only = true;
 

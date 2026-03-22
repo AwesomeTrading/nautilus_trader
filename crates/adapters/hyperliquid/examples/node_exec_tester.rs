@@ -93,8 +93,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tester_config.base.external_order_claims = Some(vec![instrument_id]);
 
-    // Use UUIDs for unique client order IDs across restarts
-    tester_config.base.use_uuid_client_order_ids = true;
     // Hyperliquid supports hyphens in client order IDs (they're hashed to cloid)
     tester_config.base.use_hyphens_in_client_order_ids = true;
 

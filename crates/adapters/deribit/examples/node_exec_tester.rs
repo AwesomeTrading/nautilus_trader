@@ -93,8 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_use_post_only(true)
     .with_log_data(false);
 
-    // Use UUIDs for unique client order IDs across restarts
-    tester_config.base.use_uuid_client_order_ids = true;
+    tester_config.base.external_order_claims = Some(vec![instrument_id]);
 
     let tester = ExecTester::new(tester_config);
 
