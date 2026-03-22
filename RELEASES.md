@@ -62,6 +62,7 @@ Released on TBD (UTC).
 - Fixed Sandbox `RefCell` re-entrancy panic when submitting orders through `ExecutionEngine` in async runner (#3732), thanks for reporting @linimin
 - Fixed triggered stop orders remaining in matching core after full fill, causing repeated duplicate fill log messages (#3741), thanks for reporting @linimin
 - Fixed matching engine GTD order expiry running after fills, allowing expired orders to fill before being expired
+- Fixed `Order::calculate_overfill` emitting false `Quantity` saturation warnings during normal partial fills (#3746), thanks for reporting @linimin
 - Fixed Sandbox reconciliation missing `account_id` (#3705), thanks for reporting @eliotOrderson
 - Fixed Rust `Portfolio` account-scoped `net_exposure`, `net_exposures`, and balance updates in multi-account mode
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
@@ -160,6 +161,7 @@ Released on TBD (UTC).
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
 - Added OKX to adapter support tables in Options and Greeks concept guides
 - Added option greeks test cases (TC-D62, TC-D63) with config examples to the data testing spec
+- Added test style guidance against log capture assertions in developer testing guide
 - Rewrote Live Trading concept guide for accuracy (reconciliation, periodic timers, lookback windows)
 - Rewrote Custom Data architecture docs for two-mode (Rust/Python) registration
 - Improved Value Types concept guide with full arithmetic operator and unary operation docs
