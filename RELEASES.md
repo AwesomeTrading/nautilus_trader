@@ -60,6 +60,8 @@ Released on TBD (UTC).
 - Fixed backtest analyzer to include position snapshots in Rust (#3710), thanks @necofx
 - Fixed `make_dict_serializer` incompatible with instance-method `to_dict` for `@customdataclass` types (#3722), thanks for reporting @Lacleman-trading
 - Fixed Sandbox `RefCell` re-entrancy panic when submitting orders through `ExecutionEngine` in async runner (#3732), thanks for reporting @linimin
+- Fixed triggered stop orders remaining in matching core after full fill, causing repeated duplicate fill log messages (#3741), thanks for reporting @linimin
+- Fixed matching engine GTD order expiry running after fills, allowing expired orders to fill before being expired
 - Fixed Sandbox reconciliation missing `account_id` (#3705), thanks for reporting @eliotOrderson
 - Fixed Rust `Portfolio` account-scoped `net_exposure`, `net_exposures`, and balance updates in multi-account mode
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
