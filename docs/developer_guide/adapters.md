@@ -200,6 +200,29 @@ for fixtures, providing a single place for cross-cutting pieces.
 When an adapter has multiple environments or product categories, add a dedicated `common::urls` helper so
 REST/WebSocket base URLs stay in sync with the Python layer.
 
+### Symbol normalization (`common/symbol.rs`)
+
+When a venue uses a different symbol format than Nautilus `InstrumentId`, place bidirectional
+conversion helpers in `common/symbol.rs`. Two functions form the standard interface:
+
+- `format_instrument_id(venue_symbol, product_type)` converts a venue symbol string to a
+  Nautilus `InstrumentId`, appending or transforming product-type suffixes as needed
+  (e.g., `"BTCUSDT"` + `Linear` becomes `"BTCUSDT-LINEAR.BYBIT"`).
+- `format_venue_symbol(instrument_id)` strips Nautilus suffixes to recover the venue-native
+  symbol for API calls.
+
+Common patterns across adapters:
+
+- **Suffix-based product types**: Bybit appends `-SPOT`, `-LINEAR`, `-INVERSE`, `-OPTION`.
+  A `BybitSymbol` wrapper validates the suffix and normalizes to uppercase on construction.
+- **Implicit product mapping**: Binance USD-M futures append `-PERP` at the Nautilus layer
+  while COIN-M keeps the venue's existing `_PERP` suffix.
+- **Case normalization**: Convert to uppercase on input when venues are case-insensitive.
+- **`Ustr` interning**: Store normalized symbols as `Ustr` for zero-cost comparison.
+
+For venues where the raw symbol maps 1:1 to an `InstrumentId` (no suffix gymnastics), inline
+helpers in `common/parse.rs` are sufficient and a dedicated `symbol.rs` is not needed.
+
 ### URL resolution
 
 Define URL constants and resolution functions in `common/urls.rs`:
@@ -346,6 +369,32 @@ thread-safe access across clones.
 Store shared fixtures and payload loaders in `src/common/testing.rs` for use across HTTP and WebSocket unit tests.
 This keeps `#[cfg(test)]` helpers out of production modules and encourages reuse.
 
+### Instrument status diffing (`common/status.rs`)
+
+When a data client polls instrument status via REST, place the diff logic in `common/status.rs`
+rather than inlining it in the data client. The standard function signature is:
+
+```rust
+pub fn diff_and_emit_statuses(
+    new_statuses: &AHashMap<InstrumentId, MarketStatusAction>,
+    cached_statuses: &mut AHashMap<InstrumentId, MarketStatusAction>,
+    subscriptions: Option<&DashSet<InstrumentId>>,
+    sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
+    ts_event: UnixNanos,
+    ts_init: UnixNanos,
+)
+```
+
+The function compares each entry in `new_statuses` against `cached_statuses`, emitting an
+`InstrumentStatus` event for any instrument whose `MarketStatusAction` changed. Instruments
+present in the cache but absent from the new snapshot are treated as removed and emit
+`NotAvailableForTrading`. The cache always reflects the full API state.
+
+Pass `subscriptions` as `Some(&set)` to restrict emissions to subscribed instruments, or
+`None` to emit all changes unconditionally. The data client stores the cache in an
+`Arc<RwLock<AHashMap<InstrumentId, MarketStatusAction>>>` and calls this function on each
+poll cycle.
+
 ### Factory module (`factories.rs`)
 
 Complex adapters may define a `factories.rs` module for converting venue data to Nautilus types.
@@ -376,6 +425,29 @@ race conditions with reconciliation and strategy startup. The platform waits for
 signal connected before running reconciliation or starting strategies, so all initialization must
 complete within `connect()`.
 
+#### Data event emission
+
+Data clients emit events to the platform through an unbounded channel obtained at
+construction:
+
+```rust
+let data_sender = get_data_event_sender();
+```
+
+The `DataEvent` enum carries all data types the client produces:
+
+| Variant                       | Usage                                                 |
+|-------------------------------|-------------------------------------------------------|
+| `DataEvent::Instrument`       | Instrument definitions during bootstrap and updates.  |
+| `DataEvent::InstrumentStatus` | Market status changes from polling or WS streams.     |
+| `DataEvent::Data`             | Market data (trades, quotes, book deltas, bars).      |
+| `DataEvent::Response`         | Responses to historical data requests.                |
+| `DataEvent::FundingRate`      | Funding rate updates for derivatives.                 |
+
+Send events with `self.data_sender.send(DataEvent::Instrument(instrument))`. Log warnings
+on send failure but do not propagate the error since a closed receiver means the system
+is shutting down. Clone the sender for spawned tasks that emit data from async work.
+
 #### Data client
 
 1. **Fetch instruments via REST** - call `bootstrap_instruments()` or equivalent.
@@ -397,14 +469,20 @@ async fn connect(&mut self) -> anyhow::Result<()> {
 
 #### Execution client
 
-1. **Initialize instruments** - fetch via REST if not already cached. Cache to HTTP, WebSocket,
-   and broadcaster clients.
+1. **Initialize instruments** - call `ensure_instruments_initialized_async()` which checks
+   `self.core.instruments_initialized()` and returns early if instruments are already cached.
+   Otherwise it fetches instruments via REST and caches them to the HTTP client, WebSocket
+   client, and any broadcaster clients.
 2. **Connect WebSocket** - establish the private streaming connection.
 3. **Subscribe to channels** - orders, executions, positions, wallet/margin.
 4. **Start WebSocket stream handler** - begin processing incoming messages.
-5. **Fetch account state** - request account state via REST and emit via `emitter.send_account_state()`.
-6. **Await account registered** - poll the cache until the account is registered (30s timeout).
-   This ensures the portfolio can process orders during reconciliation.
+5. **Fetch account state** - call `refresh_account_state()` which requests balances and
+   margins via REST, builds an `AccountState`, and emits it through the
+   `ExecutionEventEmitter`.
+6. **Await account registered** - call `await_account_registered(timeout_secs)` which polls
+   `self.core.cache().account(&account_id)` at 10ms intervals until the account appears or
+   the timeout expires. This step blocks connect so the portfolio can process orders during
+   reconciliation.
 7. **Signal connected** - call `self.core.set_connected()`.
 
 ```rust
@@ -423,8 +501,15 @@ async fn connect(&mut self) -> anyhow::Result<()> {
 }
 ```
 
-The `await_account_registered` method polls `self.core.cache().account(&account_id)` at 10ms
-intervals until the account appears or the timeout expires.
+#### Account state emission
+
+The `ExecutionEventEmitter` provides two methods for emitting account state:
+
+- `emit_account_state(balances, margins, reported, ts_event)` builds an `AccountState`
+  from raw parameters using the internal `OrderEventFactory`, then dispatches it. Use
+  this when the adapter has individual balance and margin values to combine.
+- `send_account_state(state)` dispatches a pre-built `AccountState`. Use this when the
+  adapter already has a fully constructed state from parsing an HTTP or WebSocket payload.
 
 ## HTTP client patterns
 
@@ -752,7 +837,23 @@ Authentication state is managed through events:
 
 - Handler processes `Login` response → **returns** `{Venue}WsMessage::Authenticated` immediately.
 - Client receives event → updates local auth state → proceeds with subscriptions.
-- `AuthTracker` may be shared via `Arc` for state queries, but handler returns events directly (no blocking).
+- `AuthTracker` (from `nautilus_network::websocket::auth`) tracks auth state across threads.
+
+The `AuthTracker` struct from `nautilus_network` provides thread-safe authentication state:
+
+```rust
+pub struct AuthTracker {
+    tx: Arc<Mutex<Option<AuthResultSender>>>,
+    authenticated: Arc<AtomicBool>,
+}
+```
+
+`AuthTracker` is internally `Arc`-based, so cloning shares state. Both client and handler
+store `auth_tracker: AuthTracker` and receive a `.clone()` of the same instance. The tracker
+exposes a four-method lifecycle: `begin()` starts an attempt and returns a one-shot receiver,
+`succeed()` sets the authenticated flag and notifies the receiver, `fail(message)` clears
+the flag with an error, and `invalidate()` clears the flag on disconnect. Downstream
+consumers query `is_authenticated()` for lock-free reads via the internal `AtomicBool`.
 
 **Note**: The `Authenticated` message is consumed in the client's spawn loop for reconnection
 flow coordination and is not forwarded to downstream consumers (data/execution clients).
@@ -1080,6 +1181,29 @@ The `dispatch_ws_message()` free function in the same module routes `{Venue}WsMe
 variants to the appropriate order event builders, using `WsDispatchState` for dedup
 and `OrderIdentity` for tracked-vs-external classification.
 
+#### Cross-source fill deduplication
+
+`WsDispatchState` prevents duplicate lifecycle events within a single stream. When an
+adapter receives fills from multiple sources (WebSocket user data and HTTP reconciliation),
+a separate trade-ID-level dedup is needed to prevent the same fill from being emitted twice.
+
+The `BoundedDedup<T>` pattern addresses this with a fixed-capacity set backed by a
+`VecDeque` for insertion order and an `AHashSet` for O(1) lookup. When the set reaches
+capacity, the oldest entry is evicted (FIFO). The `insert()` method returns `true` if the
+value was already present, signaling a duplicate:
+
+```rust
+struct BoundedDedup<T> {
+    order: VecDeque<T>,
+    set: AHashSet<T>,
+    capacity: usize,
+}
+```
+
+Use this in the execution client to track trade IDs (typically as `(Ustr, i64)` tuples
+of symbol and trade ID). A capacity of 10,000 provides sufficient coverage for most
+venues without unbounded memory growth.
+
 ### Error handling
 
 #### Client-side error propagation
@@ -1353,6 +1477,27 @@ Split the WebSocket module when the venue has:
 Do not split when a single connection handles all message types through channel-based
 multiplexing (the common pattern for OKX, Bybit, and similar venues).
 
+### Multi-product WebSocket management
+
+Some venues use the same WebSocket protocol for all product types but serve them on
+separate endpoints (e.g., Bybit provides distinct URLs for Linear, Spot, and Inverse).
+In this case the data client creates one WebSocket client per product type and manages
+them in a map:
+
+```rust
+pub struct MyDataClient {
+    ws_clients: AHashMap<MyProductType, MyWebSocketClient>,
+}
+```
+
+Each client follows the same two-layer client/handler pattern. Subscription routing
+inspects the instrument's product type to select the correct client. On connect, the
+data client iterates the map to connect all clients; on disconnect, it closes them all.
+
+This differs from the split architecture (`streams/` vs `trading/`) which separates by
+protocol or purpose. Multi-product management separates by product type while sharing
+the same protocol.
+
 ## Modeling venue payloads
 
 Use the following conventions when mirroring upstream schemas in Rust.
@@ -1368,6 +1513,59 @@ Use the following conventions when mirroring upstream schemas in Rust.
 - Define streaming payload types in `src/websocket/messages.rs`, giving each venue topic a struct or enum that mirrors the upstream JSON.
 - Apply the same naming guidance as REST models: rely on blanket casing renames and keep field names aligned with the venue unless syntax forces a change; consider serde helpers such as `#[serde(tag = "op")]` or `#[serde(flatten)]` and document the choice.
 - Note any intentional deviations from the upstream schema in code comments and module docs so other contributors can follow the mapping quickly.
+
+---
+
+## Task management
+
+### Spawning async tasks (`spawn_task`)
+
+Data and execution clients spawn background tasks for WebSocket stream processing,
+periodic polling, and order submission. Wrap all spawned work with a `spawn_task()`
+method that provides error logging and handle tracking:
+
+```rust
+fn spawn_task<F>(&self, description: &'static str, fut: F)
+where
+    F: Future<Output = anyhow::Result<()>> + Send + 'static,
+{
+    let runtime = get_runtime();
+    let handle = runtime.spawn(async move {
+        if let Err(e) = fut.await {
+            log::warn!("{description} failed: {e:?}");
+        }
+    });
+
+    let mut tasks = self.pending_tasks.lock().expect(MUTEX_POISONED);
+    tasks.retain(|handle| !handle.is_finished());
+    tasks.push(handle);
+}
+```
+
+Store task handles in `pending_tasks: Mutex<Vec<JoinHandle<()>>>`. Each call to
+`spawn_task` prunes finished handles before pushing the new one, preventing unbounded
+growth. On disconnect, abort all remaining handles.
+
+### Graceful shutdown with `CancellationToken`
+
+Use `tokio_util::sync::CancellationToken` to coordinate shutdown across multiple spawned
+tasks. The client creates a token at construction and passes clones to each spawned task.
+Tasks select on the token alongside their primary work:
+
+```rust
+tokio::select! {
+    msg = stream.next() => { /* process */ }
+    _ = cancellation_token.cancelled() => { break; }
+}
+```
+
+On disconnect, the client cancels the token, which signals all tasks to exit their loops.
+This complements the handler-level `signal: Arc<AtomicBool>` pattern: `AtomicBool` gates
+the handler's I/O loop, while `CancellationToken` coordinates shutdown of tasks the client
+spawned outside the handler (polling loops, reconciliation tasks, stream consumers).
+
+Reset the token on reconnect by replacing it with a fresh `CancellationToken::new()` so
+subsequent tasks are not born cancelled.
 
 ---
 
