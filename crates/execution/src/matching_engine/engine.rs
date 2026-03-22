@@ -13,10 +13,6 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-// Under development
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 use std::{
     cell::RefCell,
     cmp::min,
@@ -2032,7 +2028,7 @@ impl OrderMatchingEngine {
     }
 
     /// Processes a cancel all orders command for an instrument.
-    pub fn process_cancel_all(&mut self, command: &CancelAllOrders, account_id: AccountId) {
+    pub fn process_cancel_all(&mut self, command: &CancelAllOrders, _account_id: AccountId) {
         let instrument_id = command.instrument_id;
         let open_orders = self
             .cache
@@ -3343,7 +3339,7 @@ impl OrderMatchingEngine {
     ) {
         if order.time_in_force() == TimeInForce::Fok {
             let mut total_size = Quantity::zero(order.quantity().precision);
-            for (fill_px, fill_qty) in fills {
+            for (_fill_px, fill_qty) in fills {
                 total_size = total_size.add(*fill_qty);
             }
 
@@ -3492,7 +3488,7 @@ impl OrderMatchingEngine {
         last_qty: Quantity,
         liquidity_side: LiquiditySide,
         venue_position_id: Option<PositionId>,
-        position: Option<&Position>,
+        _position: Option<&Position>,
     ) {
         self.check_size_precision(last_qty.precision, "fill quantity")
             .unwrap();
