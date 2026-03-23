@@ -65,22 +65,22 @@ class BybitApiKeyPermissions: ...
 class BybitDataClientConfig:
     def __init__(
         self,
-        product_types: typing.Sequence[BybitProductType] | None = ...,
-        environment: BybitEnvironment | None = ...,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        base_url_http: str | None = ...,
-        base_url_ws_public: str | None = ...,
-        base_url_ws_private: str | None = ...,
-        http_proxy_url: str | None = ...,
-        http_timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_initial_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        heartbeat_interval_secs: int | None = ...,
-        recv_window_ms: int | None = ...,
-        update_instruments_interval_mins: int | None = ...,
-        instrument_status_poll_secs: int | None = ...,
+        product_types: typing.Sequence[BybitProductType] | None = None,
+        environment: BybitEnvironment | None = None,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        base_url_http: str | None = None,
+        base_url_ws_public: str | None = None,
+        base_url_ws_private: str | None = None,
+        http_proxy_url: str | None = None,
+        http_timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_initial_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        heartbeat_interval_secs: int | None = None,
+        recv_window_ms: int | None = None,
+        update_instruments_interval_mins: int | None = None,
+        instrument_status_poll_secs: int | None = None,
     ) -> None: ...
 
 @typing.final
@@ -92,23 +92,23 @@ class BybitDataClientFactory:
 class BybitExecClientConfig:
     def __init__(
         self,
-        product_types: typing.Sequence[BybitProductType] | None = ...,
-        environment: BybitEnvironment | None = ...,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        base_url_http: str | None = ...,
-        base_url_ws_private: str | None = ...,
-        base_url_ws_trade: str | None = ...,
-        http_proxy_url: str | None = ...,
-        http_timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_initial_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        heartbeat_interval_secs: int | None = ...,
-        recv_window_ms: int | None = ...,
-        account_id: model.AccountId | None = ...,
-        use_spot_position_reports: bool | None = ...,
-        margin_mode: BybitMarginMode | None = ...,
+        product_types: typing.Sequence[BybitProductType] | None = None,
+        environment: BybitEnvironment | None = None,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        base_url_http: str | None = None,
+        base_url_ws_private: str | None = None,
+        base_url_ws_trade: str | None = None,
+        http_proxy_url: str | None = None,
+        http_timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_initial_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        heartbeat_interval_secs: int | None = None,
+        recv_window_ms: int | None = None,
+        account_id: model.AccountId | None = None,
+        use_spot_position_reports: bool | None = None,
+        margin_mode: BybitMarginMode | None = None,
     ) -> None: ...
 
 @typing.final
@@ -123,17 +123,17 @@ class BybitFeeRate: ...
 class BybitHttpClient:
     def __init__(
         self,
-        api_key: str | None,
-        api_secret: str | None,
-        base_url: str | None,
-        demo: bool,
-        testnet: bool,
-        timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        recv_window_ms: int | None = ...,
-        proxy_url: str | None = ...,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        base_url: str | None = None,
+        demo: bool = False,
+        testnet: bool = False,
+        timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        recv_window_ms: int | None = None,
+        proxy_url: str | None = None,
     ) -> None: ...
     @property
     def base_url(self) -> str: ...
@@ -344,17 +344,17 @@ class BybitOrderCursorList: ...
 class BybitRawHttpClient:
     def __init__(
         self,
-        api_key: str | None,
-        api_secret: str | None,
-        base_url: str | None,
-        demo: bool,
-        testnet: bool,
-        timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        recv_window_ms: int | None = ...,
-        proxy_url: str | None = ...,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        base_url: str | None = None,
+        demo: bool = False,
+        testnet: bool = False,
+        timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        recv_window_ms: int | None = None,
+        proxy_url: str | None = None,
     ) -> None: ...
     @property
     def base_url(self) -> str: ...
@@ -389,9 +389,9 @@ class BybitTickersParams:
     def __init__(
         self,
         category: BybitProductType,
-        symbol: str | None = ...,
-        base_coin: str | None = ...,
-        exp_date: str | None = ...,
+        symbol: str | None = None,
+        base_coin: str | None = None,
+        exp_date: str | None = None,
     ) -> None: ...
 
 @typing.final
@@ -400,24 +400,24 @@ class BybitWebSocketClient:
     def new_public(
         product_type: BybitProductType,
         environment: BybitEnvironment,
-        url: str | None = ...,
-        heartbeat: int | None = ...,
+        url: str | None = None,
+        heartbeat: int | None = None,
     ) -> BybitWebSocketClient: ...
     @staticmethod
     def new_private(
         environment: BybitEnvironment,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        url: str | None = ...,
-        heartbeat: int | None = ...,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        url: str | None = None,
+        heartbeat: int | None = None,
     ) -> BybitWebSocketClient: ...
     @staticmethod
     def new_trade(
         environment: BybitEnvironment,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        url: str | None = ...,
-        heartbeat: int | None = ...,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        url: str | None = None,
+        heartbeat: int | None = None,
     ) -> BybitWebSocketClient: ...
     @property
     def api_key_masked(self) -> str | None: ...
@@ -501,15 +501,15 @@ class BybitWebSocketClient:
         order_side: model.OrderSide,
         order_type: model.OrderType,
         quantity: model.Quantity,
-        is_quote_quantity: bool,
-        time_in_force: model.TimeInForce | None,
-        price: model.Price | None,
-        trigger_price: model.Price | None,
-        post_only: bool | None,
-        reduce_only: bool | None,
-        is_leverage: bool,
-        take_profit: model.Price | None = ...,
-        stop_loss: model.Price | None = ...,
+        is_quote_quantity: bool = False,
+        time_in_force: model.TimeInForce | None = None,
+        price: model.Price | None = None,
+        trigger_price: model.Price | None = None,
+        post_only: bool | None = None,
+        reduce_only: bool | None = None,
+        is_leverage: bool = False,
+        take_profit: model.Price | None = None,
+        stop_loss: model.Price | None = None,
     ) -> BybitWsPlaceOrderParams: ...
     def batch_cancel_orders(
         self,

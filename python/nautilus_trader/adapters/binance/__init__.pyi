@@ -19,13 +19,13 @@ __all__ = [
 class BinanceDataClientConfig:
     def __init__(
         self,
-        product_types: typing.Sequence[BinanceProductType] | None = ...,
-        environment: BinanceEnvironment | None = ...,
-        base_url_http: str | None = ...,
-        base_url_ws: str | None = ...,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        instrument_status_poll_secs: int | None = ...,
+        product_types: typing.Sequence[BinanceProductType] | None = None,
+        environment: BinanceEnvironment | None = None,
+        base_url_http: str | None = None,
+        base_url_ws: str | None = None,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        instrument_status_poll_secs: int | None = None,
     ) -> None: ...
 
 @typing.final
@@ -39,14 +39,14 @@ class BinanceExecClientConfig:
         self,
         trader_id: model.TraderId,
         account_id: model.AccountId,
-        product_types: typing.Sequence[BinanceProductType] | None,
-        environment: BinanceEnvironment | None,
-        base_url_http: str | None,
-        base_url_ws: str | None,
-        base_url_ws_trading: str | None,
-        use_ws_trading: bool,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
+        product_types: typing.Sequence[BinanceProductType] | None = None,
+        environment: BinanceEnvironment | None = None,
+        base_url_http: str | None = None,
+        base_url_ws: str | None = None,
+        base_url_ws_trading: str | None = None,
+        use_ws_trading: bool = True,
+        api_key: str | None = None,
+        api_secret: str | None = None,
     ) -> None: ...
 
 @typing.final

@@ -30,69 +30,69 @@ __all__ = [
 class AxDataClientConfig:
     def __init__(
         self,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        is_sandbox: bool | None = ...,
-        base_url_http: str | None = ...,
-        base_url_ws_public: str | None = ...,
-        base_url_ws_private: str | None = ...,
-        http_proxy_url: str | None = ...,
-        ws_proxy_url: str | None = ...,
-        http_timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_initial_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        heartbeat_interval_secs: int | None = ...,
-        recv_window_ms: int | None = ...,
-        update_instruments_interval_mins: int | None = ...,
-        funding_rate_poll_interval_mins: int | None = ...,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        is_sandbox: bool | None = None,
+        base_url_http: str | None = None,
+        base_url_ws_public: str | None = None,
+        base_url_ws_private: str | None = None,
+        http_proxy_url: str | None = None,
+        ws_proxy_url: str | None = None,
+        http_timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_initial_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        heartbeat_interval_secs: int | None = None,
+        recv_window_ms: int | None = None,
+        update_instruments_interval_mins: int | None = None,
+        funding_rate_poll_interval_mins: int | None = None,
     ) -> None: ...
 
 @typing.final
 class AxExecClientConfig:
     def __init__(
         self,
-        trader_id: model.TraderId | None = ...,
-        account_id: model.AccountId | None = ...,
-        api_key: str | None = ...,
-        api_secret: str | None = ...,
-        is_sandbox: bool | None = ...,
-        base_url_http: str | None = ...,
-        base_url_orders: str | None = ...,
-        base_url_ws_private: str | None = ...,
-        http_proxy_url: str | None = ...,
-        ws_proxy_url: str | None = ...,
-        http_timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_initial_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        heartbeat_interval_secs: int | None = ...,
-        recv_window_ms: int | None = ...,
+        trader_id: model.TraderId | None = None,
+        account_id: model.AccountId | None = None,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+        is_sandbox: bool | None = None,
+        base_url_http: str | None = None,
+        base_url_orders: str | None = None,
+        base_url_ws_private: str | None = None,
+        http_proxy_url: str | None = None,
+        ws_proxy_url: str | None = None,
+        http_timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_initial_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        heartbeat_interval_secs: int | None = None,
+        recv_window_ms: int | None = None,
     ) -> None: ...
 
 @typing.final
 class AxHttpClient:
     def __init__(
         self,
-        base_url: str | None = ...,
-        orders_base_url: str | None = ...,
-        timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        proxy_url: str | None = ...,
+        base_url: str | None = None,
+        orders_base_url: str | None = None,
+        timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        proxy_url: str | None = None,
     ) -> None: ...
     @staticmethod
     def with_credentials(
         api_key: str,
         api_secret: str,
-        base_url: str | None = ...,
-        orders_base_url: str | None = ...,
-        timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        proxy_url: str | None = ...,
+        base_url: str | None = None,
+        orders_base_url: str | None = None,
+        timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        proxy_url: str | None = None,
     ) -> AxHttpClient: ...
     @property
     def base_url(self) -> str: ...
@@ -146,9 +146,9 @@ class AxHttpClient:
 
 @typing.final
 class AxMdWebSocketClient:
-    def __init__(self, url: str, auth_token: str, heartbeat: int | None = ...) -> None: ...
+    def __init__(self, url: str, auth_token: str, heartbeat: int | None = None) -> None: ...
     @staticmethod
-    def without_auth(url: str, heartbeat: int | None = ...) -> AxMdWebSocketClient: ...
+    def without_auth(url: str, heartbeat: int | None = None) -> AxMdWebSocketClient: ...
     @property
     def url(self) -> str: ...
     def is_active(self) -> bool: ...
@@ -177,7 +177,7 @@ class AxOrdersWebSocketClient:
         url: str,
         account_id: model.AccountId,
         trader_id: model.TraderId,
-        heartbeat: int | None = ...,
+        heartbeat: int | None = None,
     ) -> None: ...
     @property
     def url(self) -> str: ...

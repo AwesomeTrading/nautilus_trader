@@ -30,14 +30,14 @@ __all__ = [
 class HyperliquidDataClientConfig:
     def __init__(
         self,
-        is_testnet: bool | None = ...,
-        private_key: str | None = ...,
-        base_url_ws: str | None = ...,
-        base_url_http: str | None = ...,
-        http_proxy_url: str | None = ...,
-        http_timeout_secs: int | None = ...,
-        ws_timeout_secs: int | None = ...,
-        update_instruments_interval_mins: int | None = ...,
+        is_testnet: bool | None = None,
+        private_key: str | None = None,
+        base_url_ws: str | None = None,
+        base_url_http: str | None = None,
+        http_proxy_url: str | None = None,
+        http_timeout_secs: int | None = None,
+        ws_timeout_secs: int | None = None,
+        update_instruments_interval_mins: int | None = None,
     ) -> None: ...
 
 @typing.final
@@ -49,19 +49,19 @@ class HyperliquidDataClientFactory:
 class HyperliquidExecClientConfig:
     def __init__(
         self,
-        private_key: str | None = ...,
-        vault_address: str | None = ...,
-        account_address: str | None = ...,
-        is_testnet: bool | None = ...,
-        base_url_ws: str | None = ...,
-        base_url_http: str | None = ...,
-        base_url_exchange: str | None = ...,
-        http_proxy_url: str | None = ...,
-        http_timeout_secs: int | None = ...,
-        max_retries: int | None = ...,
-        retry_delay_initial_ms: int | None = ...,
-        retry_delay_max_ms: int | None = ...,
-        normalize_prices: bool | None = ...,
+        private_key: str | None = None,
+        vault_address: str | None = None,
+        account_address: str | None = None,
+        is_testnet: bool | None = None,
+        base_url_ws: str | None = None,
+        base_url_http: str | None = None,
+        base_url_exchange: str | None = None,
+        http_proxy_url: str | None = None,
+        http_timeout_secs: int | None = None,
+        max_retries: int | None = None,
+        retry_delay_initial_ms: int | None = None,
+        retry_delay_max_ms: int | None = None,
+        normalize_prices: bool | None = None,
     ) -> None: ...
 
 @typing.final
@@ -82,23 +82,23 @@ class HyperliquidExecutionClientFactory:
 class HyperliquidHttpClient:
     def __init__(
         self,
-        private_key: str | None,
-        vault_address: str | None,
-        account_address: str | None,
-        is_testnet: bool,
-        timeout_secs: int | None,
-        proxy_url: str | None,
-        normalize_prices: bool,
+        private_key: str | None = None,
+        vault_address: str | None = None,
+        account_address: str | None = None,
+        is_testnet: bool = False,
+        timeout_secs: int | None = None,
+        proxy_url: str | None = None,
+        normalize_prices: bool = True,
     ) -> None: ...
     @staticmethod
-    def from_env(is_testnet: bool) -> HyperliquidHttpClient: ...
+    def from_env(is_testnet: bool = False) -> HyperliquidHttpClient: ...
     @staticmethod
     def from_credentials(
         private_key: str,
-        vault_address: str | None,
-        is_testnet: bool,
-        timeout_secs: int | None = ...,
-        proxy_url: str | None = ...,
+        vault_address: str | None = None,
+        is_testnet: bool = False,
+        timeout_secs: int | None = None,
+        proxy_url: str | None = None,
     ) -> HyperliquidHttpClient: ...
     def cache_instrument(self, instrument: typing.Any) -> None: ...
     def set_account_id(self, account_id: str) -> None: ...
@@ -173,7 +173,9 @@ class HyperliquidRawHttpClient: ...
 
 @typing.final
 class HyperliquidWebSocketClient:
-    def __init__(self, url: str | None, testnet: bool, account_id: str | None = ...) -> None: ...
+    def __init__(
+        self, url: str | None = None, testnet: bool = False, account_id: str | None = None
+    ) -> None: ...
     @property
     def url(self) -> str: ...
     def is_active(self) -> bool: ...
@@ -288,4 +290,4 @@ def get_hyperliquid_http_base_url(is_testnet: bool) -> str: ...
 def get_hyperliquid_ws_url(is_testnet: bool) -> str: ...
 def hyperliquid_cloid_from_client_order_id(client_order_id: model.ClientOrderId) -> str: ...
 def hyperliquid_product_type_from_symbol(symbol: str) -> HyperliquidProductType: ...
-def revoke_hyperliquid_builder_fee(non_interactive: bool) -> bool: ...
+def revoke_hyperliquid_builder_fee(non_interactive: bool = False) -> bool: ...

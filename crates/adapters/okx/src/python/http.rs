@@ -886,6 +886,9 @@ impl OKXHttpClient {
 
     /// Cancels multiple algo orders via HTTP in a single request.
     ///
+    /// Items with non-zero `sCode` are logged as warnings but do not
+    /// fail the entire batch.
+    ///
     /// # References
     ///
     /// <https://www.okx.com/docs-v5/en/#order-book-trading-algo-trading-post-cancel-algo-order>
