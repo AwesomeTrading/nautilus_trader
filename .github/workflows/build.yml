@@ -198,9 +198,6 @@ jobs:
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
-      - name: Set compile jobs from cache state
-        run: bash scripts/ci/set-cargo-build-jobs.sh
-
       - name: Run Rust tests
         run: make cargo-test EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
@@ -252,7 +249,6 @@ jobs:
       BUILD_MODE: release
       CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-arm-py${{ matrix.python-version }}
       RUST_BACKTRACE: 1
-      CARGO_BUILD_JOBS: 1
     # yamllint disable rule:line-length
     services:
       redis:
@@ -398,9 +394,6 @@ jobs:
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
-      - name: Set compile jobs from cache state
-        run: bash scripts/ci/set-cargo-build-jobs.sh
-
       - name: Run Rust tests
         run: make cargo-test EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
@@ -412,7 +405,6 @@ jobs:
         id: build-wheel
         uses: ./.github/actions/common-wheel-build
         env:
-          CARGO_BUILD_JOBS: 1
           CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-wheel-py${{ matrix.python-version }}
           PARALLEL_BUILD: false
         with:
