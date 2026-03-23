@@ -37,13 +37,17 @@ use nautilus_model::{
 };
 use rust_decimal::Decimal;
 
-use super::messages::{
-    BybitWsAccountExecution, BybitWsAccountOrder, BybitWsAccountPosition, BybitWsAccountWallet,
-    BybitWsKline, BybitWsOrderbookDepthMsg, BybitWsTickerLinear, BybitWsTickerLinearMsg,
-    BybitWsTickerOptionMsg, BybitWsTrade,
+use super::{
+    enums::{BybitWsOperation, BybitWsPrivateChannel, BybitWsPublicChannel},
+    messages::{
+        BybitWsAccountExecution, BybitWsAccountOrder, BybitWsAccountPosition, BybitWsAccountWallet,
+        BybitWsAuthResponse, BybitWsFrame, BybitWsKline, BybitWsOrderResponse,
+        BybitWsOrderbookDepthMsg, BybitWsResponse, BybitWsSubscriptionMsg, BybitWsTickerLinear,
+        BybitWsTickerLinearMsg, BybitWsTickerOptionMsg, BybitWsTrade,
+    },
 };
 use crate::common::{
-    consts::{BYBIT_TOPIC_KLINE, BYBIT_VENUE},
+    consts::BYBIT_VENUE,
     enums::{
         BybitOrderStatus, BybitOrderType, BybitStopOrderType, BybitTimeInForce,
         BybitTriggerDirection,
@@ -53,6 +57,116 @@ use crate::common::{
         parse_quantity_with_precision,
     },
 };
+
+/// Classifies a parsed JSON value into a typed Bybit WebSocket frame.
+///
+/// Returns `Unknown(value)` if no specific type matches.
+pub fn parse_bybit_ws_frame(value: serde_json::Value) -> BybitWsFrame {
+    if let Some(op_val) = value.get("op") {
+        if let Ok(op) = serde_json::from_value::<BybitWsOperation>(op_val.clone())
+            && op == BybitWsOperation::Auth
+            && let Ok(auth) = serde_json::from_value::<BybitWsAuthResponse>(value.clone())
+        {
+            let is_success = auth.success.unwrap_or(false) || auth.ret_code.unwrap_or(-1) == 0;
+            if is_success {
+                return BybitWsFrame::Auth(auth);
+            }
+            let resp = BybitWsResponse {
+                op: Some(auth.op.clone()),
+                topic: None,
+                success: auth.success,
+                conn_id: auth.conn_id.clone(),
+                req_id: None,
+                ret_code: auth.ret_code,
+                ret_msg: auth.ret_msg,
+            };
+            return BybitWsFrame::ErrorResponse(resp);
+        }
+
+        if let Some(op_str) = op_val.as_str()
+            && op_str.starts_with("order.")
+        {
+            return serde_json::from_value::<BybitWsOrderResponse>(value.clone()).map_or_else(
+                |_| BybitWsFrame::Unknown(value),
+                BybitWsFrame::OrderResponse,
+            );
+        }
+    }
+
+    if let Some(success) = value.get("success").and_then(serde_json::Value::as_bool) {
+        if success {
+            return serde_json::from_value::<BybitWsSubscriptionMsg>(value.clone())
+                .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::Subscription);
+        }
+        return serde_json::from_value::<BybitWsResponse>(value.clone()).map_or_else(
+            |_| BybitWsFrame::Unknown(value),
+            BybitWsFrame::ErrorResponse,
+        );
+    }
+
+    if let Some(topic) = value.get("topic").and_then(serde_json::Value::as_str) {
+        if topic.starts_with(BybitWsPublicChannel::OrderBook.as_ref()) {
+            return serde_json::from_value(value.clone())
+                .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::Orderbook);
+        }
+
+        if topic.contains(BybitWsPublicChannel::PublicTrade.as_ref())
+            || topic.starts_with(BybitWsPublicChannel::Trade.as_ref())
+        {
+            return serde_json::from_value(value.clone())
+                .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::Trade);
+        }
+
+        if topic.starts_with(BybitWsPublicChannel::Kline.as_ref()) {
+            return serde_json::from_value(value.clone())
+                .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::Kline);
+        }
+
+        if topic.starts_with(BybitWsPublicChannel::Tickers.as_ref()) {
+            // Option symbols have 3+ hyphens: BTC-6JAN23-17500-C
+            let is_option = value
+                .get("data")
+                .and_then(|d| d.get("symbol"))
+                .and_then(|s| s.as_str())
+                .is_some_and(|symbol| symbol.contains('-') && symbol.matches('-').count() >= 3);
+
+            if is_option {
+                return serde_json::from_value(value.clone())
+                    .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::TickerOption);
+            }
+            return serde_json::from_value(value.clone())
+                .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::TickerLinear);
+        }
+
+        if topic.starts_with(BybitWsPrivateChannel::Order.as_ref()) {
+            return serde_json::from_value(value.clone())
+                .map_or_else(|_| BybitWsFrame::Unknown(value), BybitWsFrame::AccountOrder);
+        }
+
+        if topic.starts_with(BybitWsPrivateChannel::Execution.as_ref()) {
+            return serde_json::from_value(value.clone()).map_or_else(
+                |_| BybitWsFrame::Unknown(value),
+                BybitWsFrame::AccountExecution,
+            );
+        }
+
+        if topic.starts_with(BybitWsPrivateChannel::Wallet.as_ref()) {
+            return serde_json::from_value(value.clone()).map_or_else(
+                |_| BybitWsFrame::Unknown(value),
+                BybitWsFrame::AccountWallet,
+            );
+        }
+
+        if topic.starts_with(BybitWsPrivateChannel::Position.as_ref()) {
+            return serde_json::from_value(value.clone()).map_or_else(
+                |_| BybitWsFrame::Unknown(value),
+                BybitWsFrame::AccountPosition,
+            );
+        }
+    }
+
+    BybitWsFrame::Unknown(value)
+}
 
 /// Parses a Bybit WebSocket topic string into its components.
 ///
@@ -75,10 +189,11 @@ pub fn parse_topic(topic: &str) -> anyhow::Result<Vec<&str>> {
 ///
 /// Returns an error if the topic format is invalid.
 pub fn parse_kline_topic(topic: &str) -> anyhow::Result<(&str, &str)> {
+    let kline = BybitWsPublicChannel::Kline.as_ref();
     let parts = parse_topic(topic)?;
-    if parts.len() != 3 || parts[0] != BYBIT_TOPIC_KLINE {
+    if parts.len() != 3 || parts[0] != kline {
         anyhow::bail!(
-            "Invalid kline topic format: expected '{BYBIT_TOPIC_KLINE}.{{interval}}.{{symbol}}', was '{topic}'"
+            "Invalid kline topic format: expected '{kline}.{{interval}}.{{symbol}}', was '{topic}'"
         );
     }
     Ok((parts[1], parts[2]))

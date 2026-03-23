@@ -394,7 +394,6 @@ impl BybitWebSocketClient {
                         BybitWsMessage::Auth(_) => {
                             log::info!("WebSocket authenticated");
                         }
-                        _ => {}
                     }
                 }
             });

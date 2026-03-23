@@ -548,12 +548,12 @@ fn handle_ws_message(
                 e.message
             );
         }
-        BybitWsMessage::Auth(_) => {
-            log::debug!("WebSocket authenticated");
-        }
-        _ => {
-            log::trace!("Ignoring non-data WebSocket message");
-        }
+        BybitWsMessage::Auth(_)
+        | BybitWsMessage::OrderResponse(_)
+        | BybitWsMessage::AccountOrder(_)
+        | BybitWsMessage::AccountExecution(_)
+        | BybitWsMessage::AccountWallet(_)
+        | BybitWsMessage::AccountPosition(_) => {}
     }
 }
 

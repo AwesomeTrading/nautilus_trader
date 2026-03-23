@@ -48,15 +48,49 @@ pub struct BybitAuthRequest {
     pub args: Vec<serde_json::Value>,
 }
 
-/// High level message emitted by the Bybit WebSocket client.
+/// Wire-level frame deserialized from a Bybit WebSocket message.
+///
+/// Represents the raw protocol layer before the handler converts data
+/// variants into the public [`BybitWsMessage`] API.
 #[derive(Debug, Clone)]
-pub enum BybitWsMessage {
-    /// Generic response (subscribe/auth acknowledgement).
-    Response(BybitWsResponse),
+pub enum BybitWsFrame {
     /// Authentication acknowledgement.
     Auth(BybitWsAuthResponse),
     /// Subscription acknowledgement.
     Subscription(BybitWsSubscriptionMsg),
+    /// Order operation response (create/amend/cancel) from trade WebSocket.
+    OrderResponse(BybitWsOrderResponse),
+    /// Error response from the venue.
+    ErrorResponse(BybitWsResponse),
+    /// Orderbook snapshot or delta.
+    Orderbook(BybitWsOrderbookDepthMsg),
+    /// Trade updates.
+    Trade(BybitWsTradeMsg),
+    /// Kline updates.
+    Kline(BybitWsKlineMsg),
+    /// Linear/inverse ticker update.
+    TickerLinear(BybitWsTickerLinearMsg),
+    /// Option ticker update.
+    TickerOption(BybitWsTickerOptionMsg),
+    /// Order updates from private channel.
+    AccountOrder(BybitWsAccountOrderMsg),
+    /// Execution/fill updates from private channel.
+    AccountExecution(BybitWsAccountExecutionMsg),
+    /// Wallet/balance updates from private channel.
+    AccountWallet(BybitWsAccountWalletMsg),
+    /// Position updates from private channel.
+    AccountPosition(BybitWsAccountPositionMsg),
+    /// Payload that does not match any known frame type.
+    Unknown(Value),
+    /// Notification that the underlying connection reconnected.
+    Reconnected,
+}
+
+/// High-level message emitted by the Bybit WebSocket client.
+#[derive(Debug, Clone)]
+pub enum BybitWsMessage {
+    /// Authentication acknowledgement.
+    Auth(BybitWsAuthResponse),
     /// Order operation response (create/amend/cancel) from trade WebSocket.
     OrderResponse(BybitWsOrderResponse),
     /// Orderbook snapshot or delta.
@@ -79,12 +113,8 @@ pub enum BybitWsMessage {
     AccountPosition(BybitWsAccountPositionMsg),
     /// Error received from the venue or client lifecycle.
     Error(BybitWebSocketError),
-    /// Raw message payload that does not yet have a typed representation.
-    Raw(Value),
     /// Notification that the underlying connection reconnected.
     Reconnected,
-    /// Explicit pong event (text-based heartbeat acknowledgement).
-    Pong,
 }
 
 /// Represents an error event surfaced by the WebSocket client.

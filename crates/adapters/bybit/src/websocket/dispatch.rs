@@ -206,12 +206,12 @@ pub fn dispatch_ws_message(
         BybitWsMessage::Reconnected => {
             log::info!("WebSocket reconnected");
         }
-        BybitWsMessage::Auth(_) => {
-            log::debug!("WebSocket authenticated");
-        }
-        _ => {
-            log::trace!("Ignoring non-execution WebSocket message");
-        }
+        BybitWsMessage::Auth(_)
+        | BybitWsMessage::Orderbook(_)
+        | BybitWsMessage::Trade(_)
+        | BybitWsMessage::Kline(_)
+        | BybitWsMessage::TickerLinear(_)
+        | BybitWsMessage::TickerOption(_) => {}
     }
 }
 

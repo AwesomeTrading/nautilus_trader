@@ -29,12 +29,8 @@ use tokio_tungstenite::tungstenite::Message;
 use super::{
     enums::BybitWsOperation,
     error::{BybitWsError, create_bybit_timeout_error, should_retry_bybit_error},
-    messages::{BybitWebSocketError, BybitWsMessage, BybitWsResponse},
-};
-use crate::common::consts::{
-    BYBIT_TOPIC_EXECUTION, BYBIT_TOPIC_KLINE, BYBIT_TOPIC_ORDER, BYBIT_TOPIC_ORDERBOOK,
-    BYBIT_TOPIC_POSITION, BYBIT_TOPIC_PUBLIC_TRADE, BYBIT_TOPIC_TICKERS, BYBIT_TOPIC_TRADE,
-    BYBIT_TOPIC_WALLET,
+    messages::{BybitWebSocketError, BybitWsFrame, BybitWsMessage},
+    parse::parse_bybit_ws_frame,
 };
 
 /// Commands sent from the outer client to the inner message handler.
@@ -182,8 +178,8 @@ impl BybitWsFeedHandler {
                         continue;
                     }
 
-                    let event = match Self::parse_raw_message(msg) {
-                        Some(event) => event,
+                    let frame = match Self::parse_raw_frame(msg) {
+                        Some(frame) => frame,
                         None => continue,
                     };
 
@@ -192,8 +188,8 @@ impl BybitWsFeedHandler {
                         return None;
                     }
 
-                    match event {
-                        BybitWsMessage::Subscription(ref sub_msg) => {
+                    match frame {
+                        BybitWsFrame::Subscription(ref sub_msg) => {
                             let pending_topics = self.subscriptions.pending_subscribe_topics();
                             match sub_msg.op {
                                 BybitWsOperation::Subscribe => {
@@ -231,9 +227,8 @@ impl BybitWsFeedHandler {
                                 }
                                 _ => {}
                             }
-                            // Subscriptions are handled internally, not forwarded
                         }
-                        BybitWsMessage::Auth(ref auth_response) => {
+                        BybitWsFrame::Auth(auth_response) => {
                             let is_success = auth_response.success.unwrap_or(false)
                                 || (auth_response.ret_code == Some(0));
 
@@ -248,13 +243,47 @@ impl BybitWsFeedHandler {
                                 self.auth_tracker.fail(error_msg);
                                 log::error!("WebSocket authentication failed: error={error_msg}");
                             }
-                            return Some(event);
+                            return Some(BybitWsMessage::Auth(auth_response));
                         }
-                        BybitWsMessage::Pong | BybitWsMessage::Response(_) => {
-                            // Handled internally
+                        BybitWsFrame::ErrorResponse(resp) => {
+                            let error = BybitWebSocketError::from_response(&resp);
+                            return Some(BybitWsMessage::Error(error));
                         }
-                        _ => {
-                            return Some(event);
+                        BybitWsFrame::OrderResponse(resp) => {
+                            return Some(BybitWsMessage::OrderResponse(resp));
+                        }
+                        BybitWsFrame::Orderbook(msg) => {
+                            return Some(BybitWsMessage::Orderbook(msg));
+                        }
+                        BybitWsFrame::Trade(msg) => {
+                            return Some(BybitWsMessage::Trade(msg));
+                        }
+                        BybitWsFrame::Kline(msg) => {
+                            return Some(BybitWsMessage::Kline(msg));
+                        }
+                        BybitWsFrame::TickerLinear(msg) => {
+                            return Some(BybitWsMessage::TickerLinear(msg));
+                        }
+                        BybitWsFrame::TickerOption(msg) => {
+                            return Some(BybitWsMessage::TickerOption(msg));
+                        }
+                        BybitWsFrame::AccountOrder(msg) => {
+                            return Some(BybitWsMessage::AccountOrder(msg));
+                        }
+                        BybitWsFrame::AccountExecution(msg) => {
+                            return Some(BybitWsMessage::AccountExecution(msg));
+                        }
+                        BybitWsFrame::AccountWallet(msg) => {
+                            return Some(BybitWsMessage::AccountWallet(msg));
+                        }
+                        BybitWsFrame::AccountPosition(msg) => {
+                            return Some(BybitWsMessage::AccountPosition(msg));
+                        }
+                        BybitWsFrame::Reconnected => {
+                            return Some(BybitWsMessage::Reconnected);
+                        }
+                        BybitWsFrame::Unknown(value) => {
+                            log::debug!("Unknown WebSocket frame: {value}");
                         }
                     }
                 }
@@ -262,14 +291,12 @@ impl BybitWsFeedHandler {
         }
     }
 
-    fn parse_raw_message(msg: Message) -> Option<BybitWsMessage> {
-        use serde_json::Value;
-
+    fn parse_raw_frame(msg: Message) -> Option<BybitWsFrame> {
         match msg {
             Message::Text(text) => {
                 if text == nautilus_network::RECONNECTED {
                     log::info!("Received WebSocket reconnected signal");
-                    return Some(BybitWsMessage::Reconnected);
+                    return Some(BybitWsFrame::Reconnected);
                 }
 
                 if text.trim().eq_ignore_ascii_case("pong") {
@@ -278,7 +305,7 @@ impl BybitWsFeedHandler {
 
                 log::trace!("Raw websocket message: {text}");
 
-                let value: Value = match serde_json::from_str(&text) {
+                let value: serde_json::Value = match serde_json::from_str(&text) {
                     Ok(v) => v,
                     Err(e) => {
                         log::error!("Failed to parse WebSocket message: {e}: {text}");
@@ -286,7 +313,7 @@ impl BybitWsFeedHandler {
                     }
                 };
 
-                Some(classify_bybit_message(value))
+                Some(parse_bybit_ws_frame(value))
             }
             Message::Binary(msg) => {
                 log::debug!("Raw binary: {msg:?}");
@@ -301,127 +328,12 @@ impl BybitWsFeedHandler {
     }
 }
 
-/// Classifies a parsed JSON value into a typed Bybit WebSocket message.
-///
-/// Returns `Raw(value)` if no specific type matches.
-pub fn classify_bybit_message(value: serde_json::Value) -> BybitWsMessage {
-    use super::messages::{BybitWsAuthResponse, BybitWsOrderResponse, BybitWsSubscriptionMsg};
-
-    if let Some(op_val) = value.get("op") {
-        if let Ok(op) = serde_json::from_value::<BybitWsOperation>(op_val.clone())
-            && op == BybitWsOperation::Auth
-            && let Ok(auth) = serde_json::from_value::<BybitWsAuthResponse>(value.clone())
-        {
-            let is_success = auth.success.unwrap_or(false) || auth.ret_code.unwrap_or(-1) == 0;
-            if is_success {
-                return BybitWsMessage::Auth(auth);
-            }
-            let resp = BybitWsResponse {
-                op: Some(auth.op.clone()),
-                topic: None,
-                success: auth.success,
-                conn_id: auth.conn_id.clone(),
-                req_id: None,
-                ret_code: auth.ret_code,
-                ret_msg: auth.ret_msg,
-            };
-            let error = BybitWebSocketError::from_response(&resp);
-            return BybitWsMessage::Error(error);
-        }
-
-        if let Some(op_str) = op_val.as_str()
-            && op_str.starts_with("order.")
-        {
-            return serde_json::from_value::<BybitWsOrderResponse>(value.clone()).map_or_else(
-                |_| BybitWsMessage::Raw(value),
-                BybitWsMessage::OrderResponse,
-            );
-        }
-    }
-
-    if let Some(success) = value.get("success").and_then(serde_json::Value::as_bool) {
-        if success {
-            return serde_json::from_value::<BybitWsSubscriptionMsg>(value.clone())
-                .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::Subscription);
-        }
-        return serde_json::from_value::<BybitWsResponse>(value.clone()).map_or_else(
-            |_| BybitWsMessage::Raw(value),
-            |resp| {
-                let error = BybitWebSocketError::from_response(&resp);
-                BybitWsMessage::Error(error)
-            },
-        );
-    }
-
-    // Most common path for market data
-    if let Some(topic) = value.get("topic").and_then(serde_json::Value::as_str) {
-        if topic.starts_with(BYBIT_TOPIC_ORDERBOOK) {
-            return serde_json::from_value(value.clone())
-                .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::Orderbook);
-        }
-
-        if topic.contains(BYBIT_TOPIC_PUBLIC_TRADE) || topic.starts_with(BYBIT_TOPIC_TRADE) {
-            return serde_json::from_value(value.clone())
-                .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::Trade);
-        }
-
-        if topic.starts_with(BYBIT_TOPIC_KLINE) {
-            return serde_json::from_value(value.clone())
-                .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::Kline);
-        }
-
-        if topic.starts_with(BYBIT_TOPIC_TICKERS) {
-            // Option symbols: BTC-6JAN23-17500-C (date, strike, C/P)
-            let is_option = value
-                .get("data")
-                .and_then(|d| d.get("symbol"))
-                .and_then(|s| s.as_str())
-                .is_some_and(|symbol| symbol.contains('-') && symbol.matches('-').count() >= 3);
-
-            if is_option {
-                return serde_json::from_value(value.clone())
-                    .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::TickerOption);
-            }
-            return serde_json::from_value(value.clone())
-                .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::TickerLinear);
-        }
-
-        if topic.starts_with(BYBIT_TOPIC_ORDER) {
-            return serde_json::from_value(value.clone())
-                .map_or_else(|_| BybitWsMessage::Raw(value), BybitWsMessage::AccountOrder);
-        }
-
-        if topic.starts_with(BYBIT_TOPIC_EXECUTION) {
-            return serde_json::from_value(value.clone()).map_or_else(
-                |_| BybitWsMessage::Raw(value),
-                BybitWsMessage::AccountExecution,
-            );
-        }
-
-        if topic.starts_with(BYBIT_TOPIC_WALLET) {
-            return serde_json::from_value(value.clone()).map_or_else(
-                |_| BybitWsMessage::Raw(value),
-                BybitWsMessage::AccountWallet,
-            );
-        }
-
-        if topic.starts_with(BYBIT_TOPIC_POSITION) {
-            return serde_json::from_value(value.clone()).map_or_else(
-                |_| BybitWsMessage::Raw(value),
-                BybitWsMessage::AccountPosition,
-            );
-        }
-    }
-
-    BybitWsMessage::Raw(value)
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::common::consts::BYBIT_WS_TOPIC_DELIMITER;
+    use crate::common::{consts::BYBIT_WS_TOPIC_DELIMITER, testing::load_test_json};
 
     fn create_test_handler() -> BybitWsFeedHandler {
         let signal = Arc::new(AtomicBool::new(false));
@@ -433,8 +345,228 @@ mod tests {
         BybitWsFeedHandler::new(signal, cmd_rx, raw_rx, auth_tracker, subscriptions)
     }
 
+    fn load_value(fixture: &str) -> serde_json::Value {
+        let json = load_test_json(fixture);
+        serde_json::from_str(&json).unwrap()
+    }
+
     #[rstest]
     fn test_handler_initializes() {
         let _handler = create_test_handler();
+    }
+
+    #[rstest]
+    fn test_parse_frame_auth_success() {
+        let value = load_value("ws_auth_success.json");
+        let frame = parse_bybit_ws_frame(value);
+        match frame {
+            BybitWsFrame::Auth(auth) => {
+                assert_eq!(auth.conn_id.as_deref(), Some("cejreaspqfm9se7usbrg-2xh"));
+                assert_eq!(auth.ret_code, Some(0));
+                assert_eq!(auth.success, Some(true));
+            }
+            other => panic!("Expected Auth, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_parse_frame_auth_failure() {
+        let value = load_value("ws_auth_failure.json");
+        let frame = parse_bybit_ws_frame(value);
+        match frame {
+            BybitWsFrame::ErrorResponse(resp) => {
+                assert_eq!(resp.ret_code, Some(10003));
+                assert_eq!(resp.ret_msg.as_deref(), Some("Invalid apikey"));
+            }
+            other => panic!("Expected ErrorResponse, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_parse_frame_subscription_ack() {
+        let value = load_value("ws_subscription_ack.json");
+        let frame = parse_bybit_ws_frame(value);
+        match frame {
+            BybitWsFrame::Subscription(sub) => {
+                assert!(sub.success);
+                assert_eq!(sub.op, BybitWsOperation::Subscribe);
+                assert_eq!(sub.req_id.as_deref(), Some("sub-orderbook-1"));
+            }
+            other => panic!("Expected Subscription, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_parse_frame_subscription_failure() {
+        let value = load_value("ws_subscription_failure.json");
+        let frame = parse_bybit_ws_frame(value);
+        match frame {
+            BybitWsFrame::ErrorResponse(resp) => {
+                assert_eq!(
+                    resp.ret_msg.as_deref(),
+                    Some("Invalid topic: invalid.topic.BTCUSDT")
+                );
+            }
+            other => panic!("Expected ErrorResponse, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_parse_frame_order_response() {
+        let value = load_value("ws_order_response.json");
+        let frame = parse_bybit_ws_frame(value);
+        match frame {
+            BybitWsFrame::OrderResponse(resp) => {
+                assert_eq!(resp.op.as_str(), "order.create");
+                assert_eq!(resp.ret_code, 0);
+                assert_eq!(resp.ret_msg, "OK");
+            }
+            other => panic!("Expected OrderResponse, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_parse_frame_orderbook() {
+        let value = load_value("ws_orderbook_snapshot.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::Orderbook(_)),
+            "Expected Orderbook, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_trade() {
+        let value = load_value("ws_public_trade.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::Trade(_)),
+            "Expected Trade, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_kline() {
+        let value = load_value("ws_kline.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::Kline(_)),
+            "Expected Kline, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_ticker_linear() {
+        let value = load_value("ws_ticker_linear.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::TickerLinear(_)),
+            "Expected TickerLinear, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_ticker_option() {
+        let value = load_value("ws_ticker_option.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::TickerOption(_)),
+            "Expected TickerOption, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_account_order() {
+        let value = load_value("ws_account_order.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::AccountOrder(_)),
+            "Expected AccountOrder, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_account_execution() {
+        let value = load_value("ws_account_execution.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::AccountExecution(_)),
+            "Expected AccountExecution, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_account_wallet() {
+        let value = load_value("ws_account_wallet.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::AccountWallet(_)),
+            "Expected AccountWallet, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_account_position() {
+        let value = load_value("ws_account_position.json");
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::AccountPosition(_)),
+            "Expected AccountPosition, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_frame_unknown_message() {
+        let value: serde_json::Value = serde_json::json!({"foo": "bar"});
+        let frame = parse_bybit_ws_frame(value);
+        assert!(
+            matches!(frame, BybitWsFrame::Unknown(_)),
+            "Expected Unknown, was {frame:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_raw_reconnected_signal() {
+        let msg = Message::Text(nautilus_network::RECONNECTED.to_string().into());
+        let result = BybitWsFeedHandler::parse_raw_frame(msg);
+        assert!(
+            matches!(result, Some(BybitWsFrame::Reconnected)),
+            "Expected Some(Reconnected), was {result:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_raw_pong_text() {
+        let msg = Message::Text("pong".into());
+        let result = BybitWsFeedHandler::parse_raw_frame(msg);
+        assert!(result.is_none(), "Expected None for pong, was {result:?}");
+    }
+
+    #[rstest]
+    fn test_parse_raw_valid_json() {
+        let json = load_test_json("ws_public_trade.json");
+        let msg = Message::Text(json.into());
+        let result = BybitWsFeedHandler::parse_raw_frame(msg);
+        assert!(
+            matches!(result, Some(BybitWsFrame::Trade(_))),
+            "Expected Some(Trade), was {result:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_raw_invalid_json() {
+        let msg = Message::Text("not valid json".into());
+        let result = BybitWsFeedHandler::parse_raw_frame(msg);
+        assert!(
+            result.is_none(),
+            "Expected None for invalid JSON, was {result:?}"
+        );
+    }
+
+    #[rstest]
+    fn test_parse_raw_binary_message() {
+        let msg = Message::Binary(vec![0x01, 0x02].into());
+        let result = BybitWsFeedHandler::parse_raw_frame(msg);
+        assert!(result.is_none(), "Expected None for binary, was {result:?}");
     }
 }
