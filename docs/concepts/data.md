@@ -536,9 +536,14 @@ The `ts_init` field indicates when the message was originally received.
 
 ## Data flow
 
-The platform ensures consistency by flowing data through the same pathways across all system [environment contexts](architecture.md#environment-contexts)
-(e.g., `backtest`, `sandbox`, `live`). Data is primarily transported via the `MessageBus` to the `DataEngine`
-and then distributed to subscribed or registered handlers.
+From the `DataEngine` onward, data follows the same pathway regardless of
+[environment context](architecture.md#environment-contexts) (backtest, sandbox,
+live). In live and sandbox modes a venue adapter creates a normalized data
+object and sends it through a channel; in backtests the engine feeds data
+directly. Either way the `DataEngine` stores it in the `Cache` (for cached
+types) and publishes it on the `MessageBus` to subscribed handlers.
+For a step-by-step trace with a sequence diagram, see
+[Data flow: life of a quote tick](architecture.md#data-flow-life-of-a-quote-tick).
 
 For users who need more flexibility, the platform also supports the creation of custom data types.
 For details on how to implement user-defined data types, see the [Custom Data](#custom-data) section below.

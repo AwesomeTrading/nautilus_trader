@@ -172,6 +172,7 @@ Released on TBD (UTC).
 - Added Rust tutorial for Betfair book imbalance backtest with `DataActor` walkthrough
 - Added Options concept guide with chain architecture, subscription API, strike filtering, and snapshot modes
 - Added Greeks concept guide covering venue-provided and local calculator paths
+- Added end-to-end data flow and execution flow sequence diagrams to architecture concepts
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
