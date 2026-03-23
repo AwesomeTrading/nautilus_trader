@@ -322,6 +322,10 @@ pub fn calculate_market_price(
         .filter(|(p, s)| !p.is_zero() && !s.is_zero())
         .collect();
 
+    if parsed_levels.is_empty() {
+        anyhow::bail!("Empty order book: no valid price levels for market order");
+    }
+
     match side {
         PolymarketOrderSide::Buy => parsed_levels.sort_by(|a, b| a.0.cmp(&b.0)),
         PolymarketOrderSide::Sell => parsed_levels.sort_by(|a, b| b.0.cmp(&a.0)),
@@ -673,6 +677,22 @@ mod tests {
     #[rstest]
     fn test_calculate_market_price_empty_book() {
         let levels: Vec<ClobBookLevel> = vec![];
+        let result = calculate_market_price(&levels, dec!(50), PolymarketOrderSide::Buy);
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn test_calculate_market_price_all_zero_levels_returns_error() {
+        let levels = vec![
+            ClobBookLevel {
+                price: "0".to_string(),
+                size: "100.0".to_string(),
+            },
+            ClobBookLevel {
+                price: "0.50".to_string(),
+                size: "0".to_string(),
+            },
+        ];
         let result = calculate_market_price(&levels, dec!(50), PolymarketOrderSide::Buy);
         assert!(result.is_err());
     }

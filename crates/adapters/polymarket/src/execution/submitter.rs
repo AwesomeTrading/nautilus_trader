@@ -21,7 +21,10 @@
 //! Uses [`RetryManager`] from `nautilus-network` with exponential backoff for
 //! transient HTTP failures (timeouts, 5xx, rate limits).
 
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use dashmap::DashMap;
 use nautilus_core::UnixNanos;
@@ -49,12 +52,15 @@ use crate::{
 /// - Expiration calculation
 /// - Order building and EIP-712 signing (via [`PolymarketOrderBuilder`])
 /// - HTTP posting to the CLOB API with automatic retry on transient failures
+///
+/// Fee rates are cached per token with a 5-minute TTL to avoid stale values
+/// if the account's volume tier changes during a session.
 #[derive(Debug, Clone)]
 pub(crate) struct OrderSubmitter {
     http_client: PolymarketClobHttpClient,
     order_builder: Arc<PolymarketOrderBuilder>,
     retry_manager: Arc<RetryManager<Error>>,
-    fee_rate_cache: Arc<DashMap<String, Decimal>>,
+    fee_rate_cache: Arc<DashMap<String, (Decimal, Instant)>>,
 }
 
 impl OrderSubmitter {
@@ -71,21 +77,39 @@ impl OrderSubmitter {
         }
     }
 
-    /// Returns the fee rate in basis points for a token, fetching from the API on cache miss.
+    /// Returns the fee rate in basis points for a token, fetching from the API on cache miss
+    /// or when the cached value is older than 5 minutes.
+    ///
+    /// Falls back to the stale cached value if the refresh fails, so transient API
+    /// outages do not block order submission.
     async fn get_fee_rate_bps(&self, token_id: &str) -> anyhow::Result<Decimal> {
-        if let Some(rate) = self.fee_rate_cache.get(token_id) {
-            return Ok(*rate);
+        const TTL: Duration = Duration::from_secs(300);
+
+        if let Some(entry) = self.fee_rate_cache.get(token_id) {
+            let (rate, fetched_at) = entry.value();
+            if fetched_at.elapsed() < TTL {
+                return Ok(*rate);
+            }
         }
 
-        let response = self
-            .http_client
-            .get_fee_rate(token_id)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to fetch fee rate: {e}"))?;
-
-        self.fee_rate_cache
-            .insert(token_id.to_string(), response.base_fee);
-        Ok(response.base_fee)
+        match self.http_client.get_fee_rate(token_id).await {
+            Ok(response) => {
+                self.fee_rate_cache
+                    .insert(token_id.to_string(), (response.base_fee, Instant::now()));
+                Ok(response.base_fee)
+            }
+            Err(e) => {
+                if let Some(mut entry) = self.fee_rate_cache.get_mut(token_id) {
+                    let (rate, fetched_at) = entry.value_mut();
+                    log::warn!("Fee rate refresh failed, using stale cached value: {e}");
+                    let rate = *rate;
+                    *fetched_at = Instant::now();
+                    Ok(rate)
+                } else {
+                    Err(anyhow::anyhow!("Failed to fetch fee rate: {e}"))
+                }
+            }
+        }
     }
 
     /// Builds a signed limit order and posts it with retry on transient failures.
