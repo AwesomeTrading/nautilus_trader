@@ -113,12 +113,28 @@ runs:
         cache-on-failure: ${{ inputs.rust-cache-on-failure }}
         override: true
 
-    - name: Install cargo-nextest
+    - name: Get cargo-nextest version
       if: inputs.build-type != 'pre-commit'
+      shell: bash
+      run: |
+        version="$(bash scripts/cargo-tool-version.sh cargo-nextest)"
+        if [ -z "$version" ]; then
+          echo "::error::Failed to extract cargo-nextest version"
+          exit 1
+        fi
+        echo "CARGO_NEXTEST_VERSION=$version" >> "$GITHUB_ENV"
+
+    - name: Install cargo-nextest
+      if: inputs.build-type != 'pre-commit' && runner.os != 'macOS'
       # https://github.com/taiki-e/install-action
       uses: taiki-e/install-action@cede0bb282aae847dfa8aacca3a41c86d973d4d7 # v2.68.1
       with:
-        tool: nextest
+        tool: cargo-nextest@${{ env.CARGO_NEXTEST_VERSION }}
+
+    - name: Install cargo-nextest (macOS)
+      if: inputs.build-type != 'pre-commit' && runner.os == 'macOS'
+      shell: bash
+      run: bash scripts/ci/install-cargo-nextest.sh "${CARGO_NEXTEST_VERSION}"
 
     # > --------------------------------------------------
     # > sccache (disabled on macOS: causes filesystem corruption on GH runners)

@@ -7,14 +7,14 @@ GIT_TAG:=$(shell git rev-parse --abbrev-ref HEAD)
 IMAGE_FULL?=$(IMAGE):$(GIT_TAG)
 
 # Tool versions from Cargo.toml [workspace.metadata.tools]
-CARGO_AUDIT_VERSION := $(shell grep '^cargo-audit *= *"' Cargo.toml | awk -F\" '{print $$2}')
-CARGO_DENY_VERSION := $(shell grep '^cargo-deny *= *"' Cargo.toml | awk -F\" '{print $$2}')
-CARGO_EDIT_VERSION := $(shell grep '^cargo-edit *= *"' Cargo.toml | awk -F\" '{print $$2}')
-CARGO_LLVM_COV_VERSION := $(shell grep '^cargo-llvm-cov *= *"' Cargo.toml | awk -F\" '{print $$2}')
-CARGO_MACHETE_VERSION := $(shell grep '^cargo-machete *= *"' Cargo.toml | awk -F\" '{print $$2}')
-CARGO_NEXTEST_VERSION := $(shell grep '^cargo-nextest *= *"' Cargo.toml | awk -F\" '{print $$2}')
-CARGO_VET_VERSION := $(shell grep '^cargo-vet *= *"' Cargo.toml | awk -F\" '{print $$2}')
-LYCHEE_VERSION := $(shell grep '^lychee *= *"' Cargo.toml | awk -F\" '{print $$2}')
+CARGO_AUDIT_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-audit)
+CARGO_DENY_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-deny)
+CARGO_EDIT_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-edit)
+CARGO_LLVM_COV_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-llvm-cov)
+CARGO_MACHETE_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-machete)
+CARGO_NEXTEST_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-nextest)
+CARGO_VET_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-vet)
+LYCHEE_VERSION := $(shell bash scripts/cargo-tool-version.sh lychee)
 UV_VERSION := $(shell cat uv-version | tr -d '\n')
 
 V = 0  # 0 / 1 - verbose mode
