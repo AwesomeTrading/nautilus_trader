@@ -379,6 +379,13 @@ jobs:
       - name: Verify immutable CI inputs (post-checkout)
         run: bash scripts/ci/verify-ci-inputs.sh post-checkout
 
+      - name: Log macOS runner version
+        run: |
+          echo "::group::macOS runner info"
+          sw_vers
+          uname -a
+          echo "::endgroup::"
+
       - name: Common setup
         uses: ./.github/actions/common-setup
         with:
