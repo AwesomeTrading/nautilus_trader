@@ -22,6 +22,7 @@ Released on TBD (UTC).
 - Added OKX `subscribe_option_greeks` for venue-provided Greeks via the `opt-summary` WebSocket channel
 - Added OKX configurable `ws_auth_timeout_secs` for WebSocket authentication (#3727), thanks for reporting @Stamppot82
 - Added OKX `fwdPx` (forward price) to `OKXOptionSummaryMsg` and mapped to `underlying_price` on `OptionGreeks` for ATM tracking
+- Added OKX `request_orderbook_snapshot` and `request_funding_rates` to Python data client via PyO3 bindings
 - Added OKX missing WebSocket message fields across all channel structs
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
 - Added Tardis `MarkPriceUpdate` and `IndexPriceUpdate` parsing from `derivative_ticker` messages in Rust
@@ -99,6 +100,7 @@ Released on TBD (UTC).
 - Fixed Binance Spot Rust `connect()` not waiting for WS session authentication before signaling connected
 - Fixed Bybit demo exec client failing with error 10001 when `/v5/account/fee-rate` is unavailable (#3742), thanks for reporting @jindrichsirucek
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
+- Fixed OKX `_subscribe_instrument_status` raising `NotImplementedError` instead of being a no-op (status detected via polling)
 - Fixed OKX duplicate fills after WebSocket reconnect when replayed messages have the same `trade_id`
 - Fixed OKX HTTP algo order helpers ignoring per-item `sCode`, treating venue rejections as success
 - Fixed OKX batch algo cancel not emitting `OrderCancelRejected` events for per-item or batch-level failures
@@ -162,6 +164,7 @@ Released on TBD (UTC).
 - Added Options concept guide with chain architecture, subscription API, strike filtering, and snapshot modes
 - Added Greeks concept guide covering venue-provided and local calculator paths
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
+- Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
 - Added OKX to adapter support tables in Options and Greeks concept guides
 - Added option greeks test cases (TC-D62, TC-D63) with config examples to the data testing spec

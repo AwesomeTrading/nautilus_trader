@@ -370,6 +370,51 @@ impl OKXHttpClient {
         })
     }
 
+    #[pyo3(name = "request_orderbook_snapshot")]
+    #[pyo3(signature = (instrument_id, depth=None))]
+    fn py_request_orderbook_snapshot<'py>(
+        &self,
+        py: Python<'py>,
+        instrument_id: InstrumentId,
+        depth: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let deltas = client
+                .request_orderbook_snapshot(instrument_id, depth)
+                .await
+                .map_err(to_pyvalue_err)?;
+
+            Python::attach(|py| Ok(deltas.into_py_any_unwrap(py)))
+        })
+    }
+
+    #[pyo3(name = "request_funding_rates")]
+    #[pyo3(signature = (instrument_id, start=None, end=None, limit=None))]
+    fn py_request_funding_rates<'py>(
+        &self,
+        py: Python<'py>,
+        instrument_id: InstrumentId,
+        start: Option<DateTime<Utc>>,
+        end: Option<DateTime<Utc>>,
+        limit: Option<u32>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let rates = client
+                .request_funding_rates(instrument_id, start, end, limit)
+                .await
+                .map_err(to_pyvalue_err)?;
+
+            Python::attach(|py| {
+                let pylist = PyList::new(py, rates.into_iter().map(|r| r.into_py_any_unwrap(py)))?;
+                Ok(pylist.into_py_any_unwrap(py))
+            })
+        })
+    }
+
     /// Requests the latest mark price for the `instrument_type` from OKX.
     #[pyo3(name = "request_mark_price")]
     fn py_request_mark_price<'py>(

@@ -54,11 +54,12 @@ use nautilus_core::{
 };
 use nautilus_model::{
     data::{
-        Bar, BarType, BookOrder, FundingRateUpdate, IndexPriceUpdate, MarkPriceUpdate, TradeTick,
+        Bar, BarType, BookOrder, FundingRateUpdate, IndexPriceUpdate, MarkPriceUpdate,
+        OrderBookDelta, OrderBookDeltas, TradeTick,
     },
     enums::{
-        AggregationSource, BarAggregation, BookType, OrderSide, OrderType, PositionSide,
-        TimeInForce, TriggerType,
+        AggregationSource, BarAggregation, BookAction, BookType, OrderSide, OrderType,
+        PositionSide, RecordFlag, TimeInForce, TriggerType,
     },
     events::AccountState,
     identifiers::{AccountId, ClientOrderId, InstrumentId},
@@ -1724,6 +1725,101 @@ impl OKXHttpClient {
         );
 
         Ok(book)
+    }
+
+    /// Requests an order book snapshot as `OrderBookDeltas` for the `instrument_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or parsing fails.
+    pub async fn request_orderbook_snapshot(
+        &self,
+        instrument_id: InstrumentId,
+        depth: Option<u32>,
+    ) -> anyhow::Result<OrderBookDeltas> {
+        let inst = self.instrument_from_cache(instrument_id.symbol.inner())?;
+        let price_precision = inst.price_precision();
+        let size_precision = inst.size_precision();
+
+        let params = GetOrderBookParams {
+            inst_id: instrument_id.symbol.to_string(),
+            sz: depth,
+        };
+
+        let resp = self
+            .inner
+            .get_order_book(params)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        let snapshot = resp
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("No order book returned from OKX"))?;
+
+        let ts_event = UnixNanos::from(snapshot.ts * NANOSECONDS_IN_MILLISECOND);
+        let total_levels = snapshot.bids.len() + snapshot.asks.len();
+        let mut deltas = Vec::with_capacity(total_levels + 1);
+
+        let mut clear = OrderBookDelta::clear(instrument_id, 0, ts_event, ts_event);
+
+        if total_levels == 0 {
+            clear.flags |= RecordFlag::F_LAST as u8;
+        }
+        deltas.push(clear);
+
+        let mut processed = 0_usize;
+        for (i, level) in snapshot.bids.iter().enumerate() {
+            let price = parse_price(&level.0, price_precision)?;
+            let size = parse_quantity(&level.1, size_precision)?;
+            let order = BookOrder::new(OrderSide::Buy, price, size, i as u64);
+            processed += 1;
+            let mut flags = RecordFlag::F_SNAPSHOT as u8;
+
+            if processed == total_levels {
+                flags |= RecordFlag::F_LAST as u8;
+            }
+            deltas.push(OrderBookDelta::new(
+                instrument_id,
+                BookAction::Add,
+                order,
+                flags,
+                0,
+                ts_event,
+                ts_event,
+            ));
+        }
+
+        let bids_len = snapshot.bids.len();
+        for (i, level) in snapshot.asks.iter().enumerate() {
+            let price = parse_price(&level.0, price_precision)?;
+            let size = parse_quantity(&level.1, size_precision)?;
+            let order = BookOrder::new(OrderSide::Sell, price, size, (bids_len + i) as u64);
+            processed += 1;
+            let mut flags = RecordFlag::F_SNAPSHOT as u8;
+
+            if processed == total_levels {
+                flags |= RecordFlag::F_LAST as u8;
+            }
+            deltas.push(OrderBookDelta::new(
+                instrument_id,
+                BookAction::Add,
+                order,
+                flags,
+                0,
+                ts_event,
+                ts_event,
+            ));
+        }
+
+        log::info!(
+            "Fetched order book snapshot for {} with {} bids and {} asks",
+            instrument_id,
+            snapshot.bids.len(),
+            snapshot.asks.len(),
+        );
+
+        OrderBookDeltas::new_checked(instrument_id, deltas)
+            .context("failed to assemble OrderBookDeltas from OKX snapshot")
     }
 
     /// Requests historical funding rates for the `instrument_id`.
