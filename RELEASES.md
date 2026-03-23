@@ -40,6 +40,7 @@ Released on TBD (UTC).
 - Changed `ExecutionEngine.register_venue_routing` to error when re-routing a venue to a different client (Rust)
 - Renamed `OrderEvent.kind()` to `type_name()` in Rust
 - Renamed instrument `type_str` PyO3 getter to `type_name`
+- Changed collection-cloning PyO3 getters to methods: `Position.events()`, `adjustments()`, `client_order_ids()`, `venue_order_ids()`, `trade_ids()`; and `events()` on all order types
 
 ### Security
 - Hardened Docker Compose to bind all ports to localhost and add `no-new-privileges` to all services

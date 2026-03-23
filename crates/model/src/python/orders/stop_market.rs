@@ -129,7 +129,6 @@ impl StopMarketOrder {
         self.order_type
     }
 
-    #[getter]
     #[pyo3(name = "events")]
     fn py_events(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         self.events()

@@ -279,7 +279,7 @@ def transform_order_to_pyo3(order: Order):
 
 
 def transform_order_from_pyo3(order_pyo3) -> Order:
-    events_pyo3 = order_pyo3.events
+    events_pyo3 = order_pyo3.events()
     if len(events_pyo3) == 0:
         raise ValueError("Missing events in order")
     init_event = events_pyo3.pop(0)

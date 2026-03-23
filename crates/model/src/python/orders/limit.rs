@@ -445,7 +445,6 @@ impl LimitOrder {
         self.ts_last.as_u64()
     }
 
-    #[getter]
     #[pyo3(name = "events")]
     fn py_events(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
         self.events()

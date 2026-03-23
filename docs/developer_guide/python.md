@@ -73,6 +73,23 @@ Exceptions where docstrings are acceptable:
 
 When a private method needs context (such as a tricky precondition or side effect), prefer a short inline comment (`#`) near the relevant logic rather than a docstring.
 
+### Properties vs methods (PyO3 bindings)
+
+When exposing Rust types to Python via PyO3, use `#[getter]` (property) or a plain
+method based on what the call site communicates, not whether the value can change:
+
+- **Property (`#[getter]`):** cheap, side-effect-free, attribute-like view of current
+  state. Scalar fields, predicates, and lightweight derived values belong here even if
+  they change over the object's lifetime.
+  Examples: `status`, `side`, `quantity`, `price`, `is_open`, `has_inputs`,
+  `realized_pnl`, `venue_order_id`.
+- **Method (no `#[getter]`):** actions, mutations, nontrivial work, allocations/copies,
+  I/O, or anything that takes arguments.
+  Examples: `apply(fill)`, `unrealized_pnl(price)`, `calculate_pnl(...)`.
+- **Gray area (prefer method):** getters that clone or allocate a collection each call.
+  Using a method signals the cost to the caller.
+  Examples: `events()`, `adjustments()`, `client_order_ids()`, `trade_ids()`.
+
 ### Test naming
 
 Descriptive names explaining the scenario:
