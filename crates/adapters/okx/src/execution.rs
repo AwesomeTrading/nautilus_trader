@@ -143,6 +143,12 @@ impl OKXExecutionClient {
             None,
         );
 
+        let ws_dispatch_state = Arc::new(WsDispatchState::with_pending_maps(
+            ws_private.pending_orders.clone(),
+            ws_private.pending_cancels.clone(),
+            ws_private.pending_amends.clone(),
+        ));
+
         Ok(Self {
             core,
             clock,
@@ -154,7 +160,7 @@ impl OKXExecutionClient {
             trade_mode,
             ws_stream_handle: None,
             ws_business_stream_handle: None,
-            ws_dispatch_state: Arc::new(WsDispatchState::default()),
+            ws_dispatch_state,
             pending_tasks: Mutex::new(Vec::new()),
         })
     }

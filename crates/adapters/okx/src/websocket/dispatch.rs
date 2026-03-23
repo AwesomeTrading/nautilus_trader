@@ -20,7 +20,10 @@
 //! proper order events; untracked orders fall back to execution reports for
 //! downstream reconciliation.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use ahash::AHashMap;
 use dashmap::{DashMap, DashSet};
@@ -48,6 +51,7 @@ use crate::{
     },
     http::models::{OKXAccount, OKXCancelAlgoOrderResponse, OKXPosition},
     websocket::{
+        client::PendingOrderInfo,
         enums::OKXWsOperation,
         handler::is_post_only_auto_cancel,
         messages::{ExecutionReport, OKXOrderMsg, OKXWsMessage},
@@ -87,6 +91,9 @@ pub struct WsDispatchState {
     pub triggered_orders: DashSet<ClientOrderId>,
     pub filled_orders: DashSet<ClientOrderId>,
     pub emitted_trades: DashSet<TradeId>,
+    pub(crate) pending_orders: Arc<DashMap<String, PendingOrderInfo>>,
+    pub(crate) pending_cancels: Arc<DashMap<String, PendingOrderInfo>>,
+    pub(crate) pending_amends: Arc<DashMap<String, PendingOrderInfo>>,
     clearing: AtomicBool,
 }
 
@@ -98,7 +105,27 @@ impl Default for WsDispatchState {
             triggered_orders: DashSet::default(),
             filled_orders: DashSet::default(),
             emitted_trades: DashSet::default(),
+            pending_orders: Arc::new(DashMap::new()),
+            pending_cancels: Arc::new(DashMap::new()),
+            pending_amends: Arc::new(DashMap::new()),
             clearing: AtomicBool::new(false),
+        }
+    }
+}
+
+impl WsDispatchState {
+    // Creates a dispatch state sharing the pending operation maps
+    // with the WebSocket client that populates them
+    pub(crate) fn with_pending_maps(
+        pending_orders: Arc<DashMap<String, PendingOrderInfo>>,
+        pending_cancels: Arc<DashMap<String, PendingOrderInfo>>,
+        pending_amends: Arc<DashMap<String, PendingOrderInfo>>,
+    ) -> Self {
+        Self {
+            pending_orders,
+            pending_cancels,
+            pending_amends,
+            ..Default::default()
         }
     }
 }
@@ -253,6 +280,23 @@ pub fn dispatch_ws_message(
 
                 if s_code == "0" {
                     log::debug!("Order response ok: op={op:?} cl_ord_id={cl_ord_id}");
+                    match op {
+                        OKXWsOperation::Order
+                        | OKXWsOperation::BatchOrders
+                        | OKXWsOperation::OrderAlgo => {
+                            state.pending_orders.remove(cl_ord_id);
+                        }
+                        OKXWsOperation::CancelOrder
+                        | OKXWsOperation::BatchCancelOrders
+                        | OKXWsOperation::MassCancel
+                        | OKXWsOperation::CancelAlgos => {
+                            state.pending_cancels.remove(cl_ord_id);
+                        }
+                        OKXWsOperation::AmendOrder | OKXWsOperation::BatchAmendOrders => {
+                            state.pending_amends.remove(cl_ord_id);
+                        }
+                        _ => {}
+                    }
                     continue;
                 }
 
@@ -281,6 +325,7 @@ pub fn dispatch_ws_message(
                 match op {
                     OKXWsOperation::Order | OKXWsOperation::BatchOrders => {
                         state.order_identities.remove(&client_order_id);
+                        state.pending_orders.remove(cl_ord_id);
                         emitter.emit_order_rejected_event(
                             ident.strategy_id,
                             ident.instrument_id,
@@ -293,6 +338,7 @@ pub fn dispatch_ws_message(
                     OKXWsOperation::CancelOrder
                     | OKXWsOperation::BatchCancelOrders
                     | OKXWsOperation::MassCancel => {
+                        state.pending_cancels.remove(cl_ord_id);
                         emitter.emit_order_cancel_rejected_event(
                             ident.strategy_id,
                             ident.instrument_id,
@@ -303,6 +349,7 @@ pub fn dispatch_ws_message(
                         );
                     }
                     OKXWsOperation::AmendOrder | OKXWsOperation::BatchAmendOrders => {
+                        state.pending_amends.remove(cl_ord_id);
                         emitter.emit_order_modify_rejected_event(
                             ident.strategy_id,
                             ident.instrument_id,
@@ -343,6 +390,8 @@ pub fn dispatch_ws_message(
                         | OKXWsOperation::BatchOrders
                         | OKXWsOperation::OrderAlgo,
                     ) => {
+                        let key = client_order_id.as_str();
+                        state.pending_orders.remove(key);
                         if let Some((_, ident)) = state.order_identities.remove(&client_order_id) {
                             emitter.emit_order_rejected_event(
                                 ident.strategy_id,
@@ -360,6 +409,8 @@ pub fn dispatch_ws_message(
                         | OKXWsOperation::MassCancel
                         | OKXWsOperation::CancelAlgos,
                     ) => {
+                        let key = client_order_id.as_str();
+                        state.pending_cancels.remove(key);
                         if let Some(ident) = state.order_identities.get(&client_order_id) {
                             emitter.emit_order_cancel_rejected_event(
                                 ident.strategy_id,
@@ -372,6 +423,8 @@ pub fn dispatch_ws_message(
                         }
                     }
                     Some(OKXWsOperation::AmendOrder | OKXWsOperation::BatchAmendOrders) => {
+                        let key = client_order_id.as_str();
+                        state.pending_amends.remove(key);
                         if let Some(ident) = state.order_identities.get(&client_order_id) {
                             emitter.emit_order_modify_rejected_event(
                                 ident.strategy_id,

@@ -201,6 +201,12 @@ pub static OKX_REST_QUOTA: LazyLock<Quota> = LazyLock::new(|| {
 
 const OKX_GLOBAL_RATE_KEY: &str = "okx:global";
 
+/// OKX returns at most 100 records per page for order, fill, and algo endpoints.
+const OKX_PAGE_SIZE: usize = 100;
+
+/// Safety cap on paginated reconciliation fetches to avoid unbounded loops.
+const MAX_RECONCILIATION_PAGES: usize = 50;
+
 /// Represents an OKX HTTP response.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OKXResponse<T> {
@@ -2873,8 +2879,6 @@ impl OKXHttpClient {
         open_only: bool,
         limit: Option<u32>,
     ) -> anyhow::Result<Vec<OrderStatusReport>> {
-        let mut history_params = GetOrderHistoryParamsBuilder::default();
-
         let instrument_type = if let Some(instrument_type) = instrument_type {
             instrument_type
         } else {
@@ -2885,48 +2889,31 @@ impl OKXHttpClient {
             okx_instrument_type(&instrument)?
         };
 
-        history_params.inst_type(instrument_type);
+        let mut history_base = GetOrderHistoryParamsBuilder::default();
+        history_base.inst_type(instrument_type);
 
         if let Some(instrument_id) = instrument_id.as_ref() {
-            history_params.inst_id(instrument_id.symbol.inner().to_string());
+            history_base.inst_id(instrument_id.symbol.inner().to_string());
         }
+        let history_base = history_base.build().map_err(|e| anyhow::anyhow!(e))?;
 
-        if let Some(limit) = limit {
-            history_params.limit(limit);
-        }
-
-        let history_params = history_params.build().map_err(|e| anyhow::anyhow!(e))?;
-
-        let mut pending_params = GetOrderListParamsBuilder::default();
-        pending_params.inst_type(instrument_type);
+        let mut pending_base = GetOrderListParamsBuilder::default();
+        pending_base.inst_type(instrument_type);
 
         if let Some(instrument_id) = instrument_id.as_ref() {
-            pending_params.inst_id(instrument_id.symbol.inner().to_string());
+            pending_base.inst_id(instrument_id.symbol.inner().to_string());
         }
-
-        if let Some(limit) = limit {
-            pending_params.limit(limit);
-        }
-
-        let pending_params = pending_params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let pending_base = pending_base.build().map_err(|e| anyhow::anyhow!(e))?;
 
         let combined_resp = if open_only {
-            // Only request pending/open orders
-            self.inner
-                .get_orders_pending(pending_params)
-                .await
-                .map_err(|e| anyhow::anyhow!(e))?
+            self.paginate_orders_pending(&pending_base, limit).await?
         } else {
-            // Make both requests concurrently
-            let (history_resp, pending_resp) = tokio::try_join!(
-                self.inner.get_orders_history(history_params),
-                self.inner.get_orders_pending(pending_params)
-            )
-            .map_err(|e| anyhow::anyhow!(e))?;
-
-            // Combine both responses
-            let mut combined_resp = history_resp;
-            combined_resp.extend(pending_resp);
+            let (history, pending) = tokio::try_join!(
+                self.paginate_orders_history(&history_base, limit),
+                self.paginate_orders_pending(&pending_base, limit),
+            )?;
+            let mut combined_resp = history;
+            combined_resp.extend(pending);
             combined_resp
         };
 
@@ -3004,6 +2991,211 @@ impl OKXHttpClient {
         Ok(reports)
     }
 
+    // Paginates through order history using `ord_id` as the cursor
+    async fn paginate_orders_history(
+        &self,
+        base: &GetOrderHistoryParams,
+        limit: Option<u32>,
+    ) -> anyhow::Result<Vec<OKXOrderHistory>> {
+        let mut all = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        for _ in 0..MAX_RECONCILIATION_PAGES {
+            let mut params = base.clone();
+            params.after = cursor.take();
+
+            let page = self
+                .inner
+                .get_orders_history(params)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+
+            let page_len = page.len();
+            cursor = page.last().map(|o| o.ord_id.to_string());
+            all.extend(page);
+
+            if page_len < OKX_PAGE_SIZE {
+                break;
+            }
+
+            if let Some(lim) = limit
+                && all.len() >= lim as usize
+            {
+                break;
+            }
+        }
+
+        if let Some(lim) = limit {
+            all.truncate(lim as usize);
+        }
+
+        Ok(all)
+    }
+
+    // Paginates through pending orders using `ord_id` as the cursor
+    async fn paginate_orders_pending(
+        &self,
+        base: &GetOrderListParams,
+        limit: Option<u32>,
+    ) -> anyhow::Result<Vec<OKXOrderHistory>> {
+        let mut all = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        for _ in 0..MAX_RECONCILIATION_PAGES {
+            let mut params = base.clone();
+            params.after = cursor.take();
+
+            let page = self
+                .inner
+                .get_orders_pending(params)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+
+            let page_len = page.len();
+            cursor = page.last().map(|o| o.ord_id.to_string());
+            all.extend(page);
+
+            if page_len < OKX_PAGE_SIZE {
+                break;
+            }
+
+            if let Some(lim) = limit
+                && all.len() >= lim as usize
+            {
+                break;
+            }
+        }
+
+        if let Some(lim) = limit {
+            all.truncate(lim as usize);
+        }
+
+        Ok(all)
+    }
+
+    // Paginates through transaction details (fills) using `bill_id` as the cursor
+    async fn paginate_fills(
+        &self,
+        base: &GetTransactionDetailsParams,
+        limit: Option<u32>,
+    ) -> anyhow::Result<Vec<OKXTransactionDetail>> {
+        let mut all = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        for _ in 0..MAX_RECONCILIATION_PAGES {
+            let mut params = base.clone();
+            params.after = cursor.take();
+
+            let page = self
+                .inner
+                .get_fills(params)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+
+            let page_len = page.len();
+            cursor = page.last().map(|o| o.bill_id.to_string());
+            all.extend(page);
+
+            if page_len < OKX_PAGE_SIZE {
+                break;
+            }
+
+            if let Some(lim) = limit
+                && all.len() >= lim as usize
+            {
+                break;
+            }
+        }
+
+        if let Some(lim) = limit {
+            all.truncate(lim as usize);
+        }
+
+        Ok(all)
+    }
+
+    // Paginates through pending algo orders using `algo_id` as the cursor
+    async fn paginate_algo_pending(
+        &self,
+        base: &GetAlgoOrdersParams,
+        limit: Option<usize>,
+    ) -> anyhow::Result<Vec<OKXOrderAlgo>> {
+        let mut all = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        for _ in 0..MAX_RECONCILIATION_PAGES {
+            let mut params = base.clone();
+            params.after = cursor.take();
+
+            let page = match self.inner.get_order_algo_pending(params).await {
+                Ok(result) => result,
+                Err(OKXHttpError::UnexpectedStatus { status, .. })
+                    if status == StatusCode::NOT_FOUND =>
+                {
+                    break;
+                }
+                Err(e) => return Err(e.into()),
+            };
+
+            let page_len = page.len();
+            cursor = page.last().map(|o| o.algo_id.clone());
+            all.extend(page);
+
+            if page_len < OKX_PAGE_SIZE {
+                break;
+            }
+
+            if let Some(lim) = limit
+                && all.len() >= lim
+            {
+                break;
+            }
+        }
+
+        Ok(all)
+    }
+
+    // Paginates through historical algo orders using `algo_id` as the cursor
+    async fn paginate_algo_history(
+        &self,
+        base: &GetAlgoOrdersParams,
+        limit: Option<usize>,
+    ) -> anyhow::Result<Vec<OKXOrderAlgo>> {
+        let mut all = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        for _ in 0..MAX_RECONCILIATION_PAGES {
+            let mut params = base.clone();
+            params.after = cursor.take();
+
+            let page = match self.inner.get_order_algo_history(params).await {
+                Ok(result) => result,
+                Err(OKXHttpError::UnexpectedStatus { status, .. })
+                    if status == StatusCode::NOT_FOUND =>
+                {
+                    break;
+                }
+                Err(e) => return Err(e.into()),
+            };
+
+            let page_len = page.len();
+            cursor = page.last().map(|o| o.algo_id.clone());
+            all.extend(page);
+
+            if page_len < OKX_PAGE_SIZE {
+                break;
+            }
+
+            if let Some(lim) = limit
+                && all.len() >= lim
+            {
+                break;
+            }
+        }
+
+        Ok(all)
+    }
+
     /// Requests fill reports (transaction details) for the given parameters.
     ///
     /// # Errors
@@ -3043,17 +3235,9 @@ impl OKXHttpClient {
             params.inst_id(instrument_id.symbol.inner().to_string());
         }
 
-        if let Some(limit) = limit {
-            params.limit(limit);
-        }
-
         let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
 
-        let resp = self
-            .inner
-            .get_fills(params)
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let resp = self.paginate_fills(&params, limit).await?;
 
         // Prepare time range filter
         let start_ns = start.map(UnixNanos::from);
@@ -3961,23 +4145,12 @@ impl OKXHttpClient {
                 params_builder.state(state);
             }
 
-            if let Some(limit) = limit {
-                params_builder.limit(limit);
-            }
-
             let params = params_builder
                 .build()
                 .map_err(|e| anyhow::anyhow!(format!("Failed to build algo order params: {e}")))?;
 
-            let pending = match self.inner.get_order_algo_pending(params.clone()).await {
-                Ok(result) => result,
-                Err(OKXHttpError::UnexpectedStatus { status, .. })
-                    if status == StatusCode::NOT_FOUND =>
-                {
-                    Vec::new()
-                }
-                Err(e) => return Err(e.into()),
-            };
+            let remaining = limit.map(|l| (l as usize).saturating_sub(reports.len()));
+            let pending = self.paginate_algo_pending(&params, remaining).await?;
             self.collect_algo_reports(
                 account_id,
                 &pending,
@@ -3992,15 +4165,15 @@ impl OKXHttpClient {
                 return Ok(reports);
             }
 
-            let history = match self.inner.get_order_algo_history(params).await {
-                Ok(result) => result,
-                Err(OKXHttpError::UnexpectedStatus { status, .. })
-                    if status == StatusCode::NOT_FOUND =>
-                {
-                    Vec::new()
-                }
-                Err(e) => return Err(e.into()),
-            };
+            if let Some(lim) = limit
+                && reports.len() >= lim as usize
+            {
+                reports.truncate(lim as usize);
+                return Ok(reports);
+            }
+
+            let remaining = limit.map(|l| (l as usize).saturating_sub(reports.len()));
+            let history = self.paginate_algo_history(&params, remaining).await?;
             self.collect_algo_reports(
                 account_id,
                 &history,
@@ -4012,6 +4185,13 @@ impl OKXHttpClient {
             .await?;
 
             if has_specific_lookup && !reports.is_empty() {
+                return Ok(reports);
+            }
+
+            if let Some(lim) = limit
+                && reports.len() >= lim as usize
+            {
+                reports.truncate(lim as usize);
                 return Ok(reports);
             }
         }
