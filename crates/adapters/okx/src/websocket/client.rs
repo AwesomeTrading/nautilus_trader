@@ -2134,8 +2134,9 @@ impl OKXWebSocketClient {
         let payload = serde_json::to_string(&request)
             .map_err(|e| OKXWsError::JsonError(format!("Failed to serialize order: {e}")))?;
 
+        let cl_ord_key = client_order_id.to_string();
         self.pending_orders.insert(
-            client_order_id.to_string(),
+            cl_ord_key.clone(),
             PendingOrderInfo {
                 trader_id,
                 strategy_id,
@@ -2151,7 +2152,13 @@ impl OKXWebSocketClient {
             op: Some(super::enums::OKXWsOperation::Order),
         };
 
-        self.send_cmd(cmd).await
+        let result = self.send_cmd(cmd).await;
+
+        if result.is_err() {
+            self.pending_orders.remove(&cl_ord_key);
+        }
+
+        result
     }
 
     /// Place a new order via WebSocket.
@@ -2191,6 +2198,8 @@ impl OKXWebSocketClient {
         if let Some(venue_order_id) = venue_order_id {
             builder.ord_id(venue_order_id.as_str());
         }
+
+        let cl_ord_key = client_order_id.map(|id| id.to_string());
 
         if let Some(client_order_id) = client_order_id {
             builder.cl_ord_id(client_order_id.as_str());
@@ -2235,7 +2244,13 @@ impl OKXWebSocketClient {
             op: Some(super::enums::OKXWsOperation::AmendOrder),
         };
 
-        self.send_cmd(cmd).await
+        let result = self.send_cmd(cmd).await;
+
+        if let (Err(_), Some(key)) = (&result, &cl_ord_key) {
+            self.pending_amends.remove(key);
+        }
+
+        result
     }
 
     /// Cancels an existing order.
@@ -2267,6 +2282,8 @@ impl OKXWebSocketClient {
         if let Some(venue_order_id) = venue_order_id {
             builder.ord_id(venue_order_id.as_str());
         }
+
+        let cl_ord_key = client_order_id.map(|id| id.to_string());
 
         if let Some(client_order_id) = client_order_id {
             builder.cl_ord_id(client_order_id.as_str());
@@ -2303,7 +2320,13 @@ impl OKXWebSocketClient {
             op: Some(super::enums::OKXWsOperation::CancelOrder),
         };
 
-        self.send_cmd(cmd).await
+        let result = self.send_cmd(cmd).await;
+
+        if let (Err(_), Some(key)) = (&result, &cl_ord_key) {
+            self.pending_cancels.remove(key);
+        }
+
+        result
     }
 
     /// Mass cancels all orders for a given instrument via WebSocket.

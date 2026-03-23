@@ -1435,6 +1435,11 @@ impl ExecutionClient for OKXExecutionClient {
                         order.strategy_id(),
                     ));
                 } else {
+                    self.ensure_order_identity(
+                        order.client_order_id(),
+                        order.strategy_id(),
+                        order.instrument_id(),
+                    );
                     regular_payload.push((
                         order.instrument_id(),
                         Some(order.client_order_id()),
@@ -1513,6 +1518,11 @@ impl ExecutionClient for OKXExecutionClient {
             if is_pending_algo {
                 algo_orders.push(cancel.clone());
             } else {
+                self.ensure_order_identity(
+                    cancel.client_order_id,
+                    cancel.strategy_id,
+                    cancel.instrument_id,
+                );
                 regular_payload.push((
                     cancel.instrument_id,
                     Some(cancel.client_order_id),

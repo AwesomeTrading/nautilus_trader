@@ -107,6 +107,8 @@ Released on TBD (UTC).
 - Fixed Bybit account state free balance underflowing when locked margin exceeds wallet total during liquidation
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
 - Fixed OKX `_subscribe_instrument_status` raising `NotImplementedError` instead of being a no-op (status detected via polling)
+- Fixed OKX `cancel_all_orders` and `batch_cancel_orders` not seeding `order_identities` for reconciliation-loaded orders
+- Fixed OKX `pending_orders`, `pending_cancels`, and `pending_amends` maps leaking entries on WebSocket send failure
 - Fixed OKX duplicate fills after WebSocket reconnect when replayed messages have the same `trade_id`
 - Fixed OKX HTTP algo order helpers ignoring per-item `sCode`, treating venue rejections as success
 - Fixed OKX batch algo cancel not emitting `OrderCancelRejected` events for per-item or batch-level failures
