@@ -201,8 +201,17 @@ impl Default for LiveExecEngineConfig {
 }
 
 impl From<LiveExecEngineConfig> for ExecutionEngineConfig {
-    fn from(_config: LiveExecEngineConfig) -> Self {
-        Self::default()
+    fn from(config: LiveExecEngineConfig) -> Self {
+        Self {
+            purge_closed_orders_interval_mins: config.purge_closed_orders_interval_mins,
+            purge_closed_orders_buffer_mins: config.purge_closed_orders_buffer_mins,
+            purge_closed_positions_interval_mins: config.purge_closed_positions_interval_mins,
+            purge_closed_positions_buffer_mins: config.purge_closed_positions_buffer_mins,
+            purge_account_events_interval_mins: config.purge_account_events_interval_mins,
+            purge_account_events_lookback_mins: config.purge_account_events_lookback_mins,
+            purge_from_database: config.purge_from_database,
+            ..Self::default()
+        }
     }
 }
 

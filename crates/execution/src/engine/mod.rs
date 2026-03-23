@@ -52,8 +52,12 @@ use nautilus_common::{
         switchboard::{self},
     },
     runner::try_get_trading_cmd_sender,
+    timer::{TimeEvent, TimeEventCallback},
 };
-use nautilus_core::{UUID4, UnixNanos, WeakCell};
+use nautilus_core::{
+    UUID4, UnixNanos, WeakCell,
+    datetime::{mins_to_nanos, mins_to_secs},
+};
 use nautilus_model::{
     enums::{ContingencyType, OmsType, PositionSide},
     events::{
@@ -79,6 +83,10 @@ use crate::{
         reconcile_order_report,
     },
 };
+
+const TIMER_PURGE_CLOSED_ORDERS: &str = "ExecEngine_PURGE_CLOSED_ORDERS";
+const TIMER_PURGE_CLOSED_POSITIONS: &str = "ExecEngine_PURGE_CLOSED_POSITIONS";
+const TIMER_PURGE_ACCOUNT_EVENTS: &str = "ExecEngine_PURGE_ACCOUNT_EVENTS";
 
 /// Central execution engine responsible for orchestrating order routing and execution.
 ///
@@ -607,6 +615,163 @@ impl ExecutionEngine {
         }
     }
 
+    /// Starts the purge timers if configured.
+    #[allow(
+        clippy::missing_panics_doc,
+        reason = "timer registration is not expected to fail"
+    )]
+    pub fn start_purge_timers(&mut self) {
+        if let Some(interval_mins) = self
+            .config
+            .purge_closed_orders_interval_mins
+            .filter(|&m| m > 0)
+            && !self
+                .clock
+                .borrow()
+                .timer_names()
+                .contains(&TIMER_PURGE_CLOSED_ORDERS)
+        {
+            let interval_ns = mins_to_nanos(u64::from(interval_mins));
+            let buffer_mins = self.config.purge_closed_orders_buffer_mins.unwrap_or(0);
+            let buffer_secs = mins_to_secs(u64::from(buffer_mins));
+            let cache = self.cache.clone();
+            let clock = self.clock.clone();
+
+            let callback_fn: Rc<dyn Fn(TimeEvent)> = Rc::new(move |_event| {
+                let ts_now = clock.borrow().timestamp_ns();
+                cache.borrow_mut().purge_closed_orders(ts_now, buffer_secs);
+            });
+            let callback = TimeEventCallback::from(callback_fn);
+
+            log::info!("Starting purge closed orders timer at {interval_mins} minute intervals");
+            self.clock
+                .borrow_mut()
+                .set_timer_ns(
+                    TIMER_PURGE_CLOSED_ORDERS,
+                    interval_ns,
+                    None,
+                    None,
+                    Some(callback),
+                    None,
+                    None,
+                )
+                .expect("Failed to set purge closed orders timer");
+        }
+
+        if let Some(interval_mins) = self
+            .config
+            .purge_closed_positions_interval_mins
+            .filter(|&m| m > 0)
+            && !self
+                .clock
+                .borrow()
+                .timer_names()
+                .contains(&TIMER_PURGE_CLOSED_POSITIONS)
+        {
+            let interval_ns = mins_to_nanos(u64::from(interval_mins));
+            let buffer_mins = self.config.purge_closed_positions_buffer_mins.unwrap_or(0);
+            let buffer_secs = mins_to_secs(u64::from(buffer_mins));
+            let cache = self.cache.clone();
+            let clock = self.clock.clone();
+
+            let callback_fn: Rc<dyn Fn(TimeEvent)> = Rc::new(move |_event| {
+                let ts_now = clock.borrow().timestamp_ns();
+                cache
+                    .borrow_mut()
+                    .purge_closed_positions(ts_now, buffer_secs);
+            });
+            let callback = TimeEventCallback::from(callback_fn);
+
+            log::info!("Starting purge closed positions timer at {interval_mins} minute intervals");
+            self.clock
+                .borrow_mut()
+                .set_timer_ns(
+                    TIMER_PURGE_CLOSED_POSITIONS,
+                    interval_ns,
+                    None,
+                    None,
+                    Some(callback),
+                    None,
+                    None,
+                )
+                .expect("Failed to set purge closed positions timer");
+        }
+
+        if let Some(interval_mins) = self
+            .config
+            .purge_account_events_interval_mins
+            .filter(|&m| m > 0)
+            && !self
+                .clock
+                .borrow()
+                .timer_names()
+                .contains(&TIMER_PURGE_ACCOUNT_EVENTS)
+        {
+            let interval_ns = mins_to_nanos(u64::from(interval_mins));
+            let lookback_mins = self.config.purge_account_events_lookback_mins.unwrap_or(0);
+            let lookback_secs = mins_to_secs(u64::from(lookback_mins));
+            let cache = self.cache.clone();
+            let clock = self.clock.clone();
+
+            let callback_fn: Rc<dyn Fn(TimeEvent)> = Rc::new(move |_event| {
+                let ts_now = clock.borrow().timestamp_ns();
+                cache
+                    .borrow_mut()
+                    .purge_account_events(ts_now, lookback_secs);
+            });
+            let callback = TimeEventCallback::from(callback_fn);
+
+            log::info!("Starting purge account events timer at {interval_mins} minute intervals");
+            self.clock
+                .borrow_mut()
+                .set_timer_ns(
+                    TIMER_PURGE_ACCOUNT_EVENTS,
+                    interval_ns,
+                    None,
+                    None,
+                    Some(callback),
+                    None,
+                    None,
+                )
+                .expect("Failed to set purge account events timer");
+        }
+    }
+
+    /// Stops the purge timers if running.
+    pub fn stop_purge_timers(&mut self) {
+        let timer_names: Vec<String> = self
+            .clock
+            .borrow()
+            .timer_names()
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        if timer_names.iter().any(|n| n == TIMER_PURGE_CLOSED_ORDERS) {
+            log::info!("Canceling purge closed orders timer");
+            self.clock
+                .borrow_mut()
+                .cancel_timer(TIMER_PURGE_CLOSED_ORDERS);
+        }
+
+        if timer_names
+            .iter()
+            .any(|n| n == TIMER_PURGE_CLOSED_POSITIONS)
+        {
+            log::info!("Canceling purge closed positions timer");
+            self.clock
+                .borrow_mut()
+                .cancel_timer(TIMER_PURGE_CLOSED_POSITIONS);
+        }
+
+        if timer_names.iter().any(|n| n == TIMER_PURGE_ACCOUNT_EVENTS) {
+            log::info!("Canceling purge account events timer");
+            self.clock
+                .borrow_mut()
+                .cancel_timer(TIMER_PURGE_ACCOUNT_EVENTS);
+        }
+    }
+
     /// Creates snapshots of all open positions.
     pub fn snapshot_open_position_states(&self) {
         let positions: Vec<Position> = self
@@ -911,6 +1076,7 @@ impl ExecutionEngine {
     /// Starts the execution engine.
     pub fn start(&mut self) {
         self.start_snapshot_timer();
+        self.start_purge_timers();
 
         log::info!("Started");
     }
@@ -918,6 +1084,7 @@ impl ExecutionEngine {
     /// Stops the execution engine.
     pub fn stop(&mut self) {
         self.stop_snapshot_timer();
+        self.stop_purge_timers();
 
         log::info!("Stopped");
     }
