@@ -56,10 +56,10 @@ jobs:
           ambiguous_regex=$(printf '%s|' "${ambiguous_patterns[@]}")
           ambiguous_regex="${ambiguous_regex%|}"
 
-          # Fetch failed job IDs
+          # Fetch failed job IDs and names
           failed_jobs=$(
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?filter=latest&per_page=100" \
-              --jq '.jobs[] | select(.conclusion == "failure") | .id'
+              --jq '.jobs[] | select(.conclusion == "failure") | "\(.id)\t\(.name)"'
           )
 
           if [ -z "$failed_jobs" ]; then
@@ -70,7 +70,10 @@ jobs:
 
           # Check each failed job's logs for infrastructure patterns.
           should_rerun=false
-          for job_id in $failed_jobs; do
+          matched_job=""
+          matched_category=""
+
+          while IFS=$'\t' read -r job_id job_name; do
             logs=$(gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job_id/logs" 2>/dev/null || echo "")
             if [ -z "$logs" ]; then
               continue
@@ -78,8 +81,9 @@ jobs:
 
             # Check unique patterns against full log
             if echo "$logs" | grep -qE "$unique_regex"; then
-              echo "Infrastructure failure detected in job $job_id (unique pattern)"
               should_rerun=true
+              matched_job="$job_name"
+              matched_category="runner/framework"
               break
             fi
 
@@ -87,13 +91,18 @@ jobs:
             # Extract annotations first to avoid SIGPIPE under pipefail.
             annotations=$(echo "$logs" | grep '##\[error\]' || true)
             if [ -n "$annotations" ] && echo "$annotations" | grep -qE "$ambiguous_regex"; then
-              echo "Infrastructure failure detected in job $job_id (annotation pattern)"
               should_rerun=true
+              matched_job="$job_name"
+              matched_category="error annotation"
               break
             fi
-          done
+          done <<< "$failed_jobs"
 
-          echo "should_rerun=$should_rerun" >> "$GITHUB_OUTPUT"
+          {
+            echo "should_rerun=$should_rerun"
+            echo "matched_job=$matched_job"
+            echo "matched_category=$matched_category"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Rerun failed jobs
         if: steps.check.outputs.should_rerun == 'true'
@@ -103,3 +112,30 @@ jobs:
         run: |
           echo "Rerunning failed jobs for run $RUN_ID (attempt ${{ github.event.workflow_run.run_attempt }})"
           gh run rerun "$RUN_ID" --failed --repo "$GITHUB_REPOSITORY"
+
+      - name: Write job summary
+        if: always()
+        env:
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          SHOULD_RERUN: ${{ steps.check.outputs.should_rerun }}
+          MATCHED_JOB: ${{ steps.check.outputs.matched_job }}
+          MATCHED_CATEGORY: ${{ steps.check.outputs.matched_category }}
+        run: |
+          {
+            echo "## Auto-rerun result"
+            echo ""
+            echo "| Field | Value |"
+            echo "| ----- | ----- |"
+            echo "| Workflow | \`$WORKFLOW\` |"
+            echo "| Run | [#$RUN_ID](https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID) |"
+            echo "| Attempt | $ATTEMPT |"
+            if [ "$SHOULD_RERUN" = "true" ]; then
+              echo "| Action | Rerun triggered |"
+              echo "| Matched job | \`$MATCHED_JOB\` |"
+              echo "| Category | $MATCHED_CATEGORY |"
+            else
+              echo "| Action | No infra failure detected |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
