@@ -99,6 +99,12 @@ Released on TBD (UTC).
 - Fixed Binance Rust WS trading `OrderRejected` DashMap deadlock when `cleanup_terminal` ran while holding a read guard
 - Fixed Binance Spot Rust `connect()` not waiting for WS session authentication before signaling connected
 - Fixed Bybit demo exec client failing with error 10001 when `/v5/account/fee-rate` is unavailable (#3742), thanks for reporting @jindrichsirucek
+- Fixed Bybit HTTP client not retrying on 429 rate limit responses
+- Fixed Bybit HTTP cancellation token not resettable after `disconnect()`, causing REST calls to short-circuit on reconnect
+- Fixed Bybit WebSocket subscription ACKs confirming all pending topics instead of the acknowledged topic (via `req_id` correlation)
+- Fixed Bybit WebSocket failed subscription ACKs (success=false) not triggering `mark_failure` recovery path
+- Fixed Bybit bulk order status reports silently missing conditional (stop/MIT) orders
+- Fixed Bybit account state free balance underflowing when locked margin exceeds wallet total during liquidation
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
 - Fixed OKX `_subscribe_instrument_status` raising `NotImplementedError` instead of being a no-op (status detected via polling)
 - Fixed OKX duplicate fills after WebSocket reconnect when replayed messages have the same `trade_id`
@@ -136,6 +142,9 @@ Released on TBD (UTC).
 - Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
 - Added Tardis HTTP and WebSocket mock server integration tests
 - Added `LiveNode` stop-handle timeout test for shutdown reliability
+- Added Bybit `BybitWsFrame` enum separating wire-level deserialization from public `BybitWsMessage` API per adapter spec pattern
+- Added Bybit frame classification and subscription correlation test coverage (25 handler tests)
+- Replaced Bybit topic string constants with `BybitWsPublicChannel` and `BybitWsPrivateChannel` enum references
 - Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
 - Moved cache purge timers to base `ExecutionEngine` in Python
 - Refactored computation of greeks (#3691), thanks @faysou

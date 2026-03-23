@@ -289,6 +289,9 @@ impl ExecutionClient for BybitExecutionClient {
             return Ok(());
         }
 
+        // Reset after a prior disconnect so REST calls are not short-circuited
+        self.http_client.reset_cancellation_token();
+
         let product_types = self.product_types();
 
         if !self.core.instruments_initialized() {

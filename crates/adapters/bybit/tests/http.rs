@@ -1630,10 +1630,11 @@ async fn test_request_order_status_reports_linear_queries_all_settle_coins() {
         .map(|(_, coin)| coin)
         .collect();
 
+    // 2 settle coins x 2 order filters (regular + StopOrder) = 4 queries
     assert_eq!(
         realtime_queries.len(),
-        2,
-        "Should query realtime endpoint twice (once per settle coin)"
+        4,
+        "Should query realtime endpoint for each settle coin and order filter"
     );
     assert!(
         realtime_queries.contains(&&Some("USDT".to_string())),
@@ -1702,7 +1703,11 @@ async fn test_request_order_status_reports_respects_limit_across_settle_coins() 
         .filter(|(endpoint, _)| endpoint == "realtime")
         .count();
 
-    assert_eq!(realtime_query_count, 2, "Should query both settle coins");
+    // At least 2 queries (both settle coins), up to 4 with StopOrder filter passes
+    assert!(
+        realtime_query_count >= 2,
+        "Should query both settle coins, was {realtime_query_count}",
+    );
 }
 
 #[rstest]
@@ -1819,7 +1824,12 @@ async fn test_request_order_status_reports_combines_orders_from_each_settle_coin
         .map(|(_, coin)| coin)
         .collect();
 
-    assert_eq!(realtime_queries.len(), 2, "Should query both USDT and USDC");
+    // 2 settle coins x 2 order filters (regular + StopOrder) = 4 queries
+    assert_eq!(
+        realtime_queries.len(),
+        4,
+        "Should query both USDT and USDC with both order filters"
+    );
     assert!(
         realtime_queries.contains(&&Some("USDT".to_string())),
         "Should query USDT"

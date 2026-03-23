@@ -1051,10 +1051,15 @@ pub fn parse_ws_account_state(
         let locked_dec = coin_data.total_order_im + coin_data.total_position_im;
 
         let total = Money::from_decimal(total_dec, currency)?;
-        let locked = Money::from_decimal(locked_dec, currency)?;
-        let free = Money::from_raw(total.raw - locked.raw, currency);
+        let locked_raw = Money::from_decimal(locked_dec, currency)?.raw;
 
-        balances.push(AccountBalance::new(total, locked, free));
+        // Clamp locked between 0 and total so free stays non-negative
+        // when total itself is non-negative, and locked stays zero when
+        // total is negative (spot borrow deficit).
+        let clamped_locked = Money::from_raw(locked_raw.clamp(0, total.raw.max(0)), currency);
+        let free = Money::from_raw(total.raw - clamped_locked.raw, currency);
+
+        balances.push(AccountBalance::new(total, clamped_locked, free));
 
         let initial_margin_dec = coin_data.total_position_im;
         let maintenance_margin_dec = match &coin_data.total_position_mm {
@@ -1758,5 +1763,26 @@ mod tests {
             report.client_order_id.as_ref().unwrap().to_string(),
             "test-client-lit-001"
         );
+    }
+
+    #[rstest]
+    fn parse_ws_wallet_clamps_free_to_zero_when_locked_exceeds_total() {
+        // totalOrderIM (80) + totalPositionIM (40) = 120, which exceeds
+        // walletBalance (100). Free balance should clamp to zero, not underflow.
+        let json = load_test_json("ws_account_wallet_locked_exceeds_total.json");
+        let msg: crate::websocket::messages::BybitWsAccountWalletMsg =
+            serde_json::from_str(&json).unwrap();
+        let wallet = &msg.data[0];
+        let account_id = AccountId::new("BYBIT-UNIFIED");
+        let ts_event = UnixNanos::new(1_762_960_669_000_000_000);
+
+        let state = parse_ws_account_state(wallet, account_id, ts_event, TS).unwrap();
+
+        let usdt_balance = &state.balances[0];
+        assert_eq!(usdt_balance.currency.code.as_str(), "USDT");
+        assert!((usdt_balance.total.as_f64() - 100.0).abs() < 1e-6);
+        // Locked is capped at total to prevent negative free balance
+        assert!((usdt_balance.locked.as_f64() - 100.0).abs() < 1e-6);
+        assert_eq!(usdt_balance.free.as_f64(), 0.0);
     }
 }

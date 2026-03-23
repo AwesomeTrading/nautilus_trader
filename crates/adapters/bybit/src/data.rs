@@ -445,7 +445,7 @@ fn handle_ws_message(
                     cache_entry.2 = Some(interval.clone());
                 }
 
-                if changed {
+                if changed && cache_entry.0.is_some() {
                     let mut merged = msg.data.clone();
 
                     if merged.funding_rate.is_none() {

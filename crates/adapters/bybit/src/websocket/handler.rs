@@ -29,7 +29,9 @@ use tokio_tungstenite::tungstenite::Message;
 use super::{
     enums::BybitWsOperation,
     error::{BybitWsError, create_bybit_timeout_error, should_retry_bybit_error},
-    messages::{BybitWebSocketError, BybitWsFrame, BybitWsMessage},
+    messages::{
+        BybitWebSocketError, BybitWsFrame, BybitWsMessage, BybitWsResponse, BybitWsSubscriptionMsg,
+    },
     parse::parse_bybit_ws_frame,
 };
 
@@ -190,43 +192,7 @@ impl BybitWsFeedHandler {
 
                     match frame {
                         BybitWsFrame::Subscription(ref sub_msg) => {
-                            let pending_topics = self.subscriptions.pending_subscribe_topics();
-                            match sub_msg.op {
-                                BybitWsOperation::Subscribe => {
-                                    if sub_msg.success {
-                                        for topic in pending_topics {
-                                            self.subscriptions.confirm_subscribe(&topic);
-                                            log::debug!("Subscription confirmed: topic={topic}");
-                                        }
-                                    } else {
-                                        for topic in pending_topics {
-                                            self.subscriptions.mark_failure(&topic);
-                                            log::warn!(
-                                                "Subscription failed, will retry on reconnect: topic={topic}, error={:?}",
-                                                sub_msg.ret_msg
-                                            );
-                                        }
-                                    }
-                                }
-                                BybitWsOperation::Unsubscribe => {
-                                    let pending_unsub = self.subscriptions.pending_unsubscribe_topics();
-
-                                    if sub_msg.success {
-                                        for topic in pending_unsub {
-                                            self.subscriptions.confirm_unsubscribe(&topic);
-                                            log::debug!("Unsubscription confirmed: topic={topic}");
-                                        }
-                                    } else {
-                                        for topic in pending_unsub {
-                                            log::warn!(
-                                                "Unsubscription failed: topic={topic}, error={:?}",
-                                                sub_msg.ret_msg
-                                            );
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
+                            self.handle_subscription_ack(sub_msg);
                         }
                         BybitWsFrame::Auth(auth_response) => {
                             let is_success = auth_response.success.unwrap_or(false)
@@ -245,9 +211,24 @@ impl BybitWsFeedHandler {
                             }
                             return Some(BybitWsMessage::Auth(auth_response));
                         }
-                        BybitWsFrame::ErrorResponse(resp) => {
-                            let error = BybitWebSocketError::from_response(&resp);
-                            return Some(BybitWsMessage::Error(error));
+                        BybitWsFrame::ErrorResponse(ref resp) => {
+                            // Failed subscription/unsubscription ACKs arrive as
+                            // ErrorResponse when success=false. Route them through
+                            // the subscription state machine when the op field is
+                            // present, otherwise forward as a generic error.
+                            if let Some(op) = &resp.op {
+                                if *op == BybitWsOperation::Subscribe
+                                    || *op == BybitWsOperation::Unsubscribe
+                                {
+                                    self.handle_subscription_error(resp);
+                                } else {
+                                    let error = BybitWebSocketError::from_response(resp);
+                                    return Some(BybitWsMessage::Error(error));
+                                }
+                            } else {
+                                let error = BybitWebSocketError::from_response(resp);
+                                return Some(BybitWsMessage::Error(error));
+                            }
                         }
                         BybitWsFrame::OrderResponse(resp) => {
                             return Some(BybitWsMessage::OrderResponse(resp));
@@ -288,6 +269,81 @@ impl BybitWsFeedHandler {
                     }
                 }
             }
+        }
+    }
+
+    fn handle_subscription_ack(&self, sub_msg: &BybitWsSubscriptionMsg) {
+        match sub_msg.op {
+            BybitWsOperation::Subscribe => {
+                if sub_msg.success {
+                    if let Some(topic) = &sub_msg.req_id {
+                        self.subscriptions.confirm_subscribe(topic);
+                        log::debug!("Subscription confirmed: topic={topic}");
+                    } else {
+                        // No req_id, fall back to confirming all pending
+                        for topic in self.subscriptions.pending_subscribe_topics() {
+                            self.subscriptions.confirm_subscribe(&topic);
+                            log::debug!("Subscription confirmed (bulk): topic={topic}");
+                        }
+                    }
+                } else if let Some(topic) = &sub_msg.req_id {
+                    self.subscriptions.mark_failure(topic);
+                    log::warn!(
+                        "Subscription failed: topic={topic}, error={:?}",
+                        sub_msg.ret_msg
+                    );
+                } else {
+                    for topic in self.subscriptions.pending_subscribe_topics() {
+                        self.subscriptions.mark_failure(&topic);
+                        log::warn!(
+                            "Subscription failed (bulk): topic={topic}, error={:?}",
+                            sub_msg.ret_msg
+                        );
+                    }
+                }
+            }
+            BybitWsOperation::Unsubscribe => {
+                if sub_msg.success {
+                    if let Some(topic) = &sub_msg.req_id {
+                        self.subscriptions.confirm_unsubscribe(topic);
+                        log::debug!("Unsubscription confirmed: topic={topic}");
+                    } else {
+                        for topic in self.subscriptions.pending_unsubscribe_topics() {
+                            self.subscriptions.confirm_unsubscribe(&topic);
+                            log::debug!("Unsubscription confirmed (bulk): topic={topic}");
+                        }
+                    }
+                } else {
+                    let topic_desc = sub_msg.req_id.as_deref().unwrap_or("unknown");
+                    log::warn!(
+                        "Unsubscription failed: topic={topic_desc}, error={:?}",
+                        sub_msg.ret_msg
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_subscription_error(&self, resp: &BybitWsResponse) {
+        let topic = resp.req_id.as_deref().unwrap_or("unknown");
+        let error_msg = resp.ret_msg.as_deref().unwrap_or("unknown error");
+
+        match resp.op {
+            Some(BybitWsOperation::Subscribe) => {
+                if let Some(ref req_id) = resp.req_id {
+                    self.subscriptions.mark_failure(req_id);
+                } else {
+                    for t in self.subscriptions.pending_subscribe_topics() {
+                        self.subscriptions.mark_failure(&t);
+                    }
+                }
+                log::warn!("Subscription error: topic={topic}, error={error_msg}");
+            }
+            Some(BybitWsOperation::Unsubscribe) => {
+                log::warn!("Unsubscription error: topic={topic}, error={error_msg}");
+            }
+            _ => {}
         }
     }
 
@@ -568,5 +624,103 @@ mod tests {
         let msg = Message::Binary(vec![0x01, 0x02].into());
         let result = BybitWsFeedHandler::parse_raw_frame(msg);
         assert!(result.is_none(), "Expected None for binary, was {result:?}");
+    }
+
+    #[rstest]
+    fn test_subscription_ack_with_req_id_confirms_only_that_topic() {
+        let handler = create_test_handler();
+        handler.subscriptions.mark_subscribe("orderbook.50.BTCUSDT");
+        handler.subscriptions.mark_subscribe("publicTrade.BTCUSDT");
+
+        let ack = BybitWsSubscriptionMsg {
+            success: true,
+            op: BybitWsOperation::Subscribe,
+            conn_id: None,
+            req_id: Some("orderbook.50.BTCUSDT".to_string()),
+            ret_msg: None,
+        };
+
+        handler.handle_subscription_ack(&ack);
+
+        // Only orderbook should be confirmed, trade stays pending
+        assert!(
+            handler
+                .subscriptions
+                .pending_subscribe_topics()
+                .contains(&"publicTrade.BTCUSDT".to_string())
+        );
+        assert!(
+            !handler
+                .subscriptions
+                .pending_subscribe_topics()
+                .contains(&"orderbook.50.BTCUSDT".to_string())
+        );
+    }
+
+    #[rstest]
+    fn test_subscription_failure_with_req_id_marks_only_that_topic() {
+        let handler = create_test_handler();
+        handler.subscriptions.mark_subscribe("orderbook.50.BTCUSDT");
+        handler.subscriptions.mark_subscribe("publicTrade.BTCUSDT");
+
+        let ack = BybitWsSubscriptionMsg {
+            success: false,
+            op: BybitWsOperation::Subscribe,
+            conn_id: None,
+            req_id: Some("orderbook.50.BTCUSDT".to_string()),
+            ret_msg: Some("Invalid topic".to_string()),
+        };
+
+        handler.handle_subscription_ack(&ack);
+
+        // Orderbook should be marked as failed (back to pending for retry)
+        // Trade should remain pending (unaffected)
+        let pending = handler.subscriptions.pending_subscribe_topics();
+        assert!(pending.contains(&"orderbook.50.BTCUSDT".to_string()));
+        assert!(pending.contains(&"publicTrade.BTCUSDT".to_string()));
+    }
+
+    #[rstest]
+    fn test_error_response_with_subscribe_op_triggers_mark_failure() {
+        let handler = create_test_handler();
+        handler
+            .subscriptions
+            .mark_subscribe("invalid.topic.BTCUSDT");
+
+        let resp = BybitWsResponse {
+            op: Some(BybitWsOperation::Subscribe),
+            topic: None,
+            success: Some(false),
+            conn_id: None,
+            req_id: Some("invalid.topic.BTCUSDT".to_string()),
+            ret_code: Some(10001),
+            ret_msg: Some("Invalid topic".to_string()),
+        };
+
+        handler.handle_subscription_error(&resp);
+
+        // Topic should still be in pending (mark_failure moves confirmed -> pending)
+        let pending = handler.subscriptions.pending_subscribe_topics();
+        assert!(pending.contains(&"invalid.topic.BTCUSDT".to_string()));
+    }
+
+    #[rstest]
+    fn test_subscription_ack_without_req_id_confirms_all_pending() {
+        let handler = create_test_handler();
+        handler.subscriptions.mark_subscribe("orderbook.50.BTCUSDT");
+        handler.subscriptions.mark_subscribe("publicTrade.BTCUSDT");
+
+        let ack = BybitWsSubscriptionMsg {
+            success: true,
+            op: BybitWsOperation::Subscribe,
+            conn_id: None,
+            req_id: None,
+            ret_msg: None,
+        };
+
+        handler.handle_subscription_ack(&ack);
+
+        // Both should be confirmed when no req_id
+        assert!(handler.subscriptions.pending_subscribe_topics().is_empty());
     }
 }

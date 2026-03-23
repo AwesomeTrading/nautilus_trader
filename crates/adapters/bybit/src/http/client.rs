@@ -141,7 +141,7 @@ pub struct BybitRawHttpClient {
     credential: Option<Credential>,
     recv_window_ms: u64,
     retry_manager: RetryManager<BybitHttpError>,
-    cancellation_token: CancellationToken,
+    cancellation_token: Arc<std::sync::Mutex<CancellationToken>>,
 }
 
 impl Default for BybitRawHttpClient {
@@ -162,14 +162,33 @@ impl Debug for BybitRawHttpClient {
 }
 
 impl BybitRawHttpClient {
-    /// Cancel all pending HTTP requests.
+    /// Cancels all pending HTTP requests.
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
     pub fn cancel_all_requests(&self) {
-        self.cancellation_token.cancel();
+        self.cancellation_token
+            .lock()
+            .expect("cancellation token lock poisoned")
+            .cancel();
     }
 
-    /// Get the cancellation token for this client.
-    pub fn cancellation_token(&self) -> &CancellationToken {
-        &self.cancellation_token
+    /// Replaces the cancelled token with a fresh one so subsequent
+    /// requests are not immediately short-circuited.
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+    pub fn reset_cancellation_token(&self) {
+        let mut guard = self
+            .cancellation_token
+            .lock()
+            .expect("cancellation token lock poisoned");
+        *guard = CancellationToken::new();
+    }
+
+    /// Returns a clone of the current cancellation token.
+    #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+    pub fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token
+            .lock()
+            .expect("cancellation token lock poisoned")
+            .clone()
     }
 
     /// Creates a new [`BybitRawHttpClient`] using the default Bybit HTTP URL.
@@ -217,7 +236,7 @@ impl BybitRawHttpClient {
             credential: None,
             recv_window_ms: recv_window_ms.unwrap_or(DEFAULT_RECV_WINDOW_MS),
             retry_manager,
-            cancellation_token: CancellationToken::new(),
+            cancellation_token: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
         })
     }
 
@@ -268,7 +287,7 @@ impl BybitRawHttpClient {
             credential: Some(Credential::new(api_key, api_secret)),
             recv_window_ms: recv_window_ms.unwrap_or(DEFAULT_RECV_WINDOW_MS),
             retry_manager,
-            cancellation_token: CancellationToken::new(),
+            cancellation_token: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
         })
     }
 
@@ -503,7 +522,7 @@ impl BybitRawHttpClient {
         let should_retry = |error: &BybitHttpError| -> bool {
             match error {
                 BybitHttpError::NetworkError(_) => true,
-                BybitHttpError::UnexpectedStatus { status, .. } => *status >= 500,
+                BybitHttpError::UnexpectedStatus { status, .. } => *status == 429 || *status >= 500,
                 _ => false,
             }
         };
@@ -516,13 +535,15 @@ impl BybitRawHttpClient {
             }
         };
 
+        let token = self.cancellation_token();
+
         self.retry_manager
             .execute_with_retry_with_cancel(
                 endpoint.as_str(),
                 operation,
                 should_retry,
                 create_error,
-                &self.cancellation_token,
+                &token,
             )
             .await
     }
@@ -1399,7 +1420,11 @@ impl BybitHttpClient {
         self.inner.cancel_all_requests();
     }
 
-    pub fn cancellation_token(&self) -> &CancellationToken {
+    pub fn reset_cancellation_token(&self) {
+        self.inner.reset_cancellation_token();
+    }
+
+    pub fn cancellation_token(&self) -> CancellationToken {
         self.inner.cancellation_token()
     }
 
@@ -3483,50 +3508,75 @@ impl BybitHttpClient {
 
             let orders_for_coin = if open_only {
                 let mut all_orders = Vec::new();
-                let mut cursor: Option<String> = None;
-                let mut total_orders = 0;
+                let mut seen_ids: AHashSet<Ustr> = AHashSet::new();
 
-                loop {
-                    let remaining = if let Some(limit) = remaining_limit {
-                        (limit as usize).saturating_sub(total_orders)
+                // Query regular orders then conditional (stop/MIT) orders.
+                // Options do not support the StopOrder filter.
+                let order_filters: Vec<Option<BybitOrderFilter>> =
+                    if product_type == BybitProductType::Option {
+                        vec![None]
                     } else {
-                        usize::MAX
+                        vec![None, Some(BybitOrderFilter::StopOrder)]
                     };
 
-                    if remaining == 0 {
-                        break;
-                    }
+                for order_filter in order_filters {
+                    let mut cursor: Option<String> = None;
 
-                    // Max 50 per Bybit API
-                    let page_limit = std::cmp::min(remaining, 50);
+                    loop {
+                        let remaining = if let Some(limit) = remaining_limit {
+                            (limit as usize).saturating_sub(all_orders.len())
+                        } else {
+                            usize::MAX
+                        };
 
-                    let mut p = BybitOpenOrdersParamsBuilder::default();
-                    p.category(product_type);
+                        if remaining == 0 {
+                            break;
+                        }
 
-                    if let Some(symbol) = symbol_param.clone() {
-                        p.symbol(symbol);
-                    }
+                        // Max 50 per Bybit API
+                        let page_limit = std::cmp::min(remaining, 50);
 
-                    if let Some(coin) = settle_coin.clone() {
-                        p.settle_coin(coin);
-                    }
-                    p.limit(page_limit as u32);
+                        let mut p = BybitOpenOrdersParamsBuilder::default();
+                        p.category(product_type);
 
-                    if let Some(c) = cursor {
-                        p.cursor(c);
-                    }
-                    let params = p.build().map_err(|e| anyhow::anyhow!(e))?;
-                    let response: BybitOpenOrdersResponse = self
-                        .inner
-                        .send_request(Method::GET, "/v5/order/realtime", Some(&params), None, true)
-                        .await?;
+                        if let Some(symbol) = symbol_param.clone() {
+                            p.symbol(symbol);
+                        }
 
-                    total_orders += response.result.list.len();
-                    all_orders.extend(response.result.list);
+                        if let Some(coin) = settle_coin.clone() {
+                            p.settle_coin(coin);
+                        }
 
-                    cursor = response.result.next_page_cursor;
-                    if cursor.as_ref().is_none_or(|c| c.is_empty()) {
-                        break;
+                        if let Some(of) = order_filter {
+                            p.order_filter(of);
+                        }
+                        p.limit(page_limit as u32);
+
+                        if let Some(c) = cursor {
+                            p.cursor(c);
+                        }
+                        let params = p.build().map_err(|e| anyhow::anyhow!(e))?;
+                        let response: BybitOpenOrdersResponse = self
+                            .inner
+                            .send_request(
+                                Method::GET,
+                                "/v5/order/realtime",
+                                Some(&params),
+                                None,
+                                true,
+                            )
+                            .await?;
+
+                        for order in response.result.list {
+                            if seen_ids.insert(order.order_id) {
+                                all_orders.push(order);
+                            }
+                        }
+
+                        cursor = response.result.next_page_cursor;
+                        if cursor.as_ref().is_none_or(|c| c.is_empty()) {
+                            break;
+                        }
                     }
                 }
 
@@ -3536,128 +3586,156 @@ impl BybitHttpClient {
                 // Realtime has current open orders, history may lag for recent orders
                 let mut all_orders = Vec::new();
                 let mut open_orders = Vec::new();
-                let mut cursor: Option<String> = None;
-                let mut total_open_orders = 0;
+                let mut seen_open_ids: AHashSet<Ustr> = AHashSet::new();
 
-                loop {
-                    let remaining = if let Some(limit) = remaining_limit {
-                        (limit as usize).saturating_sub(total_open_orders)
+                // Query regular orders then conditional (stop/MIT) orders.
+                // Options do not support the StopOrder filter.
+                let order_filters: Vec<Option<BybitOrderFilter>> =
+                    if product_type == BybitProductType::Option {
+                        vec![None]
                     } else {
-                        usize::MAX
+                        vec![None, Some(BybitOrderFilter::StopOrder)]
                     };
 
-                    if remaining == 0 {
-                        break;
-                    }
+                for order_filter in &order_filters {
+                    let mut cursor: Option<String> = None;
 
-                    // Max 50 per Bybit API
-                    let page_limit = std::cmp::min(remaining, 50);
+                    loop {
+                        let remaining = if let Some(limit) = remaining_limit {
+                            (limit as usize).saturating_sub(open_orders.len())
+                        } else {
+                            usize::MAX
+                        };
 
-                    let mut open_params = BybitOpenOrdersParamsBuilder::default();
-                    open_params.category(product_type);
+                        if remaining == 0 {
+                            break;
+                        }
 
-                    if let Some(symbol) = symbol_param.clone() {
-                        open_params.symbol(symbol);
-                    }
+                        // Max 50 per Bybit API
+                        let page_limit = std::cmp::min(remaining, 50);
 
-                    if let Some(coin) = settle_coin.clone() {
-                        open_params.settle_coin(coin);
-                    }
-                    open_params.limit(page_limit as u32);
+                        let mut open_params = BybitOpenOrdersParamsBuilder::default();
+                        open_params.category(product_type);
 
-                    if let Some(c) = cursor {
-                        open_params.cursor(c);
-                    }
-                    let open_params = open_params.build().map_err(|e| anyhow::anyhow!(e))?;
-                    let open_response: BybitOpenOrdersResponse = self
-                        .inner
-                        .send_request(
-                            Method::GET,
-                            "/v5/order/realtime",
-                            Some(&open_params),
-                            None,
-                            true,
-                        )
-                        .await?;
+                        if let Some(symbol) = symbol_param.clone() {
+                            open_params.symbol(symbol);
+                        }
 
-                    total_open_orders += open_response.result.list.len();
-                    open_orders.extend(open_response.result.list);
+                        if let Some(coin) = settle_coin.clone() {
+                            open_params.settle_coin(coin);
+                        }
 
-                    cursor = open_response.result.next_page_cursor;
-                    if cursor.is_none() || cursor.as_ref().is_none_or(|c| c.is_empty()) {
-                        break;
+                        if let Some(of) = order_filter {
+                            open_params.order_filter(*of);
+                        }
+                        open_params.limit(page_limit as u32);
+
+                        if let Some(c) = cursor {
+                            open_params.cursor(c);
+                        }
+                        let open_params = open_params.build().map_err(|e| anyhow::anyhow!(e))?;
+                        let open_response: BybitOpenOrdersResponse = self
+                            .inner
+                            .send_request(
+                                Method::GET,
+                                "/v5/order/realtime",
+                                Some(&open_params),
+                                None,
+                                true,
+                            )
+                            .await?;
+
+                        for order in open_response.result.list {
+                            if !seen_open_ids.contains(&order.order_id) {
+                                seen_open_ids.insert(order.order_id);
+                                open_orders.push(order);
+                            }
+                        }
+
+                        cursor = open_response.result.next_page_cursor;
+                        if cursor.as_ref().is_none_or(|c| c.is_empty()) {
+                            break;
+                        }
                     }
                 }
 
-                let seen_order_ids: AHashSet<Ustr> =
-                    open_orders.iter().map(|o| o.order_id).collect();
+                let seen_order_ids: AHashSet<Ustr> = seen_open_ids;
+                let total_open_orders = open_orders.len();
 
                 all_orders.extend(open_orders);
 
-                let mut cursor: Option<String> = None;
                 let mut total_history_orders = 0;
 
-                loop {
-                    let total_orders = total_open_orders + total_history_orders;
-                    let remaining = if let Some(limit) = remaining_limit {
-                        (limit as usize).saturating_sub(total_orders)
-                    } else {
-                        usize::MAX
-                    };
+                for order_filter in &order_filters {
+                    let mut cursor: Option<String> = None;
 
-                    if remaining == 0 {
-                        break;
-                    }
+                    loop {
+                        let total_orders = total_open_orders + total_history_orders;
+                        let remaining = if let Some(limit) = remaining_limit {
+                            (limit as usize).saturating_sub(total_orders)
+                        } else {
+                            usize::MAX
+                        };
 
-                    // Max 50 per Bybit API
-                    let page_limit = std::cmp::min(remaining, 50);
-
-                    let mut history_params = BybitOrderHistoryParamsBuilder::default();
-                    history_params.category(product_type);
-
-                    if let Some(symbol) = symbol_param.clone() {
-                        history_params.symbol(symbol);
-                    }
-
-                    if let Some(coin) = settle_coin.clone() {
-                        history_params.settle_coin(coin);
-                    }
-
-                    if let Some(start) = start {
-                        history_params.start_time(start.timestamp_millis());
-                    }
-
-                    if let Some(end) = end {
-                        history_params.end_time(end.timestamp_millis());
-                    }
-                    history_params.limit(page_limit as u32);
-
-                    if let Some(c) = cursor {
-                        history_params.cursor(c);
-                    }
-                    let history_params = history_params.build().map_err(|e| anyhow::anyhow!(e))?;
-                    let history_response: BybitOrderHistoryResponse = self
-                        .inner
-                        .send_request(
-                            Method::GET,
-                            "/v5/order/history",
-                            Some(&history_params),
-                            None,
-                            true,
-                        )
-                        .await?;
-
-                    // Open orders might appear in both realtime and history
-                    for order in history_response.result.list {
-                        if !seen_order_ids.contains(&order.order_id) {
-                            all_orders.push(order);
-                            total_history_orders += 1;
+                        if remaining == 0 {
+                            break;
                         }
-                    }
 
-                    cursor = history_response.result.next_page_cursor;
-                    if cursor.is_none() || cursor.as_ref().is_none_or(|c| c.is_empty()) {
-                        break;
+                        // Max 50 per Bybit API
+                        let page_limit = std::cmp::min(remaining, 50);
+
+                        let mut history_params = BybitOrderHistoryParamsBuilder::default();
+                        history_params.category(product_type);
+
+                        if let Some(symbol) = symbol_param.clone() {
+                            history_params.symbol(symbol);
+                        }
+
+                        if let Some(coin) = settle_coin.clone() {
+                            history_params.settle_coin(coin);
+                        }
+
+                        if let Some(of) = order_filter {
+                            history_params.order_filter(*of);
+                        }
+
+                        if let Some(start) = start {
+                            history_params.start_time(start.timestamp_millis());
+                        }
+
+                        if let Some(end) = end {
+                            history_params.end_time(end.timestamp_millis());
+                        }
+                        history_params.limit(page_limit as u32);
+
+                        if let Some(c) = cursor {
+                            history_params.cursor(c);
+                        }
+                        let history_params =
+                            history_params.build().map_err(|e| anyhow::anyhow!(e))?;
+                        let history_response: BybitOrderHistoryResponse = self
+                            .inner
+                            .send_request(
+                                Method::GET,
+                                "/v5/order/history",
+                                Some(&history_params),
+                                None,
+                                true,
+                            )
+                            .await?;
+
+                        // Open orders might appear in both realtime and history
+                        for order in history_response.result.list {
+                            if !seen_order_ids.contains(&order.order_id) {
+                                all_orders.push(order);
+                                total_history_orders += 1;
+                            }
+                        }
+
+                        cursor = history_response.result.next_page_cursor;
+                        if cursor.as_ref().is_none_or(|c| c.is_empty()) {
+                            break;
+                        }
                     }
                 }
 

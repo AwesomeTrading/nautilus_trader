@@ -39,6 +39,8 @@ use crate::{
 pub struct BybitSubscription {
     pub op: BybitWsOperation,
     pub args: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub req_id: Option<String>,
 }
 
 /// Bybit WebSocket authentication message.

@@ -331,6 +331,7 @@ impl BybitWebSocketClient {
         let ping_msg = serde_json::to_string(&BybitSubscription {
             op: BybitWsOperation::Ping,
             args: vec![],
+            req_id: None,
         })?;
 
         let config = WebSocketConfig {
@@ -472,6 +473,7 @@ impl BybitWebSocketClient {
                     let message = BybitSubscription {
                         op: BybitWsOperation::Subscribe,
                         args: vec![topic.clone()],
+                        req_id: Some(topic.clone()),
                     };
 
                     if let Ok(payload) = serde_json::to_string(&message) {
@@ -726,6 +728,7 @@ impl BybitWebSocketClient {
             let message = BybitSubscription {
                 op: BybitWsOperation::Subscribe,
                 args: vec![topic.clone()],
+                req_id: Some(topic.clone()),
             };
             let payload = serde_json::to_string(&message).map_err(|e| {
                 BybitWsError::Json(format!("Failed to serialize subscription: {e}"))
@@ -779,6 +782,7 @@ impl BybitWebSocketClient {
             let message = BybitSubscription {
                 op: BybitWsOperation::Unsubscribe,
                 args: vec![topic.clone()],
+                req_id: Some(topic.clone()),
             };
 
             if let Ok(payload) = serde_json::to_string(&message) {
