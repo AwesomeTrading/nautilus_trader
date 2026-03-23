@@ -803,6 +803,12 @@ impl PolymarketExecutionClient {
                         }
                     }
 
+                    let fok_order_id = response
+                        .order_id
+                        .as_ref()
+                        .filter(|_| response.success)
+                        .cloned();
+
                     if let Some((order_id_str, venue_order_id)) = handle_order_response(
                         Ok(response),
                         &order,
@@ -822,6 +828,22 @@ impl PolymarketExecutionClient {
                             &order_id_str,
                             venue_order_id,
                             &emitter,
+                            clock,
+                        )
+                        .await;
+                    }
+
+                    if let Some(order_id) = fok_order_id {
+                        check_fok_status(
+                            &submitter,
+                            &order_id,
+                            &fill_tracker,
+                            &emitter,
+                            account_id,
+                            order.instrument_id(),
+                            order.order_side(),
+                            size_precision,
+                            price_precision,
                             clock,
                         )
                         .await;
@@ -1629,6 +1651,98 @@ async fn execute_deferred_cancel(
             );
         }
     }
+}
+
+/// Deferred FOK status check.
+///
+/// Waits 5 seconds then queries the CLOB REST API for the order status.
+/// If the order has reached a terminal state that the WS stream missed
+/// (e.g. UNMATCHED for an unfilled FOK), emits an order status report
+/// so the engine can reconcile it.
+#[allow(clippy::too_many_arguments)]
+async fn check_fok_status(
+    submitter: &OrderSubmitter,
+    order_id: &str,
+    fill_tracker: &Arc<OrderFillTrackerMap>,
+    emitter: &ExecutionEventEmitter,
+    account_id: AccountId,
+    instrument_id: InstrumentId,
+    order_side: OrderSide,
+    size_precision: u8,
+    price_precision: u8,
+    clock: &'static AtomicTime,
+) {
+    const FOK_CHECK_DELAY: Duration = Duration::from_secs(5);
+
+    tokio::time::sleep(FOK_CHECK_DELAY).await;
+
+    let venue_order_id = VenueOrderId::from(order_id);
+    if fill_tracker.has_fills_or_settled(&venue_order_id) {
+        return;
+    }
+
+    log::info!("FOK order {order_id} unresolved after 5s, checking REST status");
+
+    let venue_order = match submitter.get_order(order_id).await {
+        Ok(o) => o,
+        Err(e) => {
+            log::warn!("FOK status check failed for {order_id}: {e}");
+            return;
+        }
+    };
+
+    let order_status = OrderStatus::from(venue_order.status);
+
+    if !matches!(
+        order_status,
+        OrderStatus::Rejected | OrderStatus::Canceled | OrderStatus::Expired | OrderStatus::Filled
+    ) {
+        return;
+    }
+
+    let quantity = Quantity::new(
+        venue_order
+            .original_size
+            .to_string()
+            .parse::<f64>()
+            .unwrap_or(0.0),
+        size_precision,
+    );
+    let filled_qty = Quantity::new(
+        venue_order
+            .size_matched
+            .to_string()
+            .parse::<f64>()
+            .unwrap_or(0.0),
+        size_precision,
+    );
+    let price = Price::new(
+        venue_order.price.to_string().parse::<f64>().unwrap_or(0.0),
+        price_precision,
+    );
+
+    let ts = clock.get_time_ns();
+    let mut report = OrderStatusReport::new(
+        account_id,
+        instrument_id,
+        None,
+        venue_order_id,
+        order_side,
+        OrderType::Limit,
+        TimeInForce::Ioc,
+        order_status,
+        quantity,
+        filled_qty,
+        ts,
+        ts,
+        ts,
+        None,
+    );
+    report.price = Some(price);
+
+    log::info!("FOK order {order_id} resolved via REST as {order_status:?}");
+
+    emitter.send_order_status_report(report);
 }
 
 fn get_usdc_currency() -> Currency {

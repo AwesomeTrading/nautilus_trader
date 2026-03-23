@@ -95,6 +95,15 @@ impl OrderFillTrackerMap {
             .is_some()
     }
 
+    /// Returns true if the order has received any fills or been removed (settled).
+    pub fn has_fills_or_settled(&self, venue_order_id: &VenueOrderId) -> bool {
+        let guard = self.inner.lock().expect(MUTEX_POISONED);
+        match guard.get(venue_order_id) {
+            Some(s) => s.cumulative_filled > 0.0,
+            None => true, // Removed = already settled
+        }
+    }
+
     /// Record a fill, updating cumulative total and last price/ts.
     pub fn record_fill(&self, venue_order_id: &VenueOrderId, qty: f64, px: f64, ts: UnixNanos) {
         if let Some(s) = self

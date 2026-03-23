@@ -41,6 +41,7 @@ use crate::{
     http::{
         clob::PolymarketClobHttpClient,
         error::Error,
+        models::PolymarketOpenOrder,
         query::{CancelResponse, OrderResponse},
     },
 };
@@ -290,5 +291,25 @@ impl OrderSubmitter {
             )
             .await
             .map_err(|e| anyhow::anyhow!("{e}"))
+    }
+
+    /// Fetches a single order by its venue order ID from the CLOB REST API.
+    pub async fn get_order(&self, order_id: &str) -> anyhow::Result<PolymarketOpenOrder> {
+        let http_client = self.http_client.clone();
+        let oid = order_id.to_string();
+
+        self.retry_manager
+            .execute_with_retry(
+                "get_order",
+                || {
+                    let http_client = http_client.clone();
+                    let oid = oid.clone();
+                    async move { http_client.get_order(&oid).await }
+                },
+                |e| e.is_retryable(),
+                Error::transport,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to fetch order status: {e}"))
     }
 }

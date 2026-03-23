@@ -34,7 +34,7 @@ use nautilus_common::{
     enums::LogLevel,
     live::runner::set_exec_event_sender,
     messages::{
-        ExecutionEvent,
+        ExecutionEvent, ExecutionReport,
         execution::{
             BatchCancelOrders, CancelOrder, GenerateFillReports, GenerateOrderStatusReport,
             GenerateOrderStatusReports, GeneratePositionStatusReports, ModifyOrder, SubmitOrder,
@@ -46,7 +46,10 @@ use nautilus_core::{UUID4, UnixNanos};
 use nautilus_live::ExecutionClientCore;
 use nautilus_model::{
     accounts::{AccountAny, cash::CashAccount},
-    enums::{AccountType, AssetClass, CurrencyType, OmsType, OrderSide, OrderType, TimeInForce},
+    enums::{
+        AccountType, AssetClass, CurrencyType, OmsType, OrderSide, OrderStatus, OrderType,
+        TimeInForce,
+    },
     events::{AccountState, OrderEventAny, OrderPendingCancel},
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, Symbol, TraderId, Venue,
@@ -76,6 +79,7 @@ struct TestServerState {
     cancel_response: Arc<tokio::sync::Mutex<Option<Value>>>,
     batch_cancel_response: Arc<tokio::sync::Mutex<Option<Value>>>,
     book_response: Arc<tokio::sync::Mutex<Option<Value>>>,
+    single_order_response: Arc<tokio::sync::Mutex<Option<Value>>>,
 }
 
 impl Default for TestServerState {
@@ -89,6 +93,7 @@ impl Default for TestServerState {
             order_response_status: Arc::new(tokio::sync::Mutex::new(StatusCode::OK)),
             cancel_response: Arc::new(tokio::sync::Mutex::new(None)),
             batch_cancel_response: Arc::new(tokio::sync::Mutex::new(None)),
+            single_order_response: Arc::new(tokio::sync::Mutex::new(None)),
             book_response: Arc::new(tokio::sync::Mutex::new(Some(json!({
                 "bids": [
                     {"price": "0.48", "size": "100.00"},
@@ -193,7 +198,11 @@ async fn handle_get_orders(State(state): State<TestServerState>) -> Response {
 
 async fn handle_get_order(State(state): State<TestServerState>) -> Response {
     *state.last_path.lock().await = "/data/order".to_string();
-    Json(load_json("http_open_order.json")).into_response()
+    let resp = state.single_order_response.lock().await;
+    match resp.as_ref() {
+        Some(v) => Json(v.clone()).into_response(),
+        None => Json(load_json("http_open_order.json")).into_response(),
+    }
 }
 
 async fn handle_get_trades(State(state): State<TestServerState>) -> Response {
@@ -928,6 +937,89 @@ async fn test_submit_market_order_rejected_empty_book() {
         .unwrap()
         .unwrap();
     assert_order_event(event, "Rejected");
+}
+
+fn assert_order_status_report(event: ExecutionEvent, expected_status: OrderStatus) {
+    match event {
+        ExecutionEvent::Report(report) => match report {
+            ExecutionReport::Order(r) => {
+                assert_eq!(
+                    r.order_status, expected_status,
+                    "Expected {expected_status:?}, was {:?}",
+                    r.order_status
+                );
+            }
+            other => panic!("Expected Order report, was {other:?}"),
+        },
+        other => panic!("Expected Report event, was {other:?}"),
+    }
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_fok_deferred_check_emits_rejected_for_unmatched() {
+    let state = TestServerState::default();
+    // REST returns UNMATCHED for the FOK order status check
+    *state.single_order_response.lock().await = Some(json!({
+        "associate_trades": [],
+        "id": "test-fok-order-id",
+        "status": "UNMATCHED",
+        "market": "0xtest",
+        "original_size": "10.0000",
+        "outcome": "Yes",
+        "maker_address": "0xtest",
+        "owner": "test-owner",
+        "price": "0.5100",
+        "side": "BUY",
+        "size_matched": "0.0000",
+        "asset_id": "TEST-TOKEN",
+        "expiration": null,
+        "order_type": "FOK",
+        "created_at": 1_703_875_200_000_i64
+    }));
+    let addr = start_mock_server(state.clone()).await;
+    let (mut client, mut rx, cache) = create_test_execution_client(addr);
+    client.start().unwrap();
+
+    let instrument_id = InstrumentId::from("TEST-TOKEN.POLYMARKET");
+    add_instrument_to_cache(&cache, instrument_id);
+
+    let order = make_market_order("O-FOK-UNMATCHED", instrument_id, OrderSide::Buy, true);
+    cache
+        .borrow_mut()
+        .add_order(order.clone(), None, None, false)
+        .unwrap();
+    let cmd = make_submit_cmd(&order, instrument_id);
+
+    client.submit_order(&cmd).unwrap();
+
+    // Submitted
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Submitted");
+
+    // Updated (quote-to-base conversion)
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Updated");
+
+    // Accepted
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_event(event, "Accepted");
+
+    // Deferred FOK check: after ~5s, should emit a Rejected status report
+    let event = tokio::time::timeout(Duration::from_secs(10), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_status_report(event, OrderStatus::Rejected);
 }
 
 fn make_limit_order(
