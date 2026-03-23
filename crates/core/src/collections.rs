@@ -21,7 +21,33 @@ use std::{
     hash::Hash,
 };
 
+use ahash::{AHashMap, AHashSet};
+use arc_swap::ArcSwap;
 use ustr::Ustr;
+
+/// A lock-free concurrent map optimized for read-heavy access patterns.
+///
+/// Reads are a single atomic pointer load with no contention between readers.
+/// Writes clone the inner map, mutate the clone, and atomically swap it in.
+///
+/// Not safe for concurrent writers using `load`/`store`: the last `store` wins
+/// and earlier updates are silently lost. Use `rcu()` when multiple writers
+/// may race, or restrict writes to a single task.
+///
+/// Wrap in `Arc` for shared ownership across threads.
+pub type AtomicMap<K, V> = ArcSwap<AHashMap<K, V>>;
+
+/// A lock-free concurrent set optimized for read-heavy access patterns.
+///
+/// Reads are a single atomic pointer load with no contention between readers.
+/// Writes clone the inner set, mutate the clone, and atomically swap it in.
+///
+/// Not safe for concurrent writers using `load`/`store`: the last `store` wins
+/// and earlier updates are silently lost. Use `rcu()` when multiple writers
+/// may race, or restrict writes to a single task.
+///
+/// Wrap in `Arc` for shared ownership across threads.
+pub type AtomicSet<K> = ArcSwap<AHashSet<K>>;
 
 /// Represents a generic set-like container with members.
 pub trait SetLike {

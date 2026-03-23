@@ -5257,10 +5257,12 @@ version = "0.55.0"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
+ "arc-swap",
  "bytes",
  "cbindgen",
  "chrono",
  "criterion",
+ "dashmap",
  "heck",
  "iai",
  "indexmap 2.13.0",
