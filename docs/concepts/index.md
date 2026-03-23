@@ -32,6 +32,12 @@ including their arithmetic behavior, precision handling, and type-specific const
 
 Built-in data types for the trading domain, and how to work with custom data.
 
+## Events
+
+The event types that drive the system: order events, position events, account
+events, and time events. Covers handler dispatch, the causal chain from order
+fills to position events, and tracing orders to positions.
+
 ## Options
 
 Option instrument types, venue-provided Greeks streaming, option chain subscriptions

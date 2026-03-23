@@ -82,24 +82,33 @@ Actors have access to a clock for scheduling:
 
 ```python
 def on_start(self) -> None:
-    # Set a recurring timer (fires every 5 seconds)
-    self.clock.set_timer("my_timer", timedelta(seconds=5))
+    # Set a recurring timer with a callback (fires every 5 seconds)
+    self.clock.set_timer(
+        "my_timer",
+        timedelta(seconds=5),
+        callback=self._on_timer,
+    )
 
-    # Set a one-time alert
-    self.clock.set_alert("my_alert", self.clock.utc_now() + timedelta(minutes=1))
+    # Set a one-time alert with a callback
+    self.clock.set_time_alert(
+        "my_alert",
+        self.clock.utc_now() + timedelta(minutes=1),
+        callback=self._on_alert,
+    )
 
 def on_stop(self) -> None:
     # Cancel timers to prevent resource leaks across stop/resume cycles
     self.clock.cancel_timer("my_timer")
 
-def on_timer(self, event: TimeEvent) -> None:
-    if event.name == "my_timer":
-        self.log.info("Timer fired!")
+def _on_timer(self, event: TimeEvent) -> None:
+    self.log.info("Timer fired!")
 
-def on_alert(self, event: TimeEvent) -> None:
-    if event.name == "my_alert":
-        self.log.info("Alert triggered!")
+def _on_alert(self, event: TimeEvent) -> None:
+    self.log.info("Alert triggered!")
 ```
+
+Pass a `callback` to direct `TimeEvent` objects to your own method. If you
+omit the callback, the event is delivered to `on_event` instead.
 
 ## System access
 

@@ -833,6 +833,7 @@ making your trading strategies more portable across different venues.
 
 ## Related guides
 
+- [Events](events.md) - Order events, position events, and handler dispatch.
 - [Execution](execution.md) - Order execution and fill handling.
 - [Positions](positions.md) - Positions created from order fills.
 - [Strategies](strategies.md) - Order management from strategies.
