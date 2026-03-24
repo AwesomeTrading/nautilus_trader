@@ -12,6 +12,7 @@ Released on TBD (UTC).
 - Added `ExecTesterConfig.test_reject_post_only` implicitly setting `post_only` on orders without requiring `use_post_only` (Python and Rust)
 - Added Betfair backtest example streaming raw `.gz` data through `BacktestEngine` in Rust
 - Added Binance instrument status polling in Rust
+- Added Binance Futures `close_position` parameter for algo stop orders to close an entire position at trigger price (Python and Rust) (#3751), thanks for reporting @dodge-basic
 - Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Deribit `LimitIfTouched` and `MarketIfTouched` order type support (`take_limit`/`take_market`)

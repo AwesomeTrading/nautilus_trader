@@ -119,6 +119,85 @@ Use admonition blocks to highlight important information:
 
 Avoid overusing admonitions; too many diminish their impact.
 
+## MDX components
+
+The docs site (fumadocs) provides built-in MDX components available in all `.md` files.
+No imports are needed.
+
+### Tabs
+
+Use `Tabs` and `Tab` for language-specific or variant code examples.
+
+```markdown
+<Tabs items={['Python', 'Rust']}>
+<Tab value="Python">
+\`\`\`python
+strategy.submit_order(order, params={"close_position": True})
+\`\`\`
+</Tab>
+<Tab value="Rust">
+\`\`\`rust
+let params = Params::from([("close_position", true.into())]);
+\`\`\`
+</Tab>
+</Tabs>
+```
+
+### Steps
+
+Use `Steps` and `Step` for sequential procedures.
+
+```markdown
+<Steps>
+<Step>
+Configure the adapter.
+</Step>
+<Step>
+Start the trading node.
+</Step>
+</Steps>
+```
+
+### Accordions
+
+Use `Accordions` and `Accordion` for collapsible content.
+
+```markdown
+<Accordions>
+<Accordion title="Advanced configuration">
+Content here.
+</Accordion>
+</Accordions>
+```
+
+### Files
+
+Use `Files`, `Folder`, and `File` for directory tree visualizations.
+
+```markdown
+<Files>
+<Folder name="src" defaultOpen>
+<File name="main.rs" />
+<File name="lib.rs" />
+</Folder>
+</Files>
+```
+
+### Cards
+
+Use `Cards` and `Card` for linked content grids.
+
+```markdown
+<Cards>
+<Card title="Getting started" href="/latest/getting_started" />
+<Card title="Concepts" href="/latest/concepts" />
+</Cards>
+```
+
+### TypeTable
+
+Use `TypeTable` for parameter or type documentation tables.
+
 ## Line length and wrapping
 
 - Wrap lines at no more than ~100-120 characters for better readability and diff reviews.

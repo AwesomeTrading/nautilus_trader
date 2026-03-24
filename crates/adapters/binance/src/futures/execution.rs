@@ -430,6 +430,12 @@ impl BinanceFuturesExecutionClient {
 
         let use_algo_api = is_algo_order_type(order_type);
 
+        let close_position = cmd
+            .params
+            .as_ref()
+            .and_then(|p| p.get_bool("close_position"))
+            .unwrap_or(false);
+
         // Convert trailing offset (basis points) to Binance callback rate (percentage).
         // Binance accepts 1 decimal place (0.1% granularity = 10 bp increments).
         let callback_rate = trailing_offset
@@ -559,6 +565,7 @@ impl BinanceFuturesExecutionClient {
                         price,
                         trigger_price,
                         reduce_only,
+                        close_position,
                         position_side,
                         activation_price,
                         callback_rate,
@@ -1608,7 +1615,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             return Ok(());
         }
 
-        // Validate trailing offset before submission (Initialized -> Denied is valid,
+        // Validate before submission (Initialized -> Denied is valid,
         // but Submitted -> Denied is not, so validate before emitting OrderSubmitted)
         if let Some(offset_type) = order.trailing_offset_type() {
             if offset_type != TrailingOffsetType::BasisPoints {
@@ -1624,6 +1631,29 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                 {
                     anyhow::bail!("callbackRate {rate}% out of Binance range [0.1, 10.0]");
                 }
+            }
+        }
+
+        let close_position = cmd
+            .params
+            .as_ref()
+            .and_then(|p| p.get_bool("close_position"))
+            .unwrap_or(false);
+
+        if close_position {
+            let order_type = order.order_type();
+
+            if !matches!(
+                order_type,
+                OrderType::StopMarket | OrderType::MarketIfTouched
+            ) {
+                anyhow::bail!(
+                    "`close_position` is not supported for order type {order_type:?} on Binance"
+                );
+            }
+
+            if order.is_reduce_only() {
+                anyhow::bail!("`close_position` cannot be combined with `reduce_only` on Binance");
             }
         }
 
