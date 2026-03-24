@@ -113,6 +113,11 @@ between backtesting and live trading.
 
 Requirements and best practices for developing integration adapters for data providers and trading venues.
 
+## Rust
+
+Writing actors, strategies, and running backtests and live trading in pure Rust
+using the `crates/` implementation directly.
+
 :::note
 The Python API reference (linked in the sidebar) is the source of truth for the platform.
 If there are discrepancies between these guides and the API reference, the API reference is correct.

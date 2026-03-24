@@ -1,6 +1,6 @@
 # Events
 
-NautilusTrader is event-driven: every state change in the system is represented
+Nautilus is event-driven: every state change in the system is represented
 by an event object that flows through the `MessageBus` to strategy and actor
 handlers. This guide covers the event types, how they are dispatched, and how
 order fills produce position events.

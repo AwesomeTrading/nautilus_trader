@@ -90,7 +90,7 @@ metadata.
 The outer PyO3 `CustomData` wrapper is the common container that crosses the
 FFI boundary.
 
-Constructor signature: `CustomData(data_type, data)` -- the `DataType` comes
+Constructor signature: `CustomData(data_type, data)` where `DataType` comes
 first, then the inner payload.
 
 It contains:
