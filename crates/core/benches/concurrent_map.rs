@@ -13,44 +13,40 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! Benchmarks comparing `Arc<DashMap>`, `Arc<RwLock<AHashMap>>`, and `Arc<ArcSwap<AHashMap>>`
+//! Benchmarks comparing `Arc<DashMap>`, `Arc<RwLock<AHashMap>>`, and `Arc<AtomicMap>`
 //! for read-heavy concurrent access patterns.
 //!
-//! Hardware: Apple M4 Pro (8P+4E cores), 24 GB RAM, macOS, rustc 1.94.0.
+//! Hardware: AMD Ryzen 9 7950X (16C/32T), 128 GB RAM, Linux 6.8, rustc 1.94.0.
 //!
 //! Results (10k reads/thread, barrier-synced, String keys, u64 values):
 //!
 //! ```text
 //! Single-threaded read (per-lookup, no contention)
-//! ┌──────────┬──────────┬──────────┬──────────┐
-//! │ Map size │ DashMap  │ RwLock   │ ArcSwap  │
-//! ├──────────┼──────────┼──────────┼──────────┤
-//! │ 100      │ 18.1 ns  │  7.8 ns  │  8.8 ns  │
-//! │ 1000     │ 31.6 ns  │  8.2 ns  │ 11.2 ns  │
-//! └──────────┴──────────┴──────────┴──────────┘
+//! ┌──────────┬──────────┬──────────┬───────────┐
+//! │ Map size │ DashMap  │ RwLock   │ AtomicMap │
+//! ├──────────┼──────────┼──────────┼───────────┤
+//! │ 100      │ 16.3 ns  │  7.7 ns  │   9.3 ns  │
+//! │ 1000     │ 17.5 ns  │  8.5 ns  │  10.3 ns  │
+//! └──────────┴──────────┴──────────┴───────────┘
 //!
 //! Concurrent reads (100 entries)
-//! ┌──────────┬──────────┬──────────┬──────────┐
-//! │ Threads  │ DashMap  │ RwLock   │ ArcSwap  │
-//! ├──────────┼──────────┼──────────┼──────────┤
-//! │  4       │  690 us  │  2.4 ms  │  453 us  │
-//! │  8       │  1.4 ms  │  7.3 ms  │  243 us  │
-//! │ 16       │  3.6 ms  │ 35.9 ms  │  793 us  │
-//! └──────────┴──────────┴──────────┴──────────┘
+//! ┌──────────┬──────────┬──────────┬───────────┐
+//! │ Threads  │ DashMap  │ RwLock   │ AtomicMap │
+//! ├──────────┼──────────┼──────────┼───────────┤
+//! │  4       │  899 us  │  1.7 ms  │   181 us  │
+//! │  8       │  1.8 ms  │  4.2 ms  │   244 us  │
+//! │ 16       │  2.4 ms  │ 11.4 ms  │   445 us  │
+//! └──────────┴──────────┴──────────┴───────────┘
 //!
 //! Write-once read-many (1000 entries)
-//! ┌──────────┬──────────┬──────────┬──────────┐
-//! │ Threads  │ DashMap  │ RwLock   │ ArcSwap  │
-//! ├──────────┼──────────┼──────────┼──────────┤
-//! │  4       │  550 us  │  2.1 ms  │  141 us  │
-//! │  8       │  2.5 ms  │ 10.2 ms  │  350 us  │
-//! │ 16       │  2.0 ms  │ 43.4 ms  │  430 us  │
-//! └──────────┴──────────┴──────────┴──────────┘
+//! ┌──────────┬──────────┬──────────┬───────────┐
+//! │ Threads  │ DashMap  │ RwLock   │ AtomicMap │
+//! ├──────────┼──────────┼──────────┼───────────┤
+//! │  4       │  1.1 ms  │  2.0 ms  │   183 us  │
+//! │  8       │  1.2 ms  │  4.6 ms  │   246 us  │
+//! │ 16       │  2.5 ms  │  7.3 ms  │   443 us  │
+//! └──────────┴──────────┴──────────┴───────────┘
 //! ```
-//!
-//! NOTE: macOS `pthread_rwlock` uses a fair scheduling policy that causes reader-to-reader
-//! contention at high thread counts. Linux futex-based RwLock does not have this property.
-//! Run on both platforms before drawing conclusions for production (Linux) deployments.
 
 use std::{
     hint::black_box,
@@ -58,9 +54,9 @@ use std::{
 };
 
 use ahash::AHashMap;
-use arc_swap::ArcSwap;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use dashmap::DashMap;
+use nautilus_core::AtomicMap;
 
 const MAP_SIZES: [usize; 2] = [100, 1_000];
 const THREAD_COUNTS: [usize; 4] = [1, 4, 8, 16];
@@ -87,12 +83,12 @@ fn populated_rwlock(keys: &[String]) -> Arc<RwLock<AHashMap<String, u64>>> {
     Arc::new(RwLock::new(map))
 }
 
-fn populated_arcswap(keys: &[String]) -> Arc<ArcSwap<AHashMap<String, u64>>> {
+fn populated_atomic_map(keys: &[String]) -> Arc<AtomicMap<String, u64>> {
     let mut map = AHashMap::with_capacity(keys.len());
     for (i, key) in keys.iter().enumerate() {
         map.insert(key.clone(), i as u64);
     }
-    Arc::new(ArcSwap::from_pointee(map))
+    Arc::new(AtomicMap::from(map))
 }
 
 fn bench_single_thread_read(c: &mut Criterion) {
@@ -125,14 +121,12 @@ fn bench_single_thread_read(c: &mut Criterion) {
             });
         });
 
-        let swp = populated_arcswap(&keys);
-        group.bench_with_input(BenchmarkId::new("ArcSwapAHashMap", size), &size, |b, _| {
+        let atomic = populated_atomic_map(&keys);
+        group.bench_with_input(BenchmarkId::new("AtomicMap", size), &size, |b, _| {
             let mut idx = 0usize;
             b.iter(|| {
                 let key = &keys[idx % keys.len()];
-                let guard = swp.load();
-                let val = guard.get(key).copied();
-                drop(guard);
+                let val = atomic.load().get(key).copied();
                 black_box(val);
                 idx = idx.wrapping_add(1);
             });
@@ -200,32 +194,28 @@ fn bench_concurrent_reads(c: &mut Criterion) {
                 },
             );
 
-            let swp = populated_arcswap(&keys);
+            let atomic = populated_atomic_map(&keys);
             let keys_arc = Arc::new(keys.clone());
-            group.bench_with_input(
-                BenchmarkId::new("ArcSwapAHashMap", &param),
-                &threads,
-                |b, _| {
-                    b.iter(|| {
-                        let barrier = Arc::new(Barrier::new(threads));
-                        std::thread::scope(|s| {
-                            for t in 0..threads {
-                                let map = Arc::clone(&swp);
-                                let ks = Arc::clone(&keys_arc);
-                                let bar = Arc::clone(&barrier);
-                                s.spawn(move || {
-                                    bar.wait();
-                                    for i in 0..READS_PER_THREAD {
-                                        let key = &ks[(t * READS_PER_THREAD + i) % ks.len()];
-                                        let guard = map.load();
-                                        black_box(guard.get(key).copied());
-                                    }
-                                });
-                            }
-                        });
+            group.bench_with_input(BenchmarkId::new("AtomicMap", &param), &threads, |b, _| {
+                b.iter(|| {
+                    let barrier = Arc::new(Barrier::new(threads));
+                    std::thread::scope(|s| {
+                        for t in 0..threads {
+                            let map = Arc::clone(&atomic);
+                            let ks = Arc::clone(&keys_arc);
+                            let bar = Arc::clone(&barrier);
+                            s.spawn(move || {
+                                bar.wait();
+                                for i in 0..READS_PER_THREAD {
+                                    let key = &ks[(t * READS_PER_THREAD + i) % ks.len()];
+                                    let guard = map.load();
+                                    black_box(guard.get(key).copied());
+                                }
+                            });
+                        }
                     });
-                },
-            );
+                });
+            });
         }
     }
     group.finish();
@@ -329,51 +319,46 @@ fn bench_read_heavy_mixed(c: &mut Criterion) {
                 },
             );
 
-            let swp = populated_arcswap(&keys);
+            let atomic = populated_atomic_map(&keys);
             let keys_arc = Arc::new(keys.clone());
             let wk_arc = Arc::new(write_keys.clone());
-            group.bench_with_input(
-                BenchmarkId::new("ArcSwapAHashMap", &param),
-                &threads,
-                |b, _| {
-                    b.iter(|| {
-                        let barrier = Arc::new(Barrier::new(threads));
-                        std::thread::scope(|s| {
-                            let map = Arc::clone(&swp);
-                            let wk = Arc::clone(&wk_arc);
+            group.bench_with_input(BenchmarkId::new("AtomicMap", &param), &threads, |b, _| {
+                b.iter(|| {
+                    let barrier = Arc::new(Barrier::new(threads));
+                    std::thread::scope(|s| {
+                        let map = Arc::clone(&atomic);
+                        let wk = Arc::clone(&wk_arc);
+                        let bar = Arc::clone(&barrier);
+                        s.spawn(move || {
+                            bar.wait();
+                            map.rcu(|m| {
+                                for (i, key) in wk.iter().enumerate() {
+                                    m.insert(key.clone(), (size + i) as u64);
+                                }
+                            });
+                            map.rcu(|m| {
+                                for key in wk.iter() {
+                                    m.remove(key);
+                                }
+                            });
+                        });
+
+                        for t in 0..readers {
+                            let map = Arc::clone(&atomic);
+                            let ks = Arc::clone(&keys_arc);
                             let bar = Arc::clone(&barrier);
                             s.spawn(move || {
                                 bar.wait();
-                                let mut snapshot = AHashMap::clone(&map.load());
-                                for (i, key) in wk.iter().enumerate() {
-                                    snapshot.insert(key.clone(), (size + i) as u64);
+                                for i in 0..READS_PER_THREAD {
+                                    let key = &ks[(t * READS_PER_THREAD + i) % ks.len()];
+                                    let guard = map.load();
+                                    black_box(guard.get(key).copied());
                                 }
-                                map.store(Arc::new(snapshot));
-
-                                let mut snapshot = AHashMap::clone(&map.load());
-                                for key in wk.iter() {
-                                    snapshot.remove(key);
-                                }
-                                map.store(Arc::new(snapshot));
                             });
-
-                            for t in 0..readers {
-                                let map = Arc::clone(&swp);
-                                let ks = Arc::clone(&keys_arc);
-                                let bar = Arc::clone(&barrier);
-                                s.spawn(move || {
-                                    bar.wait();
-                                    for i in 0..READS_PER_THREAD {
-                                        let key = &ks[(t * READS_PER_THREAD + i) % ks.len()];
-                                        let guard = map.load();
-                                        black_box(guard.get(key).copied());
-                                    }
-                                });
-                            }
-                        });
+                        }
                     });
-                },
-            );
+                });
+            });
         }
     }
     group.finish();
@@ -438,32 +423,28 @@ fn bench_write_once_read_many(c: &mut Criterion) {
                 },
             );
 
-            let swp = populated_arcswap(&keys);
+            let atomic = populated_atomic_map(&keys);
             let keys_arc = Arc::new(keys.clone());
-            group.bench_with_input(
-                BenchmarkId::new("ArcSwapAHashMap", &param),
-                &threads,
-                |b, _| {
-                    b.iter(|| {
-                        let barrier = Arc::new(Barrier::new(threads));
-                        std::thread::scope(|s| {
-                            for t in 0..threads {
-                                let map = Arc::clone(&swp);
-                                let ks = Arc::clone(&keys_arc);
-                                let bar = Arc::clone(&barrier);
-                                s.spawn(move || {
-                                    bar.wait();
-                                    for i in 0..READS_PER_THREAD {
-                                        let key = &ks[(t * READS_PER_THREAD + i) % ks.len()];
-                                        let guard = map.load();
-                                        black_box(guard.get(key).copied());
-                                    }
-                                });
-                            }
-                        });
+            group.bench_with_input(BenchmarkId::new("AtomicMap", &param), &threads, |b, _| {
+                b.iter(|| {
+                    let barrier = Arc::new(Barrier::new(threads));
+                    std::thread::scope(|s| {
+                        for t in 0..threads {
+                            let map = Arc::clone(&atomic);
+                            let ks = Arc::clone(&keys_arc);
+                            let bar = Arc::clone(&barrier);
+                            s.spawn(move || {
+                                bar.wait();
+                                for i in 0..READS_PER_THREAD {
+                                    let key = &ks[(t * READS_PER_THREAD + i) % ks.len()];
+                                    let guard = map.load();
+                                    black_box(guard.get(key).copied());
+                                }
+                            });
+                        }
                     });
-                },
-            );
+                });
+            });
         }
     }
     group.finish();

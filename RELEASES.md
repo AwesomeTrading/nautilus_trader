@@ -131,6 +131,7 @@ Released on TBD (UTC).
 - Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
 
 ### Internal Improvements
+- Replaced `AtomicMap` and `AtomicSet` type aliases with newtypes wrapping `ArcSwap` for ergonomic read-heavy concurrent collections
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
 - Added `BINANCE_GTX_ORDER_REJECT_CODE` and `BINANCE_SPOT_POST_ONLY_REJECT_MSG` constants for reliable post-only rejection detection in Rust
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
