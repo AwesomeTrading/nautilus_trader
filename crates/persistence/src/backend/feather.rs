@@ -40,7 +40,7 @@ use nautilus_model::{
     instruments::InstrumentAny,
 };
 use nautilus_serialization::arrow::{EncodeToRecordBatch, KEY_INSTRUMENT_ID};
-use object_store::{ObjectStore, path::Path};
+use object_store::{ObjectStore, ObjectStoreExt, path::Path};
 
 use super::catalog::urisafe_instrument_id;
 use crate::backend::{

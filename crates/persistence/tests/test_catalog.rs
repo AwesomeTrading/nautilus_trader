@@ -385,7 +385,7 @@ fn test_datafusion_parquet_round_trip() {
     {
         let writer_props = WriterProperties::builder()
             .set_compression(Compression::SNAPPY)
-            .set_max_row_group_size(1000)
+            .set_max_row_group_row_count(Some(1000))
             .build();
 
         let mut writer =

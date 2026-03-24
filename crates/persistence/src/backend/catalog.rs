@@ -93,7 +93,7 @@ use nautilus_model::{
 use nautilus_serialization::arrow::{
     DecodeDataFromRecordBatch, EncodeToRecordBatch, custom::CustomDataDecoder,
 };
-use object_store::{ObjectStore, path::Path as ObjectPath};
+use object_store::{ObjectStore, ObjectStoreExt, path::Path as ObjectPath};
 use serde::Serialize;
 use unbounded_interval_tree::interval_tree::IntervalTree;
 
@@ -515,8 +515,10 @@ impl ParquetDataCatalog {
         let path = PathBuf::from(format!("{directory}/{filename}"));
         let object_path = self.to_object_path(&path.to_string_lossy());
 
-        let file_exists =
-            self.execute_async(async { Ok(self.object_store.head(&object_path).await.is_ok()) })?;
+        let file_exists = self.execute_async(async {
+            let exists: bool = self.object_store.head(&object_path).await.is_ok();
+            Ok(exists)
+        })?;
 
         if file_exists {
             log::info!("File {} already exists, skipping write", path.display());
@@ -602,8 +604,10 @@ impl ParquetDataCatalog {
         let path = PathBuf::from(format!("{directory}/{filename}"));
         let object_path = self.to_object_path(&path.to_string_lossy());
 
-        let file_exists =
-            self.execute_async(async { Ok(self.object_store.head(&object_path).await.is_ok()) })?;
+        let file_exists = self.execute_async(async {
+            let exists: bool = self.object_store.head(&object_path).await.is_ok();
+            Ok(exists)
+        })?;
 
         if file_exists {
             log::info!("File {} already exists, skipping write", path.display());
@@ -963,10 +967,11 @@ impl ParquetDataCatalog {
             let metadata_object_path = ObjectPath::from(metadata_path.to_string_lossy().as_ref());
             let metadata_json = serde_json::to_vec_pretty(&metadata)?;
             self.execute_async(async {
-                self.object_store
+                let _: object_store::PutResult = self
+                    .object_store
                     .put(&metadata_object_path, metadata_json.into())
-                    .await
-                    .map_err(anyhow::Error::from)
+                    .await?;
+                Ok(())
             })?;
         }
 
@@ -974,10 +979,11 @@ impl ParquetDataCatalog {
         let json_object_path = ObjectPath::from(json_path.to_string_lossy().as_ref());
         let json_data = serde_json::to_vec_pretty(&serde_json::to_value(data)?)?;
         self.execute_async(async {
-            self.object_store
+            let _: object_store::PutResult = self
+                .object_store
                 .put(&json_object_path, json_data.into())
-                .await
-                .map_err(anyhow::Error::from)
+                .await?;
+            Ok(())
         })?;
 
         Ok(json_path)
