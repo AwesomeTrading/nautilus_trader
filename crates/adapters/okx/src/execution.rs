@@ -504,6 +504,7 @@ impl OKXExecutionClient {
 
     fn mass_cancel_instrument(&self, instrument_id: InstrumentId) {
         let ws_private = self.ws_private.clone();
+
         self.spawn_task("mass_cancel_orders", async move {
             ws_private.mass_cancel_orders(instrument_id).await?;
             Ok(())
@@ -631,6 +632,7 @@ impl OKXExecutionClient {
 
     fn abort_pending_tasks(&self) {
         let mut tasks = self.pending_tasks.lock().expect(MUTEX_POISONED);
+
         for handle in tasks.drain(..) {
             handle.abort();
         }
@@ -1135,11 +1137,18 @@ impl ExecutionClient for OKXExecutionClient {
         // Query derivative positions (SWAP/FUTURES/OPTION) from /api/v5/account/positions
         // Note: The positions endpoint does not support Spot or Margin - those are handled separately
         if let Some(instrument_id) = cmd.instrument_id {
-            let mut fetched = self
-                .http_client
-                .request_position_status_reports(self.core.account_id, None, Some(instrument_id))
-                .await?;
-            reports.append(&mut fetched);
+            let inst_type = okx_instrument_type_from_symbol(instrument_id.symbol.as_str());
+            if inst_type != OKXInstrumentType::Spot && inst_type != OKXInstrumentType::Margin {
+                let mut fetched = self
+                    .http_client
+                    .request_position_status_reports(
+                        self.core.account_id,
+                        None,
+                        Some(instrument_id),
+                    )
+                    .await?;
+                reports.append(&mut fetched);
+            }
         } else {
             for inst_type in self.instrument_types() {
                 // Skip Spot and Margin - positions API only supports derivatives
@@ -1318,6 +1327,7 @@ impl ExecutionClient for OKXExecutionClient {
         let instrument_id = cmd.instrument_id;
         let strategy_id = cmd.strategy_id;
         let client_order_ids: Vec<_> = cmd.order_list.client_order_ids.clone();
+        let dispatch_state = Arc::clone(&self.ws_dispatch_state);
 
         self.spawn_task("batch_submit_orders", async move {
             let result = ws_private
@@ -1327,7 +1337,9 @@ impl ExecutionClient for OKXExecutionClient {
 
             if let Err(e) = result {
                 let ts_event = clock.get_time_ns();
+
                 for cid in &client_order_ids {
+                    dispatch_state.order_identities.remove(cid);
                     emitter.emit_order_rejected_event(
                         strategy_id,
                         instrument_id,
@@ -1419,6 +1431,7 @@ impl ExecutionClient for OKXExecutionClient {
             }
 
             let mut regular_payload = Vec::new();
+            let mut regular_cancel_contexts = Vec::new();
             let mut algo_orders: Vec<(
                 InstrumentId,
                 ClientOrderId,
@@ -1451,6 +1464,11 @@ impl ExecutionClient for OKXExecutionClient {
                         Some(order.client_order_id()),
                         order.venue_order_id(),
                     ));
+                    regular_cancel_contexts.push((
+                        order.client_order_id(),
+                        order.instrument_id(),
+                        order.strategy_id(),
+                    ));
                 }
             }
             drop(cache);
@@ -1464,8 +1482,25 @@ impl ExecutionClient for OKXExecutionClient {
 
             if !regular_payload.is_empty() {
                 let ws_private = self.ws_private.clone();
+                let emitter = self.emitter.clone();
+                let clock = self.clock;
+
                 self.spawn_task("batch_cancel_orders", async move {
-                    ws_private.batch_cancel_orders(regular_payload).await?;
+                    if let Err(e) = ws_private.batch_cancel_orders(regular_payload).await {
+                        let ts = clock.get_time_ns();
+
+                        for (cid, inst_id, strat_id) in &regular_cancel_contexts {
+                            emitter.emit_order_cancel_rejected_event(
+                                *strat_id,
+                                *inst_id,
+                                *cid,
+                                None,
+                                &format!("batch-cancel-error: {e}"),
+                                ts,
+                            );
+                        }
+                        anyhow::bail!("Batch cancel orders failed: {e}");
+                    }
                     Ok(())
                 });
             }
@@ -1540,8 +1575,35 @@ impl ExecutionClient for OKXExecutionClient {
 
         if !regular_payload.is_empty() {
             let ws_private = self.ws_private.clone();
+            let emitter = self.emitter.clone();
+            let clock = self.clock;
+            let cancel_contexts: Vec<_> = cmd
+                .cancels
+                .iter()
+                .filter(|c| {
+                    regular_payload
+                        .iter()
+                        .any(|(_, cid, _)| *cid == Some(c.client_order_id))
+                })
+                .map(|c| (c.client_order_id, c.instrument_id, c.strategy_id))
+                .collect();
+
             self.spawn_task("batch_cancel_orders", async move {
-                ws_private.batch_cancel_orders(regular_payload).await?;
+                if let Err(e) = ws_private.batch_cancel_orders(regular_payload).await {
+                    let ts = clock.get_time_ns();
+
+                    for (cid, inst_id, strat_id) in &cancel_contexts {
+                        emitter.emit_order_cancel_rejected_event(
+                            *strat_id,
+                            *inst_id,
+                            *cid,
+                            None,
+                            &format!("batch-cancel-error: {e}"),
+                            ts,
+                        );
+                    }
+                    anyhow::bail!("Batch cancel orders failed: {e}");
+                }
                 Ok(())
             });
         }

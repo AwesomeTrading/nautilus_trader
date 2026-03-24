@@ -126,6 +126,9 @@ pub enum ParsedOrderEvent {
     Fill(FillReport),
     /// Status update that doesn't map to a specific event (for reconciliation/external orders).
     StatusOnly(Box<OrderStatusReport>),
+    /// Duplicate message detected (e.g. reconnect replay with unchanged fill).
+    /// The dispatcher should update caches but not emit any event.
+    Skipped,
 }
 
 /// Snapshot of order state for detecting updates.
@@ -213,15 +216,17 @@ pub fn parse_order_event(
 
     match msg.state {
         OKXOrderStatus::Filled | OKXOrderStatus::PartiallyFilled if has_new_fill => {
-            parse_fill_report(
+            match parse_fill_report(
                 msg,
                 instrument,
                 account_id,
                 previous_fee,
                 previous_filled_qty,
                 ts_init,
-            )
-            .map(ParsedOrderEvent::Fill)
+            )? {
+                Some(report) => Ok(ParsedOrderEvent::Fill(report)),
+                None => Ok(ParsedOrderEvent::Skipped),
+            }
         }
         OKXOrderStatus::Live => {
             let ts_event = parse_millisecond_timestamp(msg.c_time);
@@ -553,6 +558,7 @@ pub fn parse_funding_rate_msg_vec(
     let msgs: Vec<OKXFundingRateMsg> = serde_json::from_value(data)?;
 
     let mut result = Vec::with_capacity(msgs.len());
+
     for msg in &msgs {
         let cache_key = (msg.funding_rate, msg.funding_time);
 
@@ -760,6 +766,7 @@ pub fn parse_book10_msg(
 
     // Parse available bid levels (up to 10)
     let bid_len = msg.bids.len().min(DEPTH10_LEN);
+
     for (i, level) in msg.bids.iter().take(DEPTH10_LEN).enumerate() {
         let price = parse_price(&level.price, price_precision)?;
         let size = parse_quantity(&level.size, size_precision)?;
@@ -783,6 +790,7 @@ pub fn parse_book10_msg(
 
     // Parse available ask levels (up to 10)
     let ask_len = msg.asks.len().min(DEPTH10_LEN);
+
     for (i, level) in msg.asks.iter().take(DEPTH10_LEN).enumerate() {
         let price = parse_price(&level.price, price_precision)?;
         let size = parse_quantity(&level.size, size_precision)?;
@@ -1063,15 +1071,18 @@ pub fn parse_order_msg(
 
     match msg.state {
         OKXOrderStatus::Filled | OKXOrderStatus::PartiallyFilled if has_new_fill => {
-            parse_fill_report(
+            match parse_fill_report(
                 msg,
                 instrument,
                 account_id,
                 previous_fee,
                 previous_filled_qty,
                 ts_init,
-            )
-            .map(ExecutionReport::Fill)
+            )? {
+                Some(report) => Ok(ExecutionReport::Fill(report)),
+                None => parse_order_status_report(msg, instrument, account_id, ts_init)
+                    .map(ExecutionReport::Order),
+            }
         }
         _ => parse_order_status_report(msg, instrument, account_id, ts_init)
             .map(ExecutionReport::Order),
@@ -1595,7 +1606,7 @@ pub fn parse_fill_report(
     previous_fee: Option<Money>,
     previous_filled_qty: Option<Quantity>,
     ts_init: UnixNanos,
-) -> anyhow::Result<FillReport> {
+) -> anyhow::Result<Option<FillReport>> {
     // For triggered algo child orders, prefer the parent algo_cl_ord_id
     let client_order_id = msg
         .algo_cl_ord_id
@@ -1656,9 +1667,10 @@ pub fn parse_fill_report(
                 }
                 let incremental = current_filled - prev_qty;
                 if incremental.is_zero() {
-                    anyhow::bail!(
-                        "Incremental fill quantity is zero (acc_fill_sz='{acc_fill_sz}', previous_filled_qty={prev_qty})"
+                    log::debug!(
+                        "Skipping duplicate fill: acc_fill_sz='{acc_fill_sz}' unchanged from previous={prev_qty}"
                     );
+                    return Ok(None);
                 }
                 incremental
             } else {
@@ -1784,7 +1796,7 @@ pub fn parse_fill_report(
         None, // Generate UUID4 automatically
     );
 
-    Ok(report)
+    Ok(Some(report))
 }
 
 /// Parses an option summary payload into [`OptionGreeks`].
@@ -2698,7 +2710,7 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        let fill_report = result.unwrap();
+        let fill_report = result.unwrap().unwrap();
 
         assert_eq!(fill_report.account_id, account_id);
         assert_eq!(fill_report.instrument_id, instrument_id);
@@ -2900,6 +2912,7 @@ mod tests {
             None,
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // First fill should get the full fee since there's no previous fee
@@ -2980,6 +2993,7 @@ mod tests {
             Some(fill_report_1.last_qty),
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // Second fill should get total_fee - previous_fee = 3.0 - 1.0 = 2.0
@@ -3097,6 +3111,7 @@ mod tests {
             None,
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // First fill gets the full rebate (negative commission)
@@ -3177,6 +3192,7 @@ mod tests {
             Some(fill_report_1.last_qty),
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // Second fill: incremental = -0.8 - (-0.5) = -0.3
@@ -3292,6 +3308,7 @@ mod tests {
             None,
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // First fill gets rebate (negative)
@@ -3374,6 +3391,7 @@ mod tests {
             Some(fill_report_1.last_qty),
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // Second fill: incremental = 2.0 - (-1.0) = 3.0
@@ -3490,6 +3508,7 @@ mod tests {
             None,
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         assert_eq!(fill_report_1.commission, Money::new(2.0, Currency::USDT()));
@@ -3570,6 +3589,7 @@ mod tests {
             Some(fill_report_1.last_qty),
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         // Incremental is negative: 1.5 - 2.0 = -0.5
@@ -3600,7 +3620,7 @@ mod tests {
             ts_init,
         );
 
-        let fill_report = result.unwrap();
+        let fill_report = result.unwrap().unwrap();
         assert_eq!(fill_report.commission.currency, Currency::BTC());
     }
 
@@ -3621,6 +3641,7 @@ mod tests {
             None,
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         assert_eq!(fill_report.last_qty, Quantity::from("0.01"));
@@ -3643,6 +3664,7 @@ mod tests {
             None,
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         assert_eq!(fill_report_1.last_qty, Quantity::from("0.01"));
@@ -3658,6 +3680,7 @@ mod tests {
             Some(fill_report_1.last_qty),
             ts_init,
         )
+        .unwrap()
         .unwrap();
 
         assert_eq!(fill_report_2.last_qty, Quantity::from("0.02"));

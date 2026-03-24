@@ -621,7 +621,8 @@ pub fn parse_order_status_report(
             }
         } else {
             log::warn!(
-                "Cannot convert quote quantity without price: ord_id={}, sz={}, px='{}', avg_px='{}', using sz as-is",
+                "Cannot convert quote quantity to base without price, using raw sz: \
+                 ord_id={}, sz={}, px='{}', avg_px='{}'",
                 order.ord_id.as_str(),
                 order.sz,
                 order.px,
@@ -2034,6 +2035,7 @@ pub fn parse_account_state(
     ts_init: UnixNanos,
 ) -> anyhow::Result<AccountState> {
     let mut balances = Vec::new();
+
     for b in &okx_account.details {
         // Skip balances with empty or whitespace-only currency codes
         let ccy_str = b.ccy.as_str().trim();

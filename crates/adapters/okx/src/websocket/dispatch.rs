@@ -214,6 +214,7 @@ pub fn dispatch_ws_message(
         OKXWsMessage::AlgoOrders(algo_msgs) => {
             let ts_init = clock.get_time_ns();
             let mut reports = Vec::new();
+
             for msg in algo_msgs {
                 match parse_algo_order_msg(&msg, account_id, instruments, ts_init) {
                     Ok(Some(report)) => reports.push(report),
@@ -273,6 +274,7 @@ pub fn dispatch_ws_message(
             data,
         } => {
             let ts_init = clock.get_time_ns();
+
             for item in &data {
                 let s_code = item.get("sCode").and_then(|v| v.as_str()).unwrap_or("");
                 let s_msg = item.get("sMsg").and_then(|v| v.as_str()).unwrap_or("");
@@ -750,6 +752,7 @@ fn dispatch_parsed_order_event(
             );
             emitter.send_order_status_report(*report);
         }
+        ParsedOrderEvent::Skipped => return,
     }
 
     if is_terminal {

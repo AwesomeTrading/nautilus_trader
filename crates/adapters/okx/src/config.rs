@@ -146,9 +146,12 @@ impl OKXDataClientConfig {
     }
 
     /// Returns `true` when the business WebSocket should be instantiated.
+    ///
+    /// The business WebSocket carries public candle data and does not
+    /// require authentication, so it is always needed.
     #[must_use]
     pub fn requires_business_ws(&self) -> bool {
-        self.has_api_credentials()
+        true
     }
 }
 
