@@ -13,6 +13,7 @@ MAX_RETRIES=2
 CORRUPTION_PATTERNS=(
   "cannot contain null bytes"
   "cannot execute binary file"
+  "Metadata field Name not found"
 )
 
 log_file="$(mktemp)"
@@ -47,9 +48,11 @@ clean_artifacts() {
     rm -rf "$CARGO_TARGET_DIR"
   fi
 
-  if [ -n "${UV_CACHE_DIR:-}" ] && [ -d "$UV_CACHE_DIR/builds-v0" ]; then
-    echo "Removing UV build cache: $UV_CACHE_DIR/builds-v0"
-    rm -rf "$UV_CACHE_DIR/builds-v0"
+  # Prune the full uv cache (wheels, archives, and builds) so corrupted
+  # metadata from installed packages or cached wheels is not reused.
+  if command -v uv > /dev/null 2>&1; then
+    echo "Pruning uv cache"
+    uv cache prune
   fi
 }
 
