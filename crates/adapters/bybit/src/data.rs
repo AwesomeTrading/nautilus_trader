@@ -25,7 +25,6 @@ use std::{
 
 use ahash::{AHashMap, AHashSet};
 use anyhow::Context;
-use dashmap::{DashMap, DashSet};
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::{
     clients::DataClient,
@@ -46,7 +45,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    MUTEX_POISONED,
+    AtomicMap, AtomicSet, MUTEX_POISONED,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -100,8 +99,8 @@ pub struct BybitDataClient {
     book_depths: Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     quote_depths: Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     ticker_subs: Arc<RwLock<AHashMap<InstrumentId, AHashSet<&'static str>>>>,
-    option_greeks_subs: Arc<DashSet<InstrumentId>>,
-    instrument_status_subs: Arc<DashSet<InstrumentId>>,
+    option_greeks_subs: Arc<AtomicSet<InstrumentId>>,
+    instrument_status_subs: Arc<AtomicSet<InstrumentId>>,
     status_cache: Arc<RwLock<AHashMap<InstrumentId, MarketStatusAction>>>,
     clock: &'static AtomicTime,
 }
@@ -174,8 +173,8 @@ impl BybitDataClient {
             book_depths: Arc::new(RwLock::new(AHashMap::new())),
             quote_depths: Arc::new(RwLock::new(AHashMap::new())),
             ticker_subs: Arc::new(RwLock::new(AHashMap::new())),
-            option_greeks_subs: Arc::new(DashSet::new()),
-            instrument_status_subs: Arc::new(DashSet::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
+            instrument_status_subs: Arc::new(AtomicSet::new()),
             status_cache: Arc::new(RwLock::new(AHashMap::new())),
             clock,
         })
@@ -262,8 +261,9 @@ impl BybitDataClient {
                         let ts = clock.get_time_ns();
                         let mut cache = status_cache.write()
                             .expect(MUTEX_POISONED);
+                        let subs_guard = status_subs.load();
                         diff_and_emit_statuses(
-                            &all_statuses, &mut cache, Some(&status_subs), &sender, ts, ts,
+                            &all_statuses, &mut cache, Some(&subs_guard), &sender, ts, ts,
                         );
                     }
                     () = cancel.cancelled() => {
@@ -297,8 +297,8 @@ fn handle_ws_message(
     ticker_subs: &Arc<RwLock<AHashMap<InstrumentId, AHashSet<&'static str>>>>,
     quote_depths: &Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     book_depths: &Arc<RwLock<AHashMap<InstrumentId, u32>>>,
-    option_greeks_subs: &Arc<DashSet<InstrumentId>>,
-    bar_types_cache: &Arc<DashMap<String, BarType>>,
+    option_greeks_subs: &Arc<AtomicSet<InstrumentId>>,
+    bar_types_cache: &Arc<AtomicMap<String, BarType>>,
     quote_cache: &mut AHashMap<InstrumentId, QuoteTick>,
     funding_cache: &mut AHashMap<Ustr, FundingCacheEntry>,
     clock: &AtomicTime,
@@ -377,7 +377,7 @@ fn handle_ws_message(
                 return;
             };
             let topic_key = msg.topic.as_str();
-            let Some(bar_type) = bar_types_cache.get(topic_key).map(|e| *e.value()) else {
+            let Some(bar_type) = bar_types_cache.load().get(topic_key).copied() else {
                 log::warn!("No bar type cached for kline topic: {topic_key}");
                 return;
             };
@@ -602,8 +602,8 @@ impl DataClient for BybitDataClient {
         self.book_depths.write().expect(MUTEX_POISONED).clear();
         self.quote_depths.write().expect(MUTEX_POISONED).clear();
         self.ticker_subs.write().expect(MUTEX_POISONED).clear();
-        self.option_greeks_subs.clear();
-        self.instrument_status_subs.clear();
+        self.option_greeks_subs.store(AHashSet::new());
+        self.instrument_status_subs.store(AHashSet::new());
         self.status_cache.write().expect(MUTEX_POISONED).clear();
         Ok(())
     }
@@ -634,7 +634,7 @@ impl DataClient for BybitDataClient {
                     format!("failed to request Bybit instruments for {product_type:?}")
                 })?;
 
-            self.http_client.cache_instruments(fetched.clone());
+            self.http_client.cache_instruments(&fetched);
 
             let mut guard = self.instruments.write().expect(MUTEX_POISONED);
             for instrument in &fetched {
@@ -795,8 +795,8 @@ impl DataClient for BybitDataClient {
         self.book_depths.write().expect(MUTEX_POISONED).clear();
         self.quote_depths.write().expect(MUTEX_POISONED).clear();
         self.ticker_subs.write().expect(MUTEX_POISONED).clear();
-        self.option_greeks_subs.clear();
-        self.instrument_status_subs.clear();
+        self.option_greeks_subs.store(AHashSet::new());
+        self.instrument_status_subs.store(AHashSet::new());
         self.status_cache.write().expect(MUTEX_POISONED).clear();
         self.is_connected.store(false, Ordering::Release);
         log::info!("Disconnected: client_id={}", self.client_id);
@@ -1853,9 +1853,8 @@ mod tests {
     use std::sync::{Arc, RwLock};
 
     use ahash::{AHashMap, AHashSet};
-    use dashmap::{DashMap, DashSet};
     use nautilus_common::messages::DataEvent;
-    use nautilus_core::{UnixNanos, time::get_atomic_clock_realtime};
+    use nautilus_core::{AtomicMap, AtomicSet, UnixNanos, time::get_atomic_clock_realtime};
     use nautilus_model::{
         data::{BarType, Data, QuoteTick},
         enums::AggressorSide,
@@ -1926,15 +1925,15 @@ mod tests {
         Arc<RwLock<AHashMap<InstrumentId, AHashSet<&'static str>>>>,
         Arc<RwLock<AHashMap<InstrumentId, u32>>>,
         Arc<RwLock<AHashMap<InstrumentId, u32>>>,
-        Arc<DashSet<InstrumentId>>,
-        Arc<DashMap<String, BarType>>,
+        Arc<AtomicSet<InstrumentId>>,
+        Arc<AtomicMap<String, BarType>>,
     ) {
         (
             Arc::new(RwLock::new(AHashMap::new())),
             Arc::new(RwLock::new(AHashMap::new())),
             Arc::new(RwLock::new(AHashMap::new())),
-            Arc::new(DashSet::new()),
-            Arc::new(DashMap::new()),
+            Arc::new(AtomicSet::new()),
+            Arc::new(AtomicMap::new()),
         )
     }
 

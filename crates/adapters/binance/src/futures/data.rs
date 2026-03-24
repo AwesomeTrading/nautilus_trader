@@ -22,7 +22,6 @@ use std::sync::{
 
 use ahash::AHashMap;
 use anyhow::Context;
-use dashmap::DashMap;
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::{
     clients::DataClient,
@@ -41,7 +40,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    MUTEX_POISONED,
+    AtomicMap, MUTEX_POISONED,
     datetime::{NANOSECONDS_IN_MILLISECOND, datetime_to_unix_nanos},
     nanos::UnixNanos,
     time::{AtomicTime, get_atomic_clock_realtime},
@@ -216,7 +215,7 @@ impl BinanceFuturesDataClient {
         msg: BinanceFuturesWsStreamsMessage,
         data_sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
         instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-        ws_instruments: &Arc<DashMap<Ustr, InstrumentAny>>,
+        ws_instruments: &Arc<AtomicMap<Ustr, InstrumentAny>>,
         book_buffers: &Arc<RwLock<AHashMap<InstrumentId, BookBuffer>>>,
         book_subscriptions: &Arc<RwLock<AHashMap<InstrumentId, u32>>>,
         book_epoch: &Arc<RwLock<u64>>,
@@ -224,35 +223,36 @@ impl BinanceFuturesDataClient {
         clock: &'static AtomicTime,
     ) {
         let ts_init = clock.get_time_ns();
+        let cache = ws_instruments.load();
 
         match msg {
             BinanceFuturesWsStreamsMessage::AggTrade(ref trade_msg) => {
-                if let Some(instrument) = ws_instruments.get(&trade_msg.symbol) {
-                    match parse_agg_trade(trade_msg, instrument.value(), ts_init) {
+                if let Some(instrument) = cache.get(&trade_msg.symbol) {
+                    match parse_agg_trade(trade_msg, instrument, ts_init) {
                         Ok(trade) => Self::send_data(data_sender, Data::Trade(trade)),
                         Err(e) => log::warn!("Failed to parse aggregate trade: {e}"),
                     }
                 }
             }
             BinanceFuturesWsStreamsMessage::Trade(ref trade_msg) => {
-                if let Some(instrument) = ws_instruments.get(&trade_msg.symbol) {
-                    match parse_trade(trade_msg, instrument.value(), ts_init) {
+                if let Some(instrument) = cache.get(&trade_msg.symbol) {
+                    match parse_trade(trade_msg, instrument, ts_init) {
                         Ok(trade) => Self::send_data(data_sender, Data::Trade(trade)),
                         Err(e) => log::warn!("Failed to parse trade: {e}"),
                     }
                 }
             }
             BinanceFuturesWsStreamsMessage::BookTicker(ref ticker_msg) => {
-                if let Some(instrument) = ws_instruments.get(&ticker_msg.symbol) {
-                    match parse_book_ticker(ticker_msg, instrument.value(), ts_init) {
+                if let Some(instrument) = cache.get(&ticker_msg.symbol) {
+                    match parse_book_ticker(ticker_msg, instrument, ts_init) {
                         Ok(quote) => Self::send_data(data_sender, Data::Quote(quote)),
                         Err(e) => log::warn!("Failed to parse book ticker: {e}"),
                     }
                 }
             }
             BinanceFuturesWsStreamsMessage::DepthUpdate(ref depth_msg) => {
-                if let Some(instrument) = ws_instruments.get(&depth_msg.symbol) {
-                    match parse_depth_update(depth_msg, instrument.value(), ts_init) {
+                if let Some(instrument) = cache.get(&depth_msg.symbol) {
+                    match parse_depth_update(depth_msg, instrument, ts_init) {
                         Ok(deltas) => {
                             let instrument_id = deltas.instrument_id;
                             let final_update_id = deltas.sequence;
@@ -282,8 +282,8 @@ impl BinanceFuturesDataClient {
                 }
             }
             BinanceFuturesWsStreamsMessage::MarkPrice(ref mark_msg) => {
-                if let Some(instrument) = ws_instruments.get(&mark_msg.symbol) {
-                    match parse_mark_price(mark_msg, instrument.value(), ts_init) {
+                if let Some(instrument) = cache.get(&mark_msg.symbol) {
+                    match parse_mark_price(mark_msg, instrument, ts_init) {
                         Ok((mark_update, index_update, _funding_update)) => {
                             Self::send_data(data_sender, Data::MarkPriceUpdate(mark_update));
                             Self::send_data(data_sender, Data::IndexPriceUpdate(index_update));
@@ -293,8 +293,8 @@ impl BinanceFuturesDataClient {
                 }
             }
             BinanceFuturesWsStreamsMessage::Kline(ref kline_msg) => {
-                if let Some(instrument) = ws_instruments.get(&kline_msg.symbol) {
-                    match parse_kline(kline_msg, instrument.value(), ts_init) {
+                if let Some(instrument) = cache.get(&kline_msg.symbol) {
+                    match parse_kline(kline_msg, instrument, ts_init) {
                         Ok(Some(bar)) => Self::send_data(data_sender, Data::Bar(bar)),
                         Ok(None) => {} // Kline not closed yet
                         Err(e) => log::warn!("Failed to parse kline: {e}"),

@@ -27,9 +27,9 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use nautilus_common::live::get_runtime;
-use nautilus_core::{UUID4, consts::NAUTILUS_USER_AGENT};
+use nautilus_core::{AtomicMap, AtomicSet, UUID4, consts::NAUTILUS_USER_AGENT};
 use nautilus_model::{
     data::BarType,
     enums::{AggregationSource, OrderSide, OrderType, PriceType, TimeInForce},
@@ -115,9 +115,9 @@ pub struct BybitWebSocketClient {
     subscriptions: SubscriptionState,
     account_id: Option<AccountId>,
     mm_level: Arc<AtomicU8>,
-    bar_types_cache: Arc<DashMap<String, BarType>>,
-    instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
-    option_greeks_subs: Arc<DashSet<InstrumentId>>,
+    bar_types_cache: Arc<AtomicMap<String, BarType>>,
+    instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
+    option_greeks_subs: Arc<AtomicSet<InstrumentId>>,
     bars_timestamp_on_close: Arc<AtomicBool>,
     pending_py_requests: Arc<DashMap<String, Vec<PendingPyRequest>>>,
     cancellation_token: CancellationToken,
@@ -203,9 +203,9 @@ impl BybitWebSocketClient {
             signal: Arc::new(AtomicBool::new(false)),
             task_handle: None,
             subscriptions: SubscriptionState::new(BYBIT_WS_TOPIC_DELIMITER),
-            bar_types_cache: Arc::new(DashMap::new()),
-            instruments_cache: Arc::new(DashMap::new()),
-            option_greeks_subs: Arc::new(DashSet::new()),
+            bar_types_cache: Arc::new(AtomicMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
             bars_timestamp_on_close: Arc::new(AtomicBool::new(true)),
             pending_py_requests: Arc::new(DashMap::new()),
             account_id: None,
@@ -250,9 +250,9 @@ impl BybitWebSocketClient {
             signal: Arc::new(AtomicBool::new(false)),
             task_handle: None,
             subscriptions: SubscriptionState::new(BYBIT_WS_TOPIC_DELIMITER),
-            bar_types_cache: Arc::new(DashMap::new()),
-            instruments_cache: Arc::new(DashMap::new()),
-            option_greeks_subs: Arc::new(DashSet::new()),
+            bar_types_cache: Arc::new(AtomicMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
             bars_timestamp_on_close: Arc::new(AtomicBool::new(true)),
             pending_py_requests: Arc::new(DashMap::new()),
             account_id: None,
@@ -297,9 +297,9 @@ impl BybitWebSocketClient {
             signal: Arc::new(AtomicBool::new(false)),
             task_handle: None,
             subscriptions: SubscriptionState::new(BYBIT_WS_TOPIC_DELIMITER),
-            bar_types_cache: Arc::new(DashMap::new()),
-            instruments_cache: Arc::new(DashMap::new()),
-            option_greeks_subs: Arc::new(DashSet::new()),
+            bar_types_cache: Arc::new(AtomicMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
             bars_timestamp_on_close: Arc::new(AtomicBool::new(true)),
             pending_py_requests: Arc::new(DashMap::new()),
             account_id: None,
@@ -852,7 +852,7 @@ impl BybitWebSocketClient {
 
     /// Returns a reference to the bar types cache.
     #[must_use]
-    pub fn bar_types_cache(&self) -> &Arc<DashMap<String, BarType>> {
+    pub fn bar_types_cache(&self) -> &Arc<AtomicMap<String, BarType>> {
         &self.bar_types_cache
     }
 
@@ -865,10 +865,7 @@ impl BybitWebSocketClient {
     /// Returns a snapshot of the instruments cache keyed by symbol.
     #[must_use]
     pub fn instruments_snapshot(&self) -> ahash::AHashMap<Ustr, InstrumentAny> {
-        self.instruments_cache
-            .iter()
-            .map(|entry| (*entry.key(), entry.value().clone()))
-            .collect()
+        (**self.instruments_cache.load()).clone()
     }
 
     /// Sets whether bar timestamps use the close time.
@@ -894,7 +891,7 @@ impl BybitWebSocketClient {
 
     /// Returns a reference to the option greeks subscription set.
     #[must_use]
-    pub fn option_greeks_subs(&self) -> &Arc<DashSet<InstrumentId>> {
+    pub fn option_greeks_subs(&self) -> &Arc<AtomicSet<InstrumentId>> {
         &self.option_greeks_subs
     }
 
@@ -906,7 +903,7 @@ impl BybitWebSocketClient {
 
     /// Returns a reference to the live instruments cache Arc.
     #[must_use]
-    pub fn instruments_cache_ref(&self) -> &Arc<DashMap<Ustr, InstrumentAny>> {
+    pub fn instruments_cache_ref(&self) -> &Arc<AtomicMap<Ustr, InstrumentAny>> {
         &self.instruments_cache
     }
 

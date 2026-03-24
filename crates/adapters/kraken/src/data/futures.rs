@@ -159,7 +159,7 @@ impl KrakenFuturesDataClient {
             }
         }
 
-        self.http.cache_instruments(instruments.clone());
+        self.http.cache_instruments(&instruments);
 
         log::info!(
             "Loaded instruments: client_id={}, count={}",
@@ -851,7 +851,7 @@ impl DataClient for KrakenFuturesDataClient {
                             guard.insert(instrument.id(), instrument.clone());
                         }
                     }
-                    http.cache_instruments(instruments.clone());
+                    http.cache_instruments(&instruments);
 
                     let response = DataResponse::Instruments(InstrumentsResponse::new(
                         request_id,
@@ -917,7 +917,7 @@ impl DataClient for KrakenFuturesDataClient {
                             guard.insert(instrument.id(), instrument.clone());
                         }
                     }
-                    http.cache_instruments(all_instruments.clone());
+                    http.cache_instruments(&all_instruments);
 
                     let instrument = all_instruments
                         .into_iter()

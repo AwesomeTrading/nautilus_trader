@@ -34,10 +34,11 @@ use std::{
 
 use ahash::{AHashMap, AHashSet};
 use arc_swap::ArcSwap;
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use futures_util::Stream;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
+    AtomicMap, AtomicSet,
     consts::NAUTILUS_USER_AGENT,
     env::{get_env_var, get_or_env_var},
     string::REDACTED,
@@ -179,12 +180,12 @@ pub struct OKXWebSocketClient {
     subscriptions_bare: Arc<DashMap<OKXWsChannel, bool>>,
     subscriptions_state: SubscriptionState,
     request_id_counter: Arc<AtomicU64>,
-    instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
-    inst_id_code_cache: Arc<DashMap<Ustr, u64>>,
+    instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
+    inst_id_code_cache: Arc<AtomicMap<Ustr, u64>>,
     pub(crate) pending_orders: Arc<DashMap<String, PendingOrderInfo>>,
     pub(crate) pending_cancels: Arc<DashMap<String, PendingOrderInfo>>,
     pub(crate) pending_amends: Arc<DashMap<String, PendingOrderInfo>>,
-    option_greeks_subs: Arc<DashSet<InstrumentId>>,
+    option_greeks_subs: Arc<AtomicSet<InstrumentId>>,
     cancellation_token: CancellationToken,
 }
 
@@ -264,12 +265,12 @@ impl OKXWebSocketClient {
             subscriptions_bare,
             subscriptions_state,
             request_id_counter: Arc::new(AtomicU64::new(1)),
-            instruments_cache: Arc::new(DashMap::new()),
-            inst_id_code_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
+            inst_id_code_cache: Arc::new(AtomicMap::new()),
             pending_orders: Arc::new(DashMap::new()),
             pending_cancels: Arc::new(DashMap::new()),
             pending_amends: Arc::new(DashMap::new()),
-            option_greeks_subs: Arc::new(DashSet::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
             cancellation_token: CancellationToken::new(),
         })
     }
@@ -372,10 +373,11 @@ impl OKXWebSocketClient {
     ///
     /// Any existing instruments with the same symbols will be replaced.
     pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
-        for inst in instruments {
-            self.instruments_cache
-                .insert(inst.symbol().inner(), inst.clone());
-        }
+        self.instruments_cache.rcu(|m| {
+            for inst in instruments {
+                m.insert(inst.symbol().inner(), inst.clone());
+            }
+        });
     }
 
     /// Caches a single instrument.
@@ -388,10 +390,7 @@ impl OKXWebSocketClient {
 
     /// Returns a snapshot of the instruments cache as an `AHashMap`.
     pub fn instruments_snapshot(&self) -> AHashMap<Ustr, InstrumentAny> {
-        self.instruments_cache
-            .iter()
-            .map(|entry| (*entry.key(), entry.value().clone()))
-            .collect()
+        (**self.instruments_cache.load()).clone()
     }
 
     /// Caches the instIdCode mapping for an instrument.
@@ -405,9 +404,12 @@ impl OKXWebSocketClient {
     ///
     /// This is typically called after loading instruments from the HTTP API.
     pub fn cache_inst_id_codes(&self, mappings: impl IntoIterator<Item = (Ustr, u64)>) {
-        for (inst_id, inst_id_code) in mappings {
-            self.inst_id_code_cache.insert(inst_id, inst_id_code);
-        }
+        let entries: Vec<_> = mappings.into_iter().collect();
+        self.inst_id_code_cache.rcu(|m| {
+            for (inst_id, inst_id_code) in &entries {
+                m.insert(*inst_id, *inst_id_code);
+            }
+        });
     }
 
     /// Gets the instIdCode for an instrument.
@@ -415,7 +417,7 @@ impl OKXWebSocketClient {
     /// Returns `None` if the instrument is not cached (e.g., SPOT instruments may not have instIdCode).
     #[must_use]
     pub fn get_inst_id_code(&self, inst_id: &Ustr) -> Option<u64> {
-        self.inst_id_code_cache.get(inst_id).map(|r| *r.value())
+        self.inst_id_code_cache.load().get(inst_id).copied()
     }
 
     /// Sets the VIP level for this client.
@@ -1393,7 +1395,7 @@ impl OKXWebSocketClient {
     }
 
     /// Returns a reference to the option greeks subscription set.
-    pub fn option_greeks_subs(&self) -> &Arc<DashSet<InstrumentId>> {
+    pub fn option_greeks_subs(&self) -> &Arc<AtomicSet<InstrumentId>> {
         &self.option_greeks_subs
     }
 
@@ -1992,7 +1994,7 @@ impl OKXWebSocketClient {
 
         let instrument = self
             .instruments_cache
-            .get(&instrument_id.symbol.inner())
+            .get_cloned(&instrument_id.symbol.inner())
             .ok_or_else(|| {
                 OKXWsError::ClientError(format!("Unknown instrument {instrument_id}"))
             })?;
@@ -2341,7 +2343,7 @@ impl OKXWebSocketClient {
     pub async fn mass_cancel_orders(&self, instrument_id: InstrumentId) -> Result<(), OKXWsError> {
         let instrument = self
             .instruments_cache
-            .get(&instrument_id.symbol.inner())
+            .get_cloned(&instrument_id.symbol.inner())
             .ok_or_else(|| {
                 OKXWsError::ClientError(format!("Unknown instrument {instrument_id}"))
             })?;
@@ -2350,7 +2352,7 @@ impl OKXWebSocketClient {
             okx_instrument_type(&instrument).map_err(|e| OKXWsError::ClientError(e.to_string()))?;
 
         let symbol = instrument.symbol().inner();
-        let inst_family = match &*instrument {
+        let inst_family = match &instrument {
             InstrumentAny::CurrencyPair(_) => symbol.as_str().to_string(),
             InstrumentAny::CryptoPerpetual(_) => symbol
                 .as_str()
@@ -2455,7 +2457,7 @@ impl OKXWebSocketClient {
             builder.cl_ord_id(cl_ord_id.as_str());
             builder.side(ord_side.as_specified());
 
-            if let Some(instrument) = self.instruments_cache.get(&inst_id.symbol.inner()) {
+            if let Some(instrument) = self.instruments_cache.get_cloned(&inst_id.symbol.inner()) {
                 builder.ccy(instrument.quote_currency().to_string());
             }
 

@@ -944,7 +944,7 @@ async fn test_spot_domain_request_trades() {
 
     // First load instruments to populate cache
     let instruments = client.request_instruments(None).await.unwrap();
-    client.cache_instruments(instruments);
+    client.cache_instruments(&instruments);
 
     // Create a valid instrument ID from cached instruments (normalized to BTC)
     let instrument_id = InstrumentId::from("BTC/USDT.KRAKEN");
@@ -985,7 +985,7 @@ async fn test_spot_domain_request_bars() {
 
     // First load instruments to populate cache
     let instruments = client.request_instruments(None).await.unwrap();
-    client.cache_instruments(instruments);
+    client.cache_instruments(&instruments);
 
     // Create a BarType for 1-minute bars (normalized to BTC)
     let bar_type = BarType::from("BTC/USDT.KRAKEN-1-MINUTE-LAST-INTERNAL");
@@ -1851,7 +1851,7 @@ async fn test_futures_domain_request_trades() {
     .unwrap();
 
     let instruments = client.request_instruments().await.unwrap();
-    client.cache_instruments(instruments);
+    client.cache_instruments(&instruments);
 
     // PF_ETHUSD is in mock instruments; trades may be partially parsed
     // due to mock execution data having BTC-level prices
@@ -1892,7 +1892,7 @@ async fn test_futures_domain_request_bars() {
     .unwrap();
 
     let instruments = client.request_instruments().await.unwrap();
-    client.cache_instruments(instruments);
+    client.cache_instruments(&instruments);
 
     let bar_type = BarType::from("PI_XBTUSD.KRAKEN-1-HOUR-LAST-INTERNAL");
 

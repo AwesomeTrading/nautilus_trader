@@ -312,7 +312,7 @@ impl ExecutionClient for BybitExecutionClient {
 
                 log::info!("Loaded {} {product_type:?} instruments", instruments.len());
 
-                self.http_client.cache_instruments(instruments.clone());
+                self.http_client.cache_instruments(&instruments);
                 all_instruments.extend(instruments);
             }
 
@@ -488,7 +488,7 @@ impl ExecutionClient for BybitExecutionClient {
                             log::warn!("No instruments returned for {product_type:?}");
                             continue;
                         }
-                        http_client.cache_instruments(instruments.clone());
+                        http_client.cache_instruments(&instruments);
                         all_instruments.extend(instruments);
                     }
                     Err(e) => {

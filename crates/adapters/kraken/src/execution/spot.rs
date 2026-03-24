@@ -614,7 +614,7 @@ impl ExecutionClient for KrakenSpotExecutionClient {
                 .await
                 .context("Failed to load Kraken spot instruments")?;
             log::info!("Loaded {} Spot instruments", instruments.len());
-            self.http.cache_instruments(instruments);
+            self.http.cache_instruments(&instruments);
             self.core.set_instruments_initialized();
         }
 
@@ -655,9 +655,8 @@ impl ExecutionClient for KrakenSpotExecutionClient {
         self.spawn_message_handler()?;
 
         if let Ok(mut guard) = self.instruments.write() {
-            for entry in self.http.instruments_cache.iter() {
-                let instrument = entry.value().clone();
-                guard.insert(instrument.id(), instrument);
+            for instrument in self.http.instruments_cache.load().values() {
+                guard.insert(instrument.id(), instrument.clone());
             }
         }
 

@@ -431,7 +431,7 @@ impl ExecutionClient for DeribitExecutionClient {
 
                 log::info!("Fetched {} {product_type:?} instruments", instruments.len());
                 self.ws_client.cache_instruments(&instruments);
-                self.http_client.cache_instruments(instruments);
+                self.http_client.cache_instruments(&instruments);
             }
             self.core.set_instruments_initialized();
         }

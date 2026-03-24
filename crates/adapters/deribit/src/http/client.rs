@@ -25,9 +25,9 @@ use std::{
 
 use ahash::AHashSet;
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use nautilus_core::{
-    AtomicTime, datetime::nanos_to_millis, nanos::UnixNanos, time::get_atomic_clock_realtime,
+    AtomicMap, AtomicTime, datetime::nanos_to_millis, nanos::UnixNanos,
+    time::get_atomic_clock_realtime,
 };
 use nautilus_model::{
     data::{Bar, BarType, TradeTick},
@@ -855,7 +855,7 @@ impl DeribitRawHttpClient {
 )]
 pub struct DeribitHttpClient {
     pub(crate) inner: Arc<DeribitRawHttpClient>,
-    pub(crate) instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
+    pub(crate) instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
     clock: &'static AtomicTime,
     cache_initialized: AtomicBool,
 }
@@ -910,7 +910,7 @@ impl DeribitHttpClient {
 
         Ok(Self {
             inner: raw_client,
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             cache_initialized: AtomicBool::new(false),
             clock: get_atomic_clock_realtime(),
         })
@@ -953,7 +953,7 @@ impl DeribitHttpClient {
 
         Ok(Self {
             inner: raw_client,
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             cache_initialized: AtomicBool::new(false),
             clock: get_atomic_clock_realtime(),
         })
@@ -1390,20 +1390,19 @@ impl DeribitHttpClient {
     }
 
     /// Caches instruments for later retrieval.
-    pub fn cache_instruments(&self, instruments: Vec<InstrumentAny>) {
-        for inst in instruments {
-            self.instruments_cache
-                .insert(inst.raw_symbol().inner(), inst);
-        }
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments_cache.rcu(|m| {
+            for inst in instruments {
+                m.insert(inst.raw_symbol().inner(), inst.clone());
+            }
+        });
         self.cache_initialized.store(true, Ordering::Release);
     }
 
     /// Retrieves a cached instrument by symbol.
     #[must_use]
     pub fn get_instrument(&self, symbol: &Ustr) -> Option<InstrumentAny> {
-        self.instruments_cache
-            .get(symbol)
-            .map(|entry| entry.value().clone())
+        self.instruments_cache.get_cloned(symbol)
     }
 
     /// Checks if the instrument cache has been initialized.

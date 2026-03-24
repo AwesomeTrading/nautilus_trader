@@ -28,6 +28,7 @@ use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
+    AtomicMap,
     consts::NAUTILUS_USER_AGENT,
     nanos::UnixNanos,
     time::{AtomicTime, get_atomic_clock_realtime},
@@ -130,7 +131,7 @@ pub struct AxOrdersWebSocketClient {
     signal: Arc<AtomicBool>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
     auth_tracker: AuthTracker,
-    instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
+    instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
     caches: OrdersCaches,
     request_id_counter: Arc<AtomicI64>,
     account_id: AccountId,
@@ -192,7 +193,7 @@ impl AxOrdersWebSocketClient {
             signal: Arc::new(AtomicBool::new(false)),
             task_handle: None,
             auth_tracker: AuthTracker::default(),
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             caches: OrdersCaches::default(),
             request_id_counter: Arc::new(AtomicI64::new(1)),
             account_id,
@@ -243,10 +244,19 @@ impl AxOrdersWebSocketClient {
         self.instruments_cache.insert(symbol, instrument);
     }
 
+    /// Caches multiple instruments for use during message parsing.
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments_cache.rcu(|m| {
+            for inst in instruments {
+                m.insert(inst.symbol().inner(), inst.clone());
+            }
+        });
+    }
+
     /// Returns a cached instrument by symbol.
     #[must_use]
     pub fn get_cached_instrument(&self, symbol: &Ustr) -> Option<InstrumentAny> {
-        self.instruments_cache.get(symbol).map(|r| r.clone())
+        self.instruments_cache.get_cloned(symbol)
     }
 
     /// Returns the shared order caches.
@@ -257,7 +267,7 @@ impl AxOrdersWebSocketClient {
 
     /// Returns the instruments cache.
     #[must_use]
-    pub fn instruments_cache(&self) -> Arc<DashMap<Ustr, InstrumentAny>> {
+    pub fn instruments_cache(&self) -> Arc<AtomicMap<Ustr, InstrumentAny>> {
         Arc::clone(&self.instruments_cache)
     }
 

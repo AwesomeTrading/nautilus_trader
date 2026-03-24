@@ -503,9 +503,9 @@ impl BitmexDataClient {
             }
         }
 
-        for instrument in &instruments {
-            self.http_client.cache_instrument(instrument.clone());
+        self.http_client.cache_instruments(&instruments);
 
+        for instrument in &instruments {
             if let Err(e) = self
                 .data_sender
                 .send(DataEvent::Instrument(instrument.clone()))
@@ -574,9 +574,7 @@ impl BitmexDataClient {
                                     }
                                 }
 
-                                for instrument in instruments {
-                                    http_client.cache_instrument(instrument);
-                                }
+                                http_client.cache_instruments(&instruments);
 
                                 log::debug!("BitMEX instruments refreshed: client_id={client_id}");
                             }
@@ -1135,8 +1133,8 @@ impl DataClient for BitmexDataClient {
                         guard.clear();
                         for instrument in &instruments {
                             guard.insert(instrument.id(), instrument.clone());
-                            http_client.cache_instrument(instrument.clone());
                         }
+                        http_client.cache_instruments(&instruments);
                     }
 
                     let response = DataResponse::Instruments(InstrumentsResponse::new(

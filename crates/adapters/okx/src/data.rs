@@ -653,7 +653,7 @@ impl DataClient for OKXDataClient {
                     })?;
 
                 fetched.retain(|instrument| contract_filter_with_config(&self.config, instrument));
-                self.http_client.cache_instruments(fetched.clone());
+                self.http_client.cache_instruments(&fetched);
 
                 let mut guard = self.instruments.write().expect(MUTEX_POISONED);
                 for instrument in &fetched {
@@ -676,7 +676,7 @@ impl DataClient for OKXDataClient {
 
                     fetched
                         .retain(|instrument| contract_filter_with_config(&self.config, instrument));
-                    self.http_client.cache_instruments(fetched.clone());
+                    self.http_client.cache_instruments(&fetched);
 
                     let mut guard = self.instruments.write().expect(MUTEX_POISONED);
                     for instrument in &fetched {

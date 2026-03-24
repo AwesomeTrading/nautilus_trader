@@ -194,7 +194,7 @@ impl OKXHttpClient {
             .into_iter()
             .map(|inst| pyobject_to_instrument_any(py, inst))
             .collect();
-        self.cache_instruments(instruments?);
+        self.cache_instruments(&instruments?);
         Ok(())
     }
 

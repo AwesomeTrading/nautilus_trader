@@ -47,10 +47,10 @@ use std::{
 use ahash::{AHashMap, AHashSet};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use nautilus_core::{
-    AtomicTime, UnixNanos, consts::NAUTILUS_USER_AGENT, datetime::NANOSECONDS_IN_MILLISECOND,
-    env::get_or_env_var, string::REDACTED, time::get_atomic_clock_realtime,
+    AtomicMap, AtomicTime, UnixNanos, consts::NAUTILUS_USER_AGENT,
+    datetime::NANOSECONDS_IN_MILLISECOND, env::get_or_env_var, string::REDACTED,
+    time::get_atomic_clock_realtime,
 };
 use nautilus_model::{
     data::{
@@ -1121,7 +1121,7 @@ impl OKXRawHttpClient {
 )]
 pub struct OKXHttpClient {
     pub(crate) inner: Arc<OKXRawHttpClient>,
-    pub(crate) instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
+    pub(crate) instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
     clock: &'static AtomicTime,
     cache_initialized: AtomicBool,
 }
@@ -1180,7 +1180,7 @@ impl OKXHttpClient {
                 is_demo,
                 proxy_url,
             )?),
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             cache_initialized: AtomicBool::new(false),
             clock: get_atomic_clock_realtime(),
         })
@@ -1238,7 +1238,7 @@ impl OKXHttpClient {
                 is_demo,
                 proxy_url,
             )?),
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             cache_initialized: AtomicBool::new(false),
             clock: get_atomic_clock_realtime(),
         })
@@ -1251,8 +1251,7 @@ impl OKXHttpClient {
     /// Returns an error if the instrument is not found in the cache.
     fn instrument_from_cache(&self, symbol: Ustr) -> anyhow::Result<InstrumentAny> {
         self.instruments_cache
-            .get(&symbol)
-            .map(|entry| entry.value().clone())
+            .get_cloned(&symbol)
             .ok_or_else(|| anyhow::anyhow!("Instrument {symbol} not in cache"))
     }
 
@@ -1312,19 +1311,21 @@ impl OKXHttpClient {
     #[must_use]
     pub fn get_cached_symbols(&self) -> Vec<String> {
         self.instruments_cache
-            .iter()
-            .map(|entry| entry.key().to_string())
+            .load()
+            .keys()
+            .map(|k| k.to_string())
             .collect()
     }
 
     /// Caches multiple instruments.
     ///
     /// Any existing instruments with the same symbols will be replaced.
-    pub fn cache_instruments(&self, instruments: Vec<InstrumentAny>) {
-        for inst in instruments {
-            self.instruments_cache
-                .insert(inst.raw_symbol().inner(), inst);
-        }
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments_cache.rcu(|m| {
+            for inst in instruments {
+                m.insert(inst.raw_symbol().inner(), inst.clone());
+            }
+        });
         self.cache_initialized.store(true, Ordering::Release);
     }
 
@@ -1339,9 +1340,7 @@ impl OKXHttpClient {
 
     /// Gets an instrument from the cache by symbol.
     pub fn get_instrument(&self, symbol: &Ustr) -> Option<InstrumentAny> {
-        self.instruments_cache
-            .get(symbol)
-            .map(|entry| entry.value().clone())
+        self.instruments_cache.get_cloned(symbol)
     }
 
     /// Requests the account state for the `account_id` from OKX.

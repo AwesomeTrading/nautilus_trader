@@ -35,11 +35,11 @@ Released on TBD (UTC).
 ### Breaking Changes
 - Removed deprecated `convert_quote_qty_to_base` from `ExecEngineConfig` and `LiveExecEngineConfig`; adapters now handle quote-to-base conversion directly
 - Removed `TARDIS_BASE_URL` constant from `nautilus_tardis::http` - use `nautilus_tardis::common::urls::TARDIS_HTTP_BASE_URL`
+- Renamed `OrderEvent.kind()` to `type_name()` in Rust
+- Renamed instrument `type_str` PyO3 getter to `type_name`
 - Changed Tardis HTTP client from `reqwest::Client` to `nautilus_network::http::HttpClient` with rate limiting
 - Changed `ExecutionEngine.register_client` to error when a venue is already routed to another client (Rust)
 - Changed `ExecutionEngine.register_venue_routing` to error when re-routing a venue to a different client (Rust)
-- Renamed `OrderEvent.kind()` to `type_name()` in Rust
-- Renamed instrument `type_str` PyO3 getter to `type_name`
 - Changed collection-cloning PyO3 getters to methods: `Position.events()`, `adjustments()`, `client_order_ids()`, `venue_order_ids()`, `trade_ids()`; and `events()` on all order types
 
 ### Security
@@ -131,7 +131,6 @@ Released on TBD (UTC).
 - Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
 
 ### Internal Improvements
-- Replaced `AtomicMap` and `AtomicSet` type aliases with newtypes wrapping `ArcSwap` for ergonomic read-heavy concurrent collections
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
 - Added `BINANCE_GTX_ORDER_REJECT_CODE` and `BINANCE_SPOT_POST_ONLY_REJECT_MSG` constants for reliable post-only rejection detection in Rust
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
@@ -139,23 +138,25 @@ Released on TBD (UTC).
 - Added backtest margin models, `FXRolloverInterestModule`, `PerContractFeeModel`, and `SimulationModule` trait in Rust
 - Added `subscribe_option_greeks` support to `DataTester` in Rust
 - Added `WebSocketClient.notify_closed()` for stream-mode callers to signal reader EOF to the controller
+- Added `LiveNode` stop-handle timeout test for shutdown reliability
+- Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
 - Added OKX trade-level fill dedup via `emitted_trades` DashSet with atomic insert for cross-stream safety
 - Added OKX `AlgoCancelContext` and `dispatch_algo_cancels` to centralize algo cancel partitioning and rejection handling
 - Added OKX execution client integration tests for trade dedup, algo cancel rejections, batch cancel failures, and concurrent dedup
 - Added OKX HTTP mock test for `place_algo_order` `sCode` rejection path
 - Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
 - Added Tardis HTTP and WebSocket mock server integration tests
-- Added `LiveNode` stop-handle timeout test for shutdown reliability
 - Added Bybit `BybitWsFrame` enum separating wire-level deserialization from public `BybitWsMessage` API per adapter spec pattern
 - Added Bybit frame classification and subscription correlation test coverage (25 handler tests)
 - Replaced Bybit topic string constants with `BybitWsPublicChannel` and `BybitWsPrivateChannel` enum references
-- Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
-- Moved cache purge timers to base `ExecutionEngine` in Python
+- Replaced `AtomicMap` and `AtomicSet` type aliases with newtypes wrapping `ArcSwap` for ergonomic read-heavy concurrent collections
+- Replaced `DashMap`/`DashSet` with `AtomicMap`/`AtomicSet` for subscription tracking sets, instrument caches, and bar type caches across all adapters
 - Refactored computation of greeks (#3691), thanks @faysou
 - Refactored Deribit trade pagination into `TradePaginator` with dedup and cursor logic shared across public trades and fill reports
 - Refactored Polymarket HTTP client and improved outcome enum (#3702), thanks @filipmacek
 - Refactored Tardis adapter module organization to align with adapter spec (`common/`, `machine/cache.rs`)
 - Refactored Tardis `TardisDataClient` with `Credential::resolve()`, centralized URL resolution, and `AHashMap`
+- Moved cache purge timers to base `ExecutionEngine` in Python
 - Improved socket clients reconnect and shutdown reliability
 - Improved `LiveNode` event loop to use biased `select!` with pinned `ctrl_c` for reliable signal handling
 - Improved Databento live price precision handling with maps populated from instrument definitions

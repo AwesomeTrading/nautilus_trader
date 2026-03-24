@@ -43,8 +43,7 @@
 
 use std::str::FromStr;
 
-use ahash::AHashMap;
-use dashmap::DashSet;
+use ahash::{AHashMap, AHashSet};
 use futures_util::StreamExt;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
@@ -330,7 +329,7 @@ impl OKXWebSocketClient {
                 let mut funding_cache: AHashMap<Ustr, (Ustr, u64)> = AHashMap::new();
                 let mut fee_cache: AHashMap<Ustr, Money> = AHashMap::new();
                 let mut filled_qty_cache: AHashMap<Ustr, Quantity> = AHashMap::new();
-                let option_greeks_subs = client.option_greeks_subs().clone();
+                let option_greeks_subs_arc = client.option_greeks_subs().clone();
                 let _client = client;
                 tokio::pin!(stream);
 
@@ -352,13 +351,14 @@ impl OKXWebSocketClient {
                             inst_id,
                             data,
                         } => {
+                            let greeks_guard = option_greeks_subs_arc.load();
                             handle_channel_data(
                                 &channel,
                                 inst_id,
                                 data,
                                 &mut instruments_by_symbol,
                                 &mut funding_cache,
-                                &option_greeks_subs,
+                                &greeks_guard,
                                 clock,
                                 &call_soon,
                                 &callback,
@@ -1445,7 +1445,7 @@ fn handle_channel_data(
     data: serde_json::Value,
     instruments_by_symbol: &mut AHashMap<Ustr, InstrumentAny>,
     funding_cache: &mut AHashMap<Ustr, (Ustr, u64)>,
-    option_greeks_subs: &DashSet<InstrumentId>,
+    option_greeks_subs: &AHashSet<InstrumentId>,
     clock: &AtomicTime,
     call_soon: &Py<PyAny>,
     callback: &Py<PyAny>,

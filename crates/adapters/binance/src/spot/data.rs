@@ -22,7 +22,6 @@ use std::sync::{
 
 use ahash::AHashMap;
 use anyhow::Context;
-use dashmap::DashMap;
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::{
     clients::DataClient,
@@ -40,7 +39,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    MUTEX_POISONED,
+    AtomicMap, MUTEX_POISONED,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -169,13 +168,14 @@ impl BinanceSpotDataClient {
     fn handle_ws_message(
         msg: BinanceSpotWsMessage,
         data_sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
-        ws_instruments: &Arc<DashMap<Ustr, InstrumentAny>>,
+        ws_instruments: &Arc<AtomicMap<Ustr, InstrumentAny>>,
     ) {
         match msg {
             BinanceSpotWsMessage::Trades(ref event) => {
                 let symbol = Ustr::from(&event.symbol);
-                if let Some(instrument) = ws_instruments.get(&symbol) {
-                    let trades = parse_trades_event(event, instrument.value());
+                let cache = ws_instruments.load();
+                if let Some(instrument) = cache.get(&symbol) {
+                    let trades = parse_trades_event(event, instrument);
                     for data in trades {
                         Self::send_data(data_sender, data);
                     }
@@ -183,23 +183,26 @@ impl BinanceSpotDataClient {
             }
             BinanceSpotWsMessage::BestBidAsk(ref event) => {
                 let symbol = Ustr::from(&event.symbol);
-                if let Some(instrument) = ws_instruments.get(&symbol) {
-                    let quote = parse_bbo_event(event, instrument.value());
+                let cache = ws_instruments.load();
+                if let Some(instrument) = cache.get(&symbol) {
+                    let quote = parse_bbo_event(event, instrument);
                     Self::send_data(data_sender, Data::from(quote));
                 }
             }
             BinanceSpotWsMessage::DepthSnapshot(ref event) => {
                 let symbol = Ustr::from(&event.symbol);
-                if let Some(instrument) = ws_instruments.get(&symbol)
-                    && let Some(deltas) = parse_depth_snapshot(event, instrument.value())
+                let cache = ws_instruments.load();
+                if let Some(instrument) = cache.get(&symbol)
+                    && let Some(deltas) = parse_depth_snapshot(event, instrument)
                 {
                     Self::send_data(data_sender, Data::Deltas(OrderBookDeltas_API::new(deltas)));
                 }
             }
             BinanceSpotWsMessage::DepthDiff(ref event) => {
                 let symbol = Ustr::from(&event.symbol);
-                if let Some(instrument) = ws_instruments.get(&symbol)
-                    && let Some(deltas) = parse_depth_diff(event, instrument.value())
+                let cache = ws_instruments.load();
+                if let Some(instrument) = cache.get(&symbol)
+                    && let Some(deltas) = parse_depth_diff(event, instrument)
                 {
                     Self::send_data(data_sender, Data::Deltas(OrderBookDeltas_API::new(deltas)));
                 }

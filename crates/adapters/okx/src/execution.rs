@@ -722,7 +722,7 @@ impl ExecutionClient for OKXExecutionClient {
                     instruments.len()
                 );
 
-                self.http_client.cache_instruments(instruments.clone());
+                self.http_client.cache_instruments(&instruments);
                 all_instruments.extend(instruments);
                 all_inst_id_codes.extend(inst_id_codes);
             }
@@ -937,7 +937,7 @@ impl ExecutionClient for OKXExecutionClient {
                             log::warn!("No instruments returned for {instrument_type:?}");
                             continue;
                         }
-                        http_client.cache_instruments(instruments.clone());
+                        http_client.cache_instruments(&instruments);
                         all_instruments.extend(instruments);
                         all_inst_id_codes.extend(inst_id_codes);
                     }

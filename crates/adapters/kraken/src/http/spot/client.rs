@@ -26,10 +26,9 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use dashmap::DashMap;
 use indexmap::IndexMap;
 use nautilus_core::{
-    AtomicTime, UUID4, consts::NAUTILUS_USER_AGENT, datetime::NANOSECONDS_IN_SECOND,
+    AtomicMap, AtomicTime, UUID4, consts::NAUTILUS_USER_AGENT, datetime::NANOSECONDS_IN_SECOND,
     nanos::UnixNanos, time::get_atomic_clock_realtime,
 };
 use nautilus_model::{
@@ -978,7 +977,7 @@ impl KrakenSpotRawHttpClient {
 )]
 pub struct KrakenSpotHttpClient {
     pub(crate) inner: Arc<KrakenSpotRawHttpClient>,
-    pub(crate) instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
+    pub(crate) instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
     clock: &'static AtomicTime,
     cache_initialized: Arc<AtomicBool>,
     use_spot_position_reports: Arc<AtomicBool>,
@@ -1046,7 +1045,7 @@ impl KrakenSpotHttpClient {
                 proxy_url,
                 max_requests_per_second,
             )?),
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             cache_initialized: Arc::new(AtomicBool::new(false)),
             use_spot_position_reports: Arc::new(AtomicBool::new(false)),
             spot_positions_quote_currency: Arc::new(RwLock::new(Ustr::from("USDT"))),
@@ -1081,7 +1080,7 @@ impl KrakenSpotHttpClient {
                 proxy_url,
                 max_requests_per_second,
             )?),
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             cache_initialized: Arc::new(AtomicBool::new(false)),
             use_spot_position_reports: Arc::new(AtomicBool::new(false)),
             spot_positions_quote_currency: Arc::new(RwLock::new(Ustr::from("USDT"))),
@@ -1153,26 +1152,26 @@ impl KrakenSpotHttpClient {
     }
 
     /// Caches multiple instruments for symbol lookup.
-    pub fn cache_instruments(&self, instruments: Vec<InstrumentAny>) {
-        for instrument in instruments {
-            self.instruments_cache
-                .insert(instrument.symbol().inner(), instrument);
-        }
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments_cache.rcu(|m| {
+            for instrument in instruments {
+                m.insert(instrument.symbol().inner(), instrument.clone());
+            }
+        });
         self.cache_initialized.store(true, Ordering::Release);
     }
 
     /// Gets an instrument from the cache by symbol.
     pub fn get_cached_instrument(&self, symbol: &Ustr) -> Option<InstrumentAny> {
-        self.instruments_cache
-            .get(symbol)
-            .map(|entry| entry.value().clone())
+        self.instruments_cache.get_cloned(symbol)
     }
 
     fn get_instrument_by_raw_symbol(&self, raw_symbol: &str) -> Option<InstrumentAny> {
         self.instruments_cache
-            .iter()
-            .find(|entry| entry.value().raw_symbol().as_str() == raw_symbol)
-            .map(|entry| entry.value().clone())
+            .load()
+            .values()
+            .find(|inst| inst.raw_symbol().as_str() == raw_symbol)
+            .cloned()
     }
 
     fn generate_ts_init(&self) -> UnixNanos {
@@ -1629,9 +1628,8 @@ impl KrakenSpotHttpClient {
         } else {
             let quote_filter = *self.spot_positions_quote_currency.read().expect("lock");
 
-            for entry in self.instruments_cache.iter() {
-                let instrument = entry.value();
-
+            let instruments_guard = self.instruments_cache.load();
+            for instrument in instruments_guard.values() {
                 let quote_currency = match instrument.quote_currency() {
                     currency if currency.code == quote_filter => currency,
                     _ => continue,

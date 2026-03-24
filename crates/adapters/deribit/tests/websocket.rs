@@ -34,10 +34,9 @@ use axum::{
     response::Response,
     routing::get,
 };
-use dashmap::DashSet;
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::testing::wait_until_async;
-use nautilus_core::UnixNanos;
+use nautilus_core::{AtomicSet, UnixNanos};
 use nautilus_deribit::websocket::{
     auth::DERIBIT_DATA_SESSION_NAME, client::DeribitWebSocketClient, enums::DeribitUpdateInterval,
     messages::NautilusWsMessage,
@@ -829,7 +828,7 @@ async fn test_ticker_subscription_flow() {
 
     // Set mark price subs so handler emits MarkPriceUpdate from ticker
     let instrument_id = InstrumentId::from("BTC-PERPETUAL.DERIBIT");
-    let mark_price_subs = Arc::new(DashSet::new());
+    let mark_price_subs = Arc::new(AtomicSet::new());
     mark_price_subs.insert(instrument_id);
     client.set_mark_price_subs(mark_price_subs);
 

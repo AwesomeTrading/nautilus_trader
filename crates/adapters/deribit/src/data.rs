@@ -23,7 +23,6 @@ use std::sync::{
 use ahash::AHashMap;
 use anyhow::Context;
 use async_trait::async_trait;
-use dashmap::DashSet;
 use futures_util::StreamExt;
 use nautilus_common::{
     clients::DataClient,
@@ -46,7 +45,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    Params,
+    AtomicSet, Params,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -90,9 +89,9 @@ pub struct DeribitDataClient {
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
     instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-    option_greeks_subs: Arc<DashSet<InstrumentId>>,
-    mark_price_subs: Arc<DashSet<InstrumentId>>,
-    index_price_subs: Arc<DashSet<InstrumentId>>,
+    option_greeks_subs: Arc<AtomicSet<InstrumentId>>,
+    mark_price_subs: Arc<AtomicSet<InstrumentId>>,
+    index_price_subs: Arc<AtomicSet<InstrumentId>>,
     clock: &'static AtomicTime,
 }
 
@@ -148,9 +147,9 @@ impl DeribitDataClient {
             tasks: Vec::new(),
             data_sender,
             instruments: Arc::new(RwLock::new(AHashMap::new())),
-            option_greeks_subs: Arc::new(DashSet::new()),
-            mark_price_subs: Arc::new(DashSet::new()),
-            index_price_subs: Arc::new(DashSet::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
+            mark_price_subs: Arc::new(AtomicSet::new()),
+            index_price_subs: Arc::new(AtomicSet::new()),
             clock,
         })
     }
@@ -425,7 +424,7 @@ impl DataClient for DeribitDataClient {
                 .with_context(|| format!("failed to request instruments for {product_type:?}"))?;
 
             // Cache in http client
-            self.http_client.cache_instruments(fetched.clone());
+            self.http_client.cache_instruments(&fetched);
 
             // Cache locally
             let mut guard = self
@@ -1334,7 +1333,7 @@ impl DataClient for DeribitDataClient {
             // Propagate to HTTP and WebSocket caches so downstream
             // requests use correct precisions.
             if !all_instruments.is_empty() {
-                http_client.cache_instruments(all_instruments.clone());
+                http_client.cache_instruments(&all_instruments);
 
                 if let Some(ws) = &ws_client {
                     ws.cache_instruments(&all_instruments);
@@ -1439,7 +1438,7 @@ impl DataClient for DeribitDataClient {
                             }
                         }
                     }
-                    http_client.cache_instruments(vec![instrument.clone()]);
+                    http_client.cache_instruments(std::slice::from_ref(&instrument));
 
                     if let Some(ws) = &ws_client {
                         ws.cache_instruments(std::slice::from_ref(&instrument));

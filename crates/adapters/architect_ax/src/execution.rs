@@ -23,7 +23,6 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
-use dashmap::DashMap;
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::{
     clients::ExecutionClient,
@@ -35,7 +34,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    MUTEX_POISONED, UUID4, UnixNanos,
+    AtomicMap, MUTEX_POISONED, UUID4, UnixNanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
@@ -423,11 +422,8 @@ impl ExecutionClient for AxExecutionClient {
                 log::warn!("No instruments returned from AX");
             } else {
                 log::info!("Loaded {} instruments", instruments.len());
-                self.http_client.cache_instruments(instruments.clone());
-
-                for instrument in instruments {
-                    self.ws_orders.cache_instrument(instrument);
-                }
+                self.http_client.cache_instruments(&instruments);
+                self.ws_orders.cache_instruments(&instruments);
             }
             self.core.set_instruments_initialized();
         }
@@ -905,7 +901,7 @@ fn dispatch_ws_message(
     emitter: &ExecutionEventEmitter,
     caches: &OrdersCaches,
     account_id: AccountId,
-    instruments: &DashMap<Ustr, InstrumentAny>,
+    instruments: &AtomicMap<Ustr, InstrumentAny>,
     clock: &'static AtomicTime,
 ) {
     match message {
@@ -946,7 +942,7 @@ fn dispatch_order_event(
     emitter: &ExecutionEventEmitter,
     caches: &OrdersCaches,
     account_id: AccountId,
-    instruments: &DashMap<Ustr, InstrumentAny>,
+    instruments: &AtomicMap<Ustr, InstrumentAny>,
     clock: &'static AtomicTime,
 ) {
     match event {
@@ -1356,10 +1352,11 @@ fn create_order_status_report(
     event_ts: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
-    instruments: &DashMap<Ustr, InstrumentAny>,
+    instruments: &AtomicMap<Ustr, InstrumentAny>,
     clock: &'static AtomicTime,
 ) -> Option<OrderStatusReport> {
-    let instrument = instruments.get(&order.s)?;
+    let instruments_snap = instruments.load();
+    let instrument = instruments_snap.get(&order.s)?;
     let venue_order_id = VenueOrderId::new(&order.oid);
     let instrument_id = instrument.id();
     let order_side = map_order_side(order.d);
@@ -1410,10 +1407,11 @@ fn create_fill_report(
     event_ts: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
-    instruments: &DashMap<Ustr, InstrumentAny>,
+    instruments: &AtomicMap<Ustr, InstrumentAny>,
     clock: &'static AtomicTime,
 ) -> Option<FillReport> {
-    let instrument = instruments.get(&order.s)?;
+    let instruments_snap = instruments.load();
+    let instrument = instruments_snap.get(&order.s)?;
     let venue_order_id = VenueOrderId::new(&order.oid);
     let instrument_id = instrument.id();
     let order_side = map_order_side(order.d);

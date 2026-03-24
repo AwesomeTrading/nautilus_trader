@@ -319,7 +319,7 @@ async fn test_domain_http_cache_instruments() {
     assert!(!client.is_initialized());
 
     let instruments = client.request_instruments(None, None).await.unwrap();
-    client.cache_instruments(instruments);
+    client.cache_instruments(&instruments);
 
     assert!(client.is_initialized());
 
@@ -339,7 +339,7 @@ async fn test_domain_http_get_cached_instrument() {
     let client = AxHttpClient::new(Some(base_url), None, Some(60), None, None, None, None).unwrap();
 
     let instruments = client.request_instruments(None, None).await.unwrap();
-    client.cache_instruments(instruments);
+    client.cache_instruments(&instruments);
 
     let eurusd_symbol = Ustr::from("EURUSD-PERP");
     let cached = client.get_instrument(&eurusd_symbol);

@@ -109,7 +109,7 @@ impl DeribitHttpClient {
             .into_iter()
             .map(|inst| pyobject_to_instrument_any(py, inst))
             .collect();
-        self.cache_instruments(instruments?);
+        self.cache_instruments(&instruments?);
         Ok(())
     }
 
@@ -119,7 +119,7 @@ impl DeribitHttpClient {
     #[pyo3(name = "cache_instrument")]
     pub fn py_cache_instrument(&self, py: Python<'_>, instrument: Py<PyAny>) -> PyResult<()> {
         let inst = pyobject_to_instrument_any(py, instrument)?;
-        self.cache_instruments(vec![inst]);
+        self.cache_instruments(std::slice::from_ref(&inst));
         Ok(())
     }
 

@@ -29,11 +29,11 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use dashmap::{DashMap, DashSet};
 use futures_util::Stream;
 use nautilus_common::{enums::LogColor, live::get_runtime, log_info};
 use nautilus_core::{
-    consts::NAUTILUS_USER_AGENT, env::get_or_env_var_opt, time::get_atomic_clock_realtime,
+    AtomicMap, AtomicSet, consts::NAUTILUS_USER_AGENT, env::get_or_env_var_opt,
+    time::get_atomic_clock_realtime,
 };
 use nautilus_model::{
     data::BarType,
@@ -99,10 +99,10 @@ pub struct DeribitWebSocketClient {
     out_rx: Option<Arc<tokio::sync::mpsc::UnboundedReceiver<NautilusWsMessage>>>,
     task_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
     subscriptions_state: SubscriptionState,
-    instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
-    option_greeks_subs: Arc<DashSet<InstrumentId>>,
-    mark_price_subs: Arc<DashSet<InstrumentId>>,
-    index_price_subs: Arc<DashSet<InstrumentId>>,
+    instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
+    option_greeks_subs: Arc<AtomicSet<InstrumentId>>,
+    mark_price_subs: Arc<AtomicSet<InstrumentId>>,
+    index_price_subs: Arc<AtomicSet<InstrumentId>>,
     cancellation_token: CancellationToken,
     account_id: Option<AccountId>,
     bars_timestamp_on_close: bool,
@@ -198,10 +198,10 @@ impl DeribitWebSocketClient {
             out_rx: None,
             task_handle: None,
             subscriptions_state,
-            instruments_cache: Arc::new(DashMap::new()),
-            option_greeks_subs: Arc::new(DashSet::new()),
-            mark_price_subs: Arc::new(DashSet::new()),
-            index_price_subs: Arc::new(DashSet::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
+            option_greeks_subs: Arc::new(AtomicSet::new()),
+            mark_price_subs: Arc::new(AtomicSet::new()),
+            index_price_subs: Arc::new(AtomicSet::new()),
             cancellation_token: CancellationToken::new(),
             account_id: None,
             bars_timestamp_on_close: true,
@@ -372,10 +372,11 @@ impl DeribitWebSocketClient {
 
     /// Caches instruments for use during message parsing.
     pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
-        for inst in instruments {
-            self.instruments_cache
-                .insert(inst.raw_symbol().inner(), inst.clone());
-        }
+        self.instruments_cache.rcu(|m| {
+            for inst in instruments {
+                m.insert(inst.raw_symbol().inner(), inst.clone());
+            }
+        });
         log::debug!("Cached {} instruments", self.instruments_cache.len());
 
         // Send per-instrument updates to the live handler rather than
@@ -403,7 +404,7 @@ impl DeribitWebSocketClient {
         // If connected, send update to handler
         if self.is_active() {
             let tx = self.cmd_tx.clone();
-            let inst = self.instruments_cache.get(&symbol).map(|r| r.clone());
+            let inst = self.instruments_cache.get_cloned(&symbol);
             if let Some(inst) = inst {
                 get_runtime().spawn(async move {
                     let _ = tx
@@ -416,17 +417,17 @@ impl DeribitWebSocketClient {
     }
 
     /// Sets the shared option greeks subscription set for handler-side gating.
-    pub fn set_option_greeks_subs(&mut self, subs: Arc<DashSet<InstrumentId>>) {
+    pub fn set_option_greeks_subs(&mut self, subs: Arc<AtomicSet<InstrumentId>>) {
         self.option_greeks_subs = subs;
     }
 
     /// Sets the shared mark price subscription set for handler-side gating.
-    pub fn set_mark_price_subs(&mut self, subs: Arc<DashSet<InstrumentId>>) {
+    pub fn set_mark_price_subs(&mut self, subs: Arc<AtomicSet<InstrumentId>>) {
         self.mark_price_subs = subs;
     }
 
     /// Sets the shared index price subscription set for handler-side gating.
-    pub fn set_index_price_subs(&mut self, subs: Arc<DashSet<InstrumentId>>) {
+    pub fn set_index_price_subs(&mut self, subs: Arc<AtomicSet<InstrumentId>>) {
         self.index_price_subs = subs;
     }
 
@@ -541,7 +542,7 @@ impl DeribitWebSocketClient {
 
         // Replay cached instruments
         let instruments: Vec<InstrumentAny> =
-            self.instruments_cache.iter().map(|r| r.clone()).collect();
+            self.instruments_cache.load().values().cloned().collect();
 
         if !instruments.is_empty() {
             log::debug!(

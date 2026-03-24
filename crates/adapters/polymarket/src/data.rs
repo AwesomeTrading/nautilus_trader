@@ -22,7 +22,7 @@ use std::sync::{
 
 use ahash::AHashMap;
 use anyhow::Context;
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use nautilus_common::{
     clients::DataClient,
     live::{get_runtime, runner::get_data_event_sender},
@@ -38,6 +38,7 @@ use nautilus_common::{
     providers::InstrumentProvider,
 };
 use nautilus_core::{
+    AtomicMap, AtomicSet,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -77,9 +78,9 @@ struct WsMessageContext {
     token_instruments: Arc<AHashMap<Ustr, InstrumentAny>>,
     order_books: Arc<DashMap<InstrumentId, OrderBook>>,
     last_quotes: Arc<DashMap<InstrumentId, QuoteTick>>,
-    active_quote_subs: Arc<DashSet<InstrumentId>>,
-    active_delta_subs: Arc<DashSet<InstrumentId>>,
-    active_trade_subs: Arc<DashSet<InstrumentId>>,
+    active_quote_subs: Arc<AtomicSet<InstrumentId>>,
+    active_delta_subs: Arc<AtomicSet<InstrumentId>>,
+    active_trade_subs: Arc<AtomicSet<InstrumentId>>,
 }
 
 /// Polymarket data client for live market data streaming.
@@ -102,12 +103,12 @@ pub struct PolymarketDataClient {
     cancellation_token: CancellationToken,
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
-    instruments: Arc<DashMap<InstrumentId, InstrumentAny>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
     order_books: Arc<DashMap<InstrumentId, OrderBook>>,
     last_quotes: Arc<DashMap<InstrumentId, QuoteTick>>,
-    active_quote_subs: Arc<DashSet<InstrumentId>>,
-    active_delta_subs: Arc<DashSet<InstrumentId>>,
-    active_trade_subs: Arc<DashSet<InstrumentId>>,
+    active_quote_subs: Arc<AtomicSet<InstrumentId>>,
+    active_delta_subs: Arc<AtomicSet<InstrumentId>>,
+    active_trade_subs: Arc<AtomicSet<InstrumentId>>,
 }
 
 impl PolymarketDataClient {
@@ -136,12 +137,12 @@ impl PolymarketDataClient {
             cancellation_token: CancellationToken::new(),
             tasks: Vec::new(),
             data_sender,
-            instruments: Arc::new(DashMap::new()),
+            instruments: Arc::new(AtomicMap::new()),
             order_books: Arc::new(DashMap::new()),
             last_quotes: Arc::new(DashMap::new()),
-            active_quote_subs: Arc::new(DashSet::new()),
-            active_delta_subs: Arc::new(DashSet::new()),
-            active_trade_subs: Arc::new(DashSet::new()),
+            active_quote_subs: Arc::new(AtomicSet::new()),
+            active_delta_subs: Arc::new(AtomicSet::new()),
+            active_trade_subs: Arc::new(AtomicSet::new()),
         }
     }
 
@@ -175,8 +176,8 @@ impl PolymarketDataClient {
     }
 
     fn resolve_token_id(&self, instrument_id: InstrumentId) -> anyhow::Result<String> {
-        let instrument = self
-            .instruments
+        let instruments = self.instruments.load();
+        let instrument = instruments
             .get(&instrument_id)
             .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
         Ok(instrument.raw_symbol().as_str().to_string())
@@ -665,8 +666,8 @@ impl DataClient for PolymarketDataClient {
 
     fn request_book_snapshot(&self, request: RequestBookSnapshot) -> anyhow::Result<()> {
         let instrument_id = request.instrument_id;
-        let instrument = self
-            .instruments
+        let instruments = self.instruments.load();
+        let instrument = instruments
             .get(&instrument_id)
             .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
 
@@ -712,8 +713,8 @@ impl DataClient for PolymarketDataClient {
 
     fn request_trades(&self, request: RequestTrades) -> anyhow::Result<()> {
         let instrument_id = request.instrument_id;
-        let instrument = self
-            .instruments
+        let instruments = self.instruments.load();
+        let instrument = instruments
             .get(&instrument_id)
             .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
 

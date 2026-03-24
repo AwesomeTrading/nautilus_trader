@@ -61,7 +61,6 @@ async-stream = { workspace = true }
 async-trait = { workspace = true }
 aws-lc-rs = { workspace = true }
 chrono = { workspace = true }
-dashmap = { workspace = true }
 derive_builder = { workspace = true }
 dotenvy = { workspace = true }
 futures-util = { workspace = true }
@@ -88,6 +87,7 @@ nautilus-testkit = { workspace = true }
 
 axum = { workspace = true }
 criterion = { workspace = true }
+dashmap = { workspace = true }
 iai = { workspace = true }
 rstest = { workspace = true }
 rust_decimal_macros = { workspace = true }

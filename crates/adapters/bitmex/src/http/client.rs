@@ -34,7 +34,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use nautilus_core::{
-    AtomicTime, UUID4, UnixNanos,
+    AtomicMap, AtomicTime, UUID4, UnixNanos,
     consts::{NAUTILUS_TRADER, NAUTILUS_USER_AGENT},
     env::get_or_env_var_opt,
     time::get_atomic_clock_realtime,
@@ -800,7 +800,7 @@ impl BitmexRawHttpClient {
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.bitmex")
 )]
 pub struct BitmexHttpClient {
-    pub(crate) instruments_cache: Arc<DashMap<Ustr, InstrumentAny>>,
+    pub(crate) instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
     pub(crate) order_type_cache: Arc<DashMap<ClientOrderId, OrderType>>,
     clock: &'static AtomicTime,
     inner: Arc<BitmexRawHttpClient>,
@@ -914,7 +914,7 @@ impl BitmexHttpClient {
 
         Ok(Self {
             inner: Arc::new(inner),
-            instruments_cache: Arc::new(DashMap::new()),
+            instruments_cache: Arc::new(AtomicMap::new()),
             order_type_cache: Arc::new(DashMap::new()),
             cache_initialized: AtomicBool::new(false),
             clock: get_atomic_clock_realtime(),
@@ -1238,11 +1238,21 @@ impl BitmexHttpClient {
         self.cache_initialized.store(true, Ordering::Release);
     }
 
+    /// Caches multiple instruments.
+    ///
+    /// Any existing instruments with the same symbols will be replaced.
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments_cache.rcu(|m| {
+            for inst in instruments {
+                m.insert(inst.raw_symbol().inner(), inst.clone());
+            }
+        });
+        self.cache_initialized.store(true, Ordering::Release);
+    }
+
     /// Gets an instrument from the cache by symbol.
     pub fn get_instrument(&self, symbol: &Ustr) -> Option<InstrumentAny> {
-        self.instruments_cache
-            .get(symbol)
-            .map(|entry| entry.value().clone())
+        self.instruments_cache.get_cloned(symbol)
     }
 
     /// Request a single instrument and parse it into a Nautilus type.
