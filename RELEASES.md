@@ -14,6 +14,8 @@ Released on TBD (UTC).
 - Added Binance instrument status polling in Rust
 - Added Binance Futures `close_position` parameter for algo stop orders to close an entire position at trigger price (Python and Rust) (#3751), thanks for reporting @dodge-basic
 - Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
+- Added Bybit options trade subscriptions using `baseCoin` topic with per-instrument filtering
+- Added Bybit option instrument fee rate population from `/v5/account/fee-rate`
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Deribit `LimitIfTouched` and `MarketIfTouched` order type support (`take_limit`/`take_market`)
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
@@ -188,6 +190,7 @@ Released on TBD (UTC).
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
+- Added Bybit options support matrix and trading limitations to integration docs
 - Added OKX to adapter support tables in Options and Greeks concept guides
 - Added option greeks test cases (TC-D62, TC-D63) with config examples to the data testing spec
 - Added test style guidance against log capture assertions in developer testing guide

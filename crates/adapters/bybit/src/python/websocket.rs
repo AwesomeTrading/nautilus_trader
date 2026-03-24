@@ -263,6 +263,7 @@ impl BybitWebSocketClient {
             let product_type = client.product_type();
             let account_id = client.account_id();
             let bar_types_cache = client.bar_types_cache().clone();
+            let trade_subs = client.trade_subs().clone();
             let option_greeks_subs = client.option_greeks_subs().clone();
             let bars_timestamp_on_close = client.bars_timestamp_on_close();
             let instruments = Arc::clone(client.instruments_cache_ref());
@@ -299,6 +300,7 @@ impl BybitWebSocketClient {
                                 msg,
                                 product_type,
                                 &instruments,
+                                &trade_subs,
                                 clock,
                                 &call_soon,
                                 &callback,
@@ -1342,6 +1344,7 @@ fn handle_trade(
     msg: &crate::websocket::messages::BybitWsTradeMsg,
     product_type: Option<BybitProductType>,
     instruments: &AtomicMap<Ustr, InstrumentAny>,
+    trade_subs: &AtomicSet<InstrumentId>,
     clock: &AtomicTime,
     call_soon: &Py<PyAny>,
     callback: &Py<PyAny>,
@@ -1351,6 +1354,13 @@ fn handle_trade(
         let Some(instrument) = resolve_instrument(&trade.s, product_type, instruments) else {
             continue;
         };
+
+        if product_type == Some(BybitProductType::Option)
+            && !trade_subs.is_empty()
+            && !trade_subs.contains(&instrument.id())
+        {
+            continue;
+        }
 
         match parse_ws_trade_tick(trade, &instrument, ts_init) {
             Ok(tick) => send_data_to_python(Data::Trade(tick), call_soon, callback),

@@ -99,6 +99,7 @@ pub struct BybitDataClient {
     book_depths: Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     quote_depths: Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     ticker_subs: Arc<RwLock<AHashMap<InstrumentId, AHashSet<&'static str>>>>,
+    trade_subs: Arc<AtomicSet<InstrumentId>>,
     option_greeks_subs: Arc<AtomicSet<InstrumentId>>,
     instrument_status_subs: Arc<AtomicSet<InstrumentId>>,
     status_cache: Arc<RwLock<AHashMap<InstrumentId, MarketStatusAction>>>,
@@ -173,6 +174,7 @@ impl BybitDataClient {
             book_depths: Arc::new(RwLock::new(AHashMap::new())),
             quote_depths: Arc::new(RwLock::new(AHashMap::new())),
             ticker_subs: Arc::new(RwLock::new(AHashMap::new())),
+            trade_subs: Arc::new(AtomicSet::new()),
             option_greeks_subs: Arc::new(AtomicSet::new()),
             instrument_status_subs: Arc::new(AtomicSet::new()),
             status_cache: Arc::new(RwLock::new(AHashMap::new())),
@@ -294,6 +296,7 @@ fn handle_ws_message(
     data_sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
     instruments: &AHashMap<Ustr, InstrumentAny>,
     product_type: Option<BybitProductType>,
+    trade_subs: &Arc<AtomicSet<InstrumentId>>,
     ticker_subs: &Arc<RwLock<AHashMap<InstrumentId, AHashSet<&'static str>>>>,
     quote_depths: &Arc<RwLock<AHashMap<InstrumentId, u32>>>,
     book_depths: &Arc<RwLock<AHashMap<InstrumentId, u32>>>,
@@ -357,9 +360,12 @@ fn handle_ws_message(
         BybitWsMessage::Trade(msg) => {
             for trade in &msg.data {
                 let Some(instrument) = resolve(&trade.s) else {
-                    log::warn!("Unknown symbol in trade update: {}", trade.s);
                     continue;
                 };
+                let instrument_id = instrument.id();
+                if !trade_subs.contains(&instrument_id) {
+                    continue;
+                }
                 match parse_ws_trade_tick(trade, instrument, ts_init) {
                     Ok(tick) => send_data(data_sender, Data::Trade(tick)),
                     Err(e) => log::error!("Failed to parse trade tick: {e}"),
@@ -713,6 +719,7 @@ impl DataClient for BybitDataClient {
             let stream = ws_client.stream();
             let product_type = ws_client.product_type();
             let sender = self.data_sender.clone();
+            let trade_subs = self.trade_subs.clone();
             let ticker_subs = self.ticker_subs.clone();
             let quote_depths = self.quote_depths.clone();
             let book_depths = self.book_depths.clone();
@@ -734,6 +741,7 @@ impl DataClient for BybitDataClient {
                                 &sender,
                                 &instruments,
                                 product_type,
+                                &trade_subs,
                                 &ticker_subs,
                                 &quote_depths,
                                 &book_depths,
@@ -795,6 +803,7 @@ impl DataClient for BybitDataClient {
         self.book_depths.write().expect(MUTEX_POISONED).clear();
         self.quote_depths.write().expect(MUTEX_POISONED).clear();
         self.ticker_subs.write().expect(MUTEX_POISONED).clear();
+        self.trade_subs.store(AHashSet::new());
         self.option_greeks_subs.store(AHashSet::new());
         self.instrument_status_subs.store(AHashSet::new());
         self.status_cache.write().expect(MUTEX_POISONED).clear();
@@ -909,6 +918,8 @@ impl DataClient for BybitDataClient {
             .get_product_type_for_instrument(instrument_id)
             .unwrap_or(BybitProductType::Linear);
 
+        self.trade_subs.insert(instrument_id);
+
         let ws = self
             .get_ws_client_for_product(product_type)
             .context("no WebSocket client for product type")?
@@ -931,8 +942,8 @@ impl DataClient for BybitDataClient {
             .get_product_type_for_instrument(instrument_id)
             .unwrap_or(BybitProductType::Linear);
 
-        if product_type == BybitProductType::Spot {
-            anyhow::bail!("Funding rates not available for Spot instruments");
+        if product_type == BybitProductType::Spot || product_type == BybitProductType::Option {
+            anyhow::bail!("Funding rates not available for {product_type:?} instruments");
         }
 
         let should_subscribe = {
@@ -1039,6 +1050,10 @@ impl DataClient for BybitDataClient {
         let product_type = self
             .get_product_type_for_instrument(instrument_id)
             .unwrap_or(BybitProductType::Linear);
+
+        if product_type == BybitProductType::Option {
+            anyhow::bail!("Bybit does not support kline/bar data for options");
+        }
 
         let ws = self
             .get_ws_client_for_product(product_type)
@@ -1169,6 +1184,8 @@ impl DataClient for BybitDataClient {
         let product_type = self
             .get_product_type_for_instrument(instrument_id)
             .unwrap_or(BybitProductType::Linear);
+
+        self.trade_subs.remove(&instrument_id);
 
         let ws = self
             .get_ws_client_for_product(product_type)
@@ -1909,7 +1926,7 @@ mod tests {
         let response: BybitInstrumentOptionResponse = serde_json::from_str(&json).unwrap();
         let instrument = &response.result.list[0];
         let ts = UnixNanos::new(1_700_000_000_000_000_000);
-        parse_option_instrument(instrument, ts, ts).unwrap()
+        parse_option_instrument(instrument, None, ts, ts).unwrap()
     }
 
     fn build_instruments(instruments: &[InstrumentAny]) -> AHashMap<Ustr, InstrumentAny> {
@@ -1922,6 +1939,7 @@ mod tests {
 
     #[allow(clippy::type_complexity)]
     fn empty_subs() -> (
+        Arc<AtomicSet<InstrumentId>>,
         Arc<RwLock<AHashMap<InstrumentId, AHashSet<&'static str>>>>,
         Arc<RwLock<AHashMap<InstrumentId, u32>>>,
         Arc<RwLock<AHashMap<InstrumentId, u32>>>,
@@ -1929,6 +1947,7 @@ mod tests {
         Arc<AtomicMap<String, BarType>>,
     ) {
         (
+            Arc::new(AtomicSet::new()),
             Arc::new(RwLock::new(AHashMap::new())),
             Arc::new(RwLock::new(AHashMap::new())),
             Arc::new(RwLock::new(AHashMap::new())),
@@ -1941,7 +1960,9 @@ mod tests {
     fn test_handle_trade_message_emits_trade_tick() {
         let instrument = linear_instrument();
         let instruments = build_instruments(std::slice::from_ref(&instrument));
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
+        trade_subs.insert(instrument.id());
         let mut quote_cache = AHashMap::new();
         let mut funding_cache = AHashMap::new();
         let clock = get_atomic_clock_realtime();
@@ -1957,6 +1978,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -1982,7 +2004,8 @@ mod tests {
     #[rstest]
     fn test_handle_trade_message_unknown_symbol_no_event() {
         let instruments = AHashMap::new();
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
         let mut quote_cache = AHashMap::new();
         let mut funding_cache = AHashMap::new();
         let clock = get_atomic_clock_realtime();
@@ -1998,6 +2021,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2016,7 +2040,8 @@ mod tests {
         let instrument = linear_instrument();
         let instrument_id = instrument.id();
         let instruments = build_instruments(&[instrument]);
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
 
         book_depths.write().unwrap().insert(instrument_id, 1);
         quote_depths.write().unwrap().insert(instrument_id, 1);
@@ -2036,6 +2061,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2057,7 +2083,8 @@ mod tests {
     fn test_handle_orderbook_message_no_sub_no_event() {
         let instrument = linear_instrument();
         let instruments = build_instruments(&[instrument]);
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
         let mut quote_cache = AHashMap::new();
         let mut funding_cache = AHashMap::new();
         let clock = get_atomic_clock_realtime();
@@ -2073,6 +2100,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2091,7 +2119,8 @@ mod tests {
         let instrument = linear_instrument();
         let instrument_id = instrument.id();
         let instruments = build_instruments(&[instrument]);
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
 
         let mut subs = AHashSet::new();
         subs.insert("quotes");
@@ -2112,6 +2141,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2132,7 +2162,8 @@ mod tests {
         let instrument = linear_instrument();
         let instrument_id = instrument.id();
         let instruments = build_instruments(&[instrument]);
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
 
         let mut subs = AHashSet::new();
         subs.insert("funding");
@@ -2153,6 +2184,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2173,6 +2205,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2191,7 +2224,8 @@ mod tests {
         let instrument = linear_instrument();
         let instrument_id = instrument.id();
         let instruments = build_instruments(&[instrument]);
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
 
         let mut subs = AHashSet::new();
         subs.insert("mark_prices");
@@ -2213,6 +2247,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2233,7 +2268,8 @@ mod tests {
     #[rstest]
     fn test_handle_reconnected_clears_caches() {
         let instruments = AHashMap::new();
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
         let mut quote_cache = AHashMap::new();
         let mut funding_cache = AHashMap::new();
         let clock = get_atomic_clock_realtime();
@@ -2267,6 +2303,7 @@ mod tests {
             &tx,
             &instruments,
             None,
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2293,7 +2330,8 @@ mod tests {
         let mut instruments = AHashMap::new();
         instruments.insert(ticker_key, instrument);
 
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
         greeks_subs.insert(instrument_id);
 
         let mut quote_cache = AHashMap::new();
@@ -2311,6 +2349,7 @@ mod tests {
             &tx,
             &instruments,
             Some(BybitProductType::Option),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2328,7 +2367,8 @@ mod tests {
     #[rstest]
     fn test_handle_execution_message_ignored_by_data() {
         let instruments = AHashMap::new();
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
         let mut quote_cache = AHashMap::new();
         let mut funding_cache = AHashMap::new();
         let clock = get_atomic_clock_realtime();
@@ -2345,6 +2385,7 @@ mod tests {
             &tx,
             &instruments,
             None,
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2363,9 +2404,11 @@ mod tests {
         let instrument = linear_instrument();
 
         let mut map = AHashMap::new();
-        map.insert(instrument.id().symbol.inner(), instrument);
+        map.insert(instrument.id().symbol.inner(), instrument.clone());
 
-        let (ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) = empty_subs();
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
+        trade_subs.insert(instrument.id());
         let mut quote_cache = AHashMap::new();
         let mut funding_cache = AHashMap::new();
         let clock = get_atomic_clock_realtime();
@@ -2380,6 +2423,7 @@ mod tests {
             &tx,
             &map,
             None,
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2397,6 +2441,7 @@ mod tests {
             &tx,
             &map,
             Some(BybitProductType::Linear),
+            &trade_subs,
             &ticker_subs,
             &quote_depths,
             &book_depths,
@@ -2407,6 +2452,59 @@ mod tests {
             clock,
         );
 
+        let event = rx.try_recv().unwrap();
+        assert!(matches!(event, DataEvent::Data(Data::Trade(_))));
+    }
+
+    #[rstest]
+    fn test_handle_trade_filters_by_subscription() {
+        let instrument = linear_instrument();
+        let instruments = build_instruments(std::slice::from_ref(&instrument));
+        let (trade_subs, ticker_subs, quote_depths, book_depths, greeks_subs, bar_types) =
+            empty_subs();
+        let mut quote_cache = AHashMap::new();
+        let mut funding_cache = AHashMap::new();
+        let clock = get_atomic_clock_realtime();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        let json = load_test_json("ws_public_trade.json");
+        let msg: BybitWsTradeMsg = serde_json::from_str(&json).unwrap();
+
+        // Without subscription, trade should be filtered out
+        handle_ws_message(
+            &BybitWsMessage::Trade(msg.clone()),
+            &tx,
+            &instruments,
+            Some(BybitProductType::Linear),
+            &trade_subs,
+            &ticker_subs,
+            &quote_depths,
+            &book_depths,
+            &greeks_subs,
+            &bar_types,
+            &mut quote_cache,
+            &mut funding_cache,
+            clock,
+        );
+        assert!(rx.try_recv().is_err());
+
+        // With subscription, trade should be emitted
+        trade_subs.insert(instrument.id());
+        handle_ws_message(
+            &BybitWsMessage::Trade(msg),
+            &tx,
+            &instruments,
+            Some(BybitProductType::Linear),
+            &trade_subs,
+            &ticker_subs,
+            &quote_depths,
+            &book_depths,
+            &greeks_subs,
+            &bar_types,
+            &mut quote_cache,
+            &mut funding_cache,
+            clock,
+        );
         let event = rx.try_recv().unwrap();
         assert!(matches!(event, DataEvent::Data(Data::Trade(_))));
     }

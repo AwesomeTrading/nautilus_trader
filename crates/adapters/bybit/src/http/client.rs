@@ -2726,6 +2726,39 @@ impl BybitHttpClient {
         }
     }
 
+    async fn fetch_option_fee_map(&self) -> anyhow::Result<AHashMap<Ustr, BybitFeeRate>> {
+        let mut fee_params = BybitFeeRateParamsBuilder::default();
+        fee_params.category(BybitProductType::Option);
+        let Ok(params) = fee_params.build() else {
+            return Ok(AHashMap::new());
+        };
+        match self.inner.get_fee_rate(&params).await {
+            Ok(response) => Ok(response
+                .result
+                .list
+                .into_iter()
+                .filter_map(|f| f.base_coin.map(|bc| (bc, f)))
+                .collect()),
+            Err(BybitHttpError::MissingCredentials) => {
+                log::warn!("Missing credentials for option fee rates, using defaults");
+                Ok(AHashMap::new())
+            }
+            Err(BybitHttpError::BybitError {
+                error_code,
+                ref message,
+            }) => {
+                log::warn!(
+                    "Option fee rate request rejected (error {error_code}: {message}), using defaults"
+                );
+                Ok(AHashMap::new())
+            }
+            Err(e) => {
+                log::warn!("Option fee rate request failed ({e}), using defaults");
+                Ok(AHashMap::new())
+            }
+        }
+    }
+
     async fn paginate_instruments<D, F>(
         &self,
         product_type: BybitProductType,
@@ -2906,10 +2939,14 @@ impl BybitHttpClient {
                 .await?
             }
             BybitProductType::Option => {
+                let fee_map = self.fetch_option_fee_map().await?;
                 self.paginate_instruments::<BybitInstrumentOption, _>(
                     product_type,
                     &symbol,
-                    |def| parse_option_instrument(def, ts_init, ts_init).ok(),
+                    |def| {
+                        let fee = fee_map.get(&def.base_coin);
+                        parse_option_instrument(def, fee, ts_init, ts_init).ok()
+                    },
                 )
                 .await?
             }

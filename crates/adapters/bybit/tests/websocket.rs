@@ -2426,3 +2426,125 @@ async fn test_build_cancel_order_params_requires_order_id() {
 
     client.close().await.unwrap();
 }
+
+#[rstest]
+#[tokio::test]
+async fn test_option_client_rejects_bar_subscription() {
+    let (addr, _state) = start_test_server().await.unwrap();
+    // Use the linear route for the mock server; the product_type on the client
+    // controls the kline guard, not the URL path.
+    let ws_url = format!("ws://{addr}/v5/public/linear");
+
+    let mut client = BybitWebSocketClient::new_public_with(
+        BybitProductType::Option,
+        BybitEnvironment::Mainnet,
+        Some(ws_url),
+        None,
+    );
+
+    client.connect().await.unwrap();
+
+    wait_until_async(|| async { client.is_active() }, Duration::from_secs(5)).await;
+
+    let bar_type = BarType::from("BTC-27MAR26-70000-P-OPTION.BYBIT-1-MINUTE-LAST-EXTERNAL");
+    let result = client.subscribe_bars(bar_type).await;
+
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("does not support kline/bar data for options")
+    );
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_option_trade_subscription_uses_base_coin_topic() {
+    let (addr, state) = start_test_server().await.unwrap();
+    // Use the linear route for the mock server; the product_type on the client
+    // controls the topic construction, not the URL path.
+    let ws_url = format!("ws://{addr}/v5/public/linear");
+
+    let mut client = BybitWebSocketClient::new_public_with(
+        BybitProductType::Option,
+        BybitEnvironment::Mainnet,
+        Some(ws_url),
+        None,
+    );
+
+    client.connect().await.unwrap();
+    wait_until_async(|| async { client.is_active() }, Duration::from_secs(5)).await;
+
+    let instrument_id = InstrumentId::from("BTC-27MAR26-70000-P-OPTION.BYBIT");
+    client.subscribe_trades(instrument_id).await.unwrap();
+
+    wait_until_async(
+        || async { !state.subscription_events.lock().await.is_empty() },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let subs = state.subscription_events.lock().await.clone();
+    assert!(
+        subs.iter()
+            .any(|(topic, ok)| topic == "publicTrade.BTC" && *ok),
+        "Expected publicTrade.BTC topic, found: {subs:?}"
+    );
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_option_trade_unsubscribe_preserves_shared_topic() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let ws_url = format!("ws://{addr}/v5/public/linear");
+
+    let mut client = BybitWebSocketClient::new_public_with(
+        BybitProductType::Option,
+        BybitEnvironment::Mainnet,
+        Some(ws_url),
+        None,
+    );
+
+    client.connect().await.unwrap();
+    wait_until_async(|| async { client.is_active() }, Duration::from_secs(5)).await;
+
+    // Subscribe to two BTC options sharing the same baseCoin topic
+    let opt1 = InstrumentId::from("BTC-27MAR26-70000-P-OPTION.BYBIT");
+    let opt2 = InstrumentId::from("BTC-27MAR26-80000-C-OPTION.BYBIT");
+    client.subscribe_trades(opt1).await.unwrap();
+    client.subscribe_trades(opt2).await.unwrap();
+
+    wait_until_async(
+        || async {
+            state
+                .subscription_events
+                .lock()
+                .await
+                .iter()
+                .any(|(t, ok)| t == "publicTrade.BTC" && *ok)
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    // Unsubscribe one; the WS topic should remain because the other still needs it
+    state.clear_subscription_events().await;
+    client.unsubscribe_trades(opt1).await.unwrap();
+
+    // Give a moment for any unsubscribe message to arrive
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // The topic should NOT have been unsubscribed (reference count > 0)
+    let subs = state.subscriptions.lock().await;
+    assert!(
+        subs.contains(&"publicTrade.BTC".to_string()),
+        "Topic should remain active while another instrument is subscribed, found: {subs:?}"
+    );
+
+    client.close().await.unwrap();
+}

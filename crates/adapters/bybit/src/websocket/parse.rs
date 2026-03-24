@@ -1147,7 +1147,7 @@ mod tests {
         let json = load_test_json("http_get_instruments_option.json");
         let response: BybitInstrumentOptionResponse = serde_json::from_str(&json).unwrap();
         let instrument = &response.result.list[0];
-        parse_option_instrument(instrument, TS, TS).unwrap()
+        parse_option_instrument(instrument, None, TS, TS).unwrap()
     }
 
     #[rstest]

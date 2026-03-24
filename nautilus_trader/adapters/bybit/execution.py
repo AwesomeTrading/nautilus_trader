@@ -662,6 +662,12 @@ class BybitExecutionClient(LiveExecutionClient):
             raw_symbol = nautilus_pyo3.bybit_extract_raw_symbol(symbol)
             product_type = nautilus_pyo3.bybit_product_type_from_symbol(symbol)
 
+            if product_type == BybitProductType.OPTION:
+                self._log.warning(
+                    f"Leverage not supported for options, skipping {symbol}",
+                )
+                return
+
             await self._http_client.set_leverage(
                 product_type=product_type,
                 symbol=raw_symbol,
@@ -697,6 +703,12 @@ class BybitExecutionClient(LiveExecutionClient):
         try:
             raw_symbol = nautilus_pyo3.bybit_extract_raw_symbol(symbol)
             product_type = nautilus_pyo3.bybit_product_type_from_symbol(symbol)
+
+            if product_type == BybitProductType.OPTION:
+                self._log.warning(
+                    f"Position mode not supported for options, skipping {symbol}",
+                )
+                return
 
             await self._http_client.switch_mode(
                 product_type=product_type,

@@ -74,6 +74,14 @@ pub fn extract_raw_symbol(symbol: &str) -> &str {
     symbol.rsplit_once('-').map_or(symbol, |(prefix, _)| prefix)
 }
 
+/// Extracts the base coin from a Bybit option symbol.
+///
+/// For example, `"BTC-27MAR26-70000-P"` returns `"BTC"`.
+#[must_use]
+pub fn extract_base_coin(symbol: &str) -> &str {
+    symbol.split_once('-').map_or(symbol, |(base, _)| base)
+}
+
 /// Constructs a full Bybit symbol from a raw symbol and product type.
 ///
 /// Returns a `Ustr` for efficient string interning and comparisons.
@@ -486,6 +494,7 @@ pub fn parse_inverse_instrument(
 /// Parses a Bybit option contract definition into a Nautilus [`CryptoOption`].
 pub fn parse_option_instrument(
     definition: &BybitInstrumentOption,
+    fee_rate: Option<&BybitFeeRate>,
     ts_event: UnixNanos,
     ts_init: UnixNanos,
 ) -> anyhow::Result<InstrumentAny> {
@@ -529,6 +538,22 @@ pub fn parse_option_instrument(
     let activation_ns = parse_millis_timestamp(&definition.launch_time, "launchTime")?;
     let expiration_ns = parse_millis_timestamp(&definition.delivery_time, "deliveryTime")?;
 
+    let (maker_fee, taker_fee) = match fee_rate {
+        Some(fee) => (
+            Some(
+                fee.maker_fee_rate
+                    .parse::<Decimal>()
+                    .unwrap_or(Decimal::ZERO),
+            ),
+            Some(
+                fee.taker_fee_rate
+                    .parse::<Decimal>()
+                    .unwrap_or(Decimal::ZERO),
+            ),
+        ),
+        None => (Some(Decimal::ZERO), Some(Decimal::ZERO)),
+    };
+
     let instrument = CryptoOption::new(
         instrument_id,
         raw_symbol,
@@ -552,10 +577,10 @@ pub fn parse_option_instrument(
         None,
         max_price,
         min_price,
-        Some(Decimal::ZERO),
-        Some(Decimal::ZERO),
-        Some(Decimal::ZERO),
-        Some(Decimal::ZERO),
+        None, // margin_init
+        None, // margin_maint
+        maker_fee,
+        taker_fee,
         None,
         ts_event,
         ts_init,
@@ -1420,7 +1445,7 @@ mod tests {
         let response: BybitInstrumentOptionResponse = serde_json::from_str(&json).unwrap();
         let instrument = &response.result.list[0];
 
-        let parsed = parse_option_instrument(instrument, TS, TS).unwrap();
+        let parsed = parse_option_instrument(instrument, None, TS, TS).unwrap();
         match parsed {
             InstrumentAny::CryptoOption(option) => {
                 assert_eq!(option.id.to_string(), "ETH-26JUN26-16000-P-OPTION.BYBIT");
@@ -1434,6 +1459,56 @@ mod tests {
                 assert_eq!(option.size_precision, 0);
                 assert_eq!(option.size_increment, Quantity::from_str("1").unwrap());
                 assert_eq!(option.lot_size, Quantity::from_str("1").unwrap());
+            }
+            other => panic!("unexpected instrument variant: {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_extract_base_coin_from_option_symbol() {
+        assert_eq!(extract_base_coin("BTC-27MAR26-70000-P"), "BTC");
+        assert_eq!(extract_base_coin("ETH-26JUN26-16000-C"), "ETH");
+        assert_eq!(extract_base_coin("SOL-30MAR26-200-P-USDT"), "SOL");
+        assert_eq!(extract_base_coin("BTC"), "BTC");
+    }
+
+    #[rstest]
+    fn test_extract_base_coin_from_nautilus_option_symbol() {
+        // After extract_raw_symbol strips the "-OPTION" suffix
+        let raw = extract_raw_symbol("BTC-27MAR26-70000-P-USDT-OPTION");
+        assert_eq!(extract_base_coin(raw), "BTC");
+    }
+
+    #[rstest]
+    fn parse_option_instrument_with_fee_rate() {
+        let json = load_test_json("http_get_instruments_option.json");
+        let response: BybitInstrumentOptionResponse = serde_json::from_str(&json).unwrap();
+        let instrument = &response.result.list[0];
+        let fee = sample_fee_rate("", "0.0006", "0.0001", Some("ETH"));
+
+        let parsed = parse_option_instrument(instrument, Some(&fee), TS, TS).unwrap();
+        match parsed {
+            InstrumentAny::CryptoOption(option) => {
+                assert_eq!(option.taker_fee, Decimal::new(6, 4));
+                assert_eq!(option.maker_fee, Decimal::new(1, 4));
+                assert_eq!(option.margin_init, Decimal::ZERO);
+                assert_eq!(option.margin_maint, Decimal::ZERO);
+            }
+            other => panic!("unexpected instrument variant: {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn parse_option_instrument_without_fee_rate_defaults_to_zero() {
+        let json = load_test_json("http_get_instruments_option.json");
+        let response: BybitInstrumentOptionResponse = serde_json::from_str(&json).unwrap();
+        let instrument = &response.result.list[0];
+
+        let parsed = parse_option_instrument(instrument, None, TS, TS).unwrap();
+        match parsed {
+            InstrumentAny::CryptoOption(option) => {
+                assert_eq!(option.taker_fee, Decimal::ZERO);
+                assert_eq!(option.maker_fee, Decimal::ZERO);
             }
             other => panic!("unexpected instrument variant: {other:?}"),
         }
