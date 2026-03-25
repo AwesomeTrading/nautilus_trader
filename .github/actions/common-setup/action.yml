@@ -79,9 +79,11 @@ runs:
         fi
 
     - name: Add swap space
-      if: inputs.build-type != 'pre-commit' && runner.os == 'Linux'
+      if: inputs.build-type != 'pre-commit' && runner.os == 'Linux' && inputs.free-disk-space == 'true'
       shell: bash
       run: |
+        sudo swapoff -a || true
+        sudo rm -f /swapfile || true
         sudo fallocate -l 8G /swapfile
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
