@@ -135,7 +135,7 @@ places (e.g. `0.00000001`).
 
 ## Actors
 
-An actor receives market data and system events but does not submit orders.
+An actor receives market data, custom data/signals, and system events but does not manage orders.
 Implement the `DataActor` trait and bind your struct to `DataActorCore` via
 `Deref`/`DerefMut`. Your struct must also implement `Debug` (required by the
 blanket `Component` impl). The core provides subscription methods, cache
@@ -167,7 +167,9 @@ override what you need.
 | `on_order_canceled`    | `OrderCanceled`           |
 | `on_time_event`        | `TimeEvent`               |
 
-For a working actor example, see
+For a step-by-step walkthrough, see the
+[Write a Rust actor](../how_to/write_rust_actor.md) how-to guide.
+For a complete example, see
 [`BookImbalanceActor`](https://github.com/nautechsystems/nautilus_trader/tree/develop/crates/trading/src/examples/actors/imbalance).
 
 ## Strategies
@@ -196,12 +198,17 @@ The `OrderFactory` (accessed via `self.core.order_factory()`) builds order
 objects: `market`, `limit`, `stop_market`, `stop_limit`,
 `market_if_touched`, `limit_if_touched`, and `trailing_stop_market`.
 
-For working strategy examples, see
+For a step-by-step walkthrough, see the
+[Write a Rust strategy](../how_to/write_rust_strategy.md) how-to guide.
+For complete examples, see
 [`EmaCross`](https://github.com/nautechsystems/nautilus_trader/tree/develop/crates/trading/src/examples/strategies/ema_cross)
 and
 [`GridMarketMaker`](https://github.com/nautechsystems/nautilus_trader/tree/develop/crates/trading/src/examples/strategies/grid_mm).
 
 ## Backtesting
+
+For annotated walkthroughs of both APIs, see the
+[Run a backtest in Rust](../how_to/run_rust_backtest.md) how-to guide.
 
 ### `BacktestEngine` (low-level API)
 
@@ -229,6 +236,9 @@ Source:
 [`crates/backtest/examples/node_ema_cross.rs`](https://github.com/nautechsystems/nautilus_trader/tree/develop/crates/backtest/examples/node_ema_cross.rs)
 
 ## Live trading
+
+For an annotated walkthrough, see the
+[Run live trading in Rust](../how_to/run_rust_live_trading.md) how-to guide.
 
 The `LiveNode` connects to real venues through adapter clients. The builder
 pattern configures data and execution clients, then `run()` starts the async
@@ -258,6 +268,10 @@ against live venues.
 
 ## Related guides
 
+- [Write a Rust actor](../how_to/write_rust_actor.md) - Step-by-step actor walkthrough.
+- [Write a Rust strategy](../how_to/write_rust_strategy.md) - Step-by-step strategy walkthrough.
+- [Run a backtest in Rust](../how_to/run_rust_backtest.md) - BacktestEngine and BacktestNode usage.
+- [Run live trading in Rust](../how_to/run_rust_live_trading.md) - LiveNode setup and venue connection.
 - [Architecture](architecture.md) - System design and data/execution flow.
 - [Actors](actors.md) - Actor concepts (applies to both Python and Rust).
 - [Strategies](strategies.md) - Strategy concepts and handler reference.
