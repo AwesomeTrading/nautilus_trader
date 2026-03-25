@@ -23,6 +23,34 @@ env:
     || 'block' }}
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      run-tests: ${{ steps.plan.outputs.run_tests }}
+    steps:
+      # https://github.com/step-security/harden-runner
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
+        with:
+          egress-policy: ${{ env.EGRESS_POLICY }}
+          allowed-endpoints: >-
+            ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
+            ${{ vars.CI_ALLOWED_ENDPOINTS }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Plan
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: bash scripts/ci/plan.sh
+
   pre-commit:
     runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
     steps:
@@ -50,7 +78,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           python-version: "3.13"
-          free-disk-space: ${{ github.event_name == 'pull_request' }}
+          free-disk-space: "true"
           build-type: "pre-commit"
 
       - name: Run pre-commit
@@ -116,7 +144,7 @@ jobs:
         run: cargo vet --locked
 
   build-linux-x86:
-    if: github.ref != 'refs/heads/test-pre-commit'
+    if: github.ref != 'refs/heads/test-pre-commit' && needs.plan.outputs.run-tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -132,6 +160,7 @@ jobs:
     name: build - python ${{ matrix.python-version }} (ubuntu-22.04)
     runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
     needs:
+      - plan
       - pre-commit
     env:
       BUILD_MODE: release
@@ -181,7 +210,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: ${{ github.event_name == 'pull_request' }}
+          free-disk-space: "true"
           rust-cache-key: build-linux-x86-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target/build-linux-x86-py${{ matrix.python-version }}
           rust-cache-save-if: ${{ github.event_name == 'push' }}
@@ -246,7 +275,9 @@ jobs:
     runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-arm-8' || 'ubuntu-22.04-arm' }}
     # Pause job on develop branch (takes ~1-1.5 hrs)
     # - test-pre-commit: only run linting jobs
+    # yamllint disable-line rule:line-length
     if: >
+      needs.plan.outputs.run-tests == 'true' &&
       !(
         (github.event_name == 'push' &&
           (github.ref_name == 'develop' || github.ref_name == 'test-pre-commit'))
@@ -254,6 +285,7 @@ jobs:
           github.base_ref == 'develop')
       )
     needs:
+      - plan
       - pre-commit
     env:
       BUILD_MODE: release
@@ -303,7 +335,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: ${{ github.event_name == 'pull_request' }}
+          free-disk-space: "true"
           rust-cache-key: build-linux-arm-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target/build-linux-arm-py${{ matrix.python-version }}
           rust-cache-save-if: ${{ github.event_name == 'push' }}
@@ -352,7 +384,7 @@ jobs:
         uses: ./.github/actions/upload-artifact-wheel
 
   build-macos:
-    if: github.ref != 'refs/heads/test-pre-commit'
+    if: github.ref != 'refs/heads/test-pre-commit' && needs.plan.outputs.run-tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -367,6 +399,7 @@ jobs:
     name: build - python ${{ matrix.python-version }} (macos)
     runs-on: ${{ github.event_name == 'push' && 'depot-macos-14' || 'macos-latest' }}
     needs:
+      - plan
       - pre-commit
     env:
       BUILD_MODE: release
@@ -502,7 +535,7 @@ jobs:
         uses: ./.github/actions/upload-artifact-wheel
 
   build-windows:
-    if: github.ref != 'refs/heads/test-pre-commit'
+    if: github.ref != 'refs/heads/test-pre-commit' && needs.plan.outputs.run-tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -517,6 +550,7 @@ jobs:
     name: build - python ${{ matrix.python-version }} (windows)
     runs-on: ${{ github.event_name == 'push' && 'depot-windows-2022-8' || 'windows-latest' }}
     needs:
+      - plan
       - pre-commit
     env:
       BUILD_MODE: release

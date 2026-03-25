@@ -20,6 +20,34 @@ env:
   PACKAGE_DIR: python
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      run-tests: ${{ steps.plan.outputs.run_tests }}
+    steps:
+      # https://github.com/step-security/harden-runner
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
+        with:
+          egress-policy: ${{ vars.STEP_SECURITY_EGRESS_POLICY || 'block' }}
+          allowed-endpoints: >-
+            ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
+            ${{ vars.CI_ALLOWED_ENDPOINTS }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Plan
+        id: plan
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: bash scripts/ci/plan.sh
+
   pre-commit:
     runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
     steps:
@@ -43,14 +71,16 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: "3.13"
-          free-disk-space: ${{ github.event_name == 'pull_request' }}
+          free-disk-space: "true"
           build-type: "pre-commit"
 
       - name: Run pre-commit
         run: pre-commit run --all-files
 
   rust-tests:
+    if: needs.plan.outputs.run-tests == 'true'
     needs:
+      - plan
       - pre-commit
     strategy:
       fail-fast: false
@@ -116,7 +146,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: ${{ github.event_name == 'pull_request' }}
+          free-disk-space: "true"
           rust-cache-key: build-v2-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
           rust-cache-on-failure: "false"
@@ -148,7 +178,9 @@ jobs:
         run: make cargo-test-adapters HYPERSYNC=true NEXTEST_PROFILE=ci
 
   build:
+    if: needs.plan.outputs.run-tests == 'true'
     needs:
+      - plan
       - rust-tests
     strategy:
       fail-fast: false
@@ -188,7 +220,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: ${{ github.event_name == 'pull_request' }}
+          free-disk-space: "true"
           rust-cache-key: build-v2-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
           rust-cache-on-failure: "false"
