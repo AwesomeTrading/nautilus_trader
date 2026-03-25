@@ -4,8 +4,8 @@
 import datetime
 import decimal
 import enum
-from enum import Enum
 import typing
+from enum import Enum
 
 from nautilus_trader import _libnautilus
 from nautilus_trader import core

@@ -26,14 +26,14 @@ This script can be used as:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from dataclasses import field
 import keyword
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tomllib
+from dataclasses import dataclass
+from dataclasses import field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 
@@ -353,8 +353,8 @@ def _resolve_signature_params(
 
     """
     params: list[tuple[str, str | None]] = []
-    for param in _split_signature_params(params_str):
-        param = param.strip()
+    for raw_param in _split_signature_params(params_str):
+        param = raw_param.strip()
         if not param or param == "*":
             continue
         if "=" not in param:

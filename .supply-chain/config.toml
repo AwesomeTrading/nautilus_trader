@@ -371,7 +371,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-arith]]
@@ -379,7 +379,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-arith]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-array]]
@@ -387,7 +387,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-array]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-buffer]]
@@ -395,7 +395,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-buffer]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-cast]]
@@ -403,7 +403,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-cast]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-csv]]
@@ -411,7 +411,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-csv]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-data]]
@@ -419,7 +419,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-data]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-ipc]]
@@ -427,7 +427,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-ipc]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-json]]
@@ -435,7 +435,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-json]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-ord]]
@@ -443,7 +443,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-ord]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-row]]
@@ -451,7 +451,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-row]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-schema]]
@@ -459,7 +459,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-schema]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-select]]
@@ -467,7 +467,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-select]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-string]]
@@ -475,7 +475,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.arrow-string]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.async-compression]]
@@ -1471,7 +1471,7 @@ version = "0.2.16"
 criteria = "safe-to-deploy"
 
 [[exemptions.libredox]]
-version = "0.1.14"
+version = "0.1.15"
 criteria = "safe-to-deploy"
 
 [[exemptions.libsqlite3-sys]]
@@ -1496,6 +1496,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.lz4_flex]]
 version = "0.12.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.lz4_flex]]
+version = "0.13.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.macro-string]]
@@ -1711,7 +1715,7 @@ version = "0.3.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.object_store]]
-version = "0.13.1"
+version = "0.13.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.once_cell]]
@@ -1759,7 +1763,7 @@ version = "57.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.parquet]]
-version = "58.0.0"
+version = "58.1.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.paste]]
@@ -1855,7 +1859,7 @@ version = "1.0.106"
 criteria = "safe-to-deploy"
 
 [[exemptions.proptest]]
-version = "1.10.0"
+version = "1.11.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.prost]]
@@ -1911,11 +1915,11 @@ version = "0.28.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.pyo3-stub-gen]]
-version = "0.19.0"
+version = "0.20.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.pyo3-stub-gen-derive]]
-version = "0.19.0"
+version = "0.20.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.quick-error]]
@@ -1923,7 +1927,7 @@ version = "1.2.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.quick-xml]]
-version = "0.38.4"
+version = "0.39.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.quinn]]
@@ -2560,6 +2564,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.unicode-properties]]
 version = "0.1.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.unicode-segmentation]]
+version = "1.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.unicode_names2]]

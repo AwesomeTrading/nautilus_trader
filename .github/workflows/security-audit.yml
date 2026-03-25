@@ -179,3 +179,4 @@ jobs:
             --config=osv-scanner.toml
             --lockfile=Cargo.lock
             --lockfile=uv.lock
+            --lockfile=python/uv.lock

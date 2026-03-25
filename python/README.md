@@ -2,10 +2,10 @@
 
 > [!WARNING]
 >
-> **Under active development and not yet considered usable.**
+> **Under active development and not yet usable.**
 
-This directory contains the `nautilus_trader` v2 Python package, built entirely with PyO3 bindings.
-This replaces the legacy Cython layer with Rust core bindings.
+This directory contains the `nautilus_trader` v2 Python package.
+v2 replaces the Cython layer with Rust core bindings exposed through PyO3.
 
 **Rules during the transition:**
 
@@ -38,8 +38,8 @@ python/
 
 > [!NOTE]
 > The v2 build uses `target-v2/` for Cargo artifacts to avoid conflicts with
-> the v1 build in `target/`. This separation is temporary until the full
-> transition to v2.
+> the v1 build in `target/`. This separation is temporary until the v2
+> transition completes.
 
 From the repository root:
 
@@ -65,7 +65,7 @@ uv run maturin develop --extras dev,test
 ```
 
 This compiles the Rust extension and installs it into the project venv (`python/.venv`).
-Run again after Rust changes to recompile.
+Run again after Rust changes.
 
 ## How it works
 
@@ -95,8 +95,7 @@ uv run maturin develop --extras dev,test
 
 ### Development wheels (pre-release)
 
-Every successful build from the `develop` or `nightly` branches publishes a wheel to the
-private v2 index.
+CI publishes a wheel to the private v2 index on every successful `develop` or `nightly` build.
 
 ```bash
 pip install --index-url https://packages.nautechsystems.io/v2/simple/ --pre nautilus-trader
@@ -119,8 +118,5 @@ Rust bindings:
 python generate_stubs.py
 ```
 
-This first runs `generate_docstrings.py` to copy doc comments from the underlying Rust source
-to PyO3 wrapper functions, then generates the `.pyi` stub files.
-
-> [!NOTE]
-> Stub generation is a work in progress and may not cover all exported types yet.
+This runs `generate_docstrings.py` first to copy doc comments from Rust source to PyO3
+wrappers. It then generates the `.pyi` stub files.

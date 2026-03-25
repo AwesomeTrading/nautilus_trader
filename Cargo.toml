@@ -107,6 +107,9 @@ nautilus-tardis = { path = "crates/adapters/tardis", version = "0.55.0", default
 
 # -----------------------------------------------------------------------------
 # Core dependencies
+#
+# - arrow, parquet major versions must stay in line with datafusion
+# - object_store must stay in line with datafusion (pre-1.0: minor bumps can break)
 # -----------------------------------------------------------------------------
 ahash = { version = "0.8.12", features = ["serde"] }
 alloy-primitives = { version = "1.5.7", default-features = false, features = [
@@ -115,13 +118,13 @@ alloy-primitives = { version = "1.5.7", default-features = false, features = [
 ] }
 anyhow = "1.0.102"
 arraydeque = "0.5.1"
-arrow = { version = "58.0.0", default-features = false, features = [
+arrow = { version = "58.1.0", default-features = false, features = [
   "csv",
   "json",
   "ipc",
   "ffi",
 ] }
-arrow-row = "58.0.0"
+arrow-row = "58.1.0"
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 aws-lc-rs = { version = "1.16.2", default-features = false, features = [
@@ -178,7 +181,7 @@ memchr = "2.8.0"
 object_store = { version = "0.13.1", default-features = false, features = [
   "fs",
 ] }
-parquet = { version = "58.0.0", default-features = false, features = [
+parquet = { version = "58.1.0", default-features = false, features = [
   "arrow",
   "async",
 ] }
@@ -197,7 +200,7 @@ pyo3-async-runtimes = { version = "0.28.0", default-features = false, features =
   "tokio",
   "tokio-runtime",
 ] }
-pyo3-stub-gen = { version = "0.19.0", default-features = false, features = [
+pyo3-stub-gen = { version = "0.20.0", default-features = false, features = [
   "rust_decimal",
 ] }
 rand = { version = "0.10.0", default-features = false, features = [
@@ -351,7 +354,7 @@ criterion = { version = "0.8.2", default-features = false, features = [
 ] }
 iai = "0.1.1"
 pretty_assertions = "1.4.1"
-proptest = { version = "1.10.0", default-features = false, features = ["std"] }
+proptest = { version = "1.11.0", default-features = false, features = ["std"] }
 rstest = "0.26.1"
 tempfile = "3.27.0"
 turmoil = "0.7.1"

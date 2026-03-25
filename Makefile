@@ -333,8 +333,8 @@ security-audit: check-audit-installed check-deny-installed check-vet-installed c
 	cargo vet --locked
 	@printf "\n$(CYAN)Running pip-audit (Python dependencies)...$(RESET)\n"
 	uv export --no-hashes --frozen | uv run --no-project --with pip-audit -- pip-audit --disable-pip --no-deps -r /dev/stdin
-	@printf "\n$(CYAN)Running osv-scanner (Cargo.lock + uv.lock)...$(RESET)\n"
-	osv-scanner --config=osv-scanner.toml --lockfile=Cargo.lock --lockfile=uv.lock
+	@printf "\n$(CYAN)Running osv-scanner (Cargo.lock + uv.lock + python/uv.lock)...$(RESET)\n"
+	osv-scanner --config=osv-scanner.toml --lockfile=Cargo.lock --lockfile=uv.lock --lockfile=python/uv.lock
 
 .PHONY: cargo-deny
 cargo-deny: check-deny-installed  #-- Run cargo-deny checks (advisories, sources, bans, licenses)
