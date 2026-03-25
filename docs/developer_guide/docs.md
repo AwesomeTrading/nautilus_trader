@@ -9,6 +9,43 @@ This guide outlines the style conventions and best practices for writing documen
 - We value standardization in conventions, style, patterns, etc.
 - Documentation should be accessible to users of varying technical backgrounds.
 
+## Documentation types
+
+Most pages should fit one of four types
+([Divio documentation system](https://docs.divio.com/documentation-system/)).
+Mixing types in a single page makes it harder to read and harder to maintain.
+
+| Type             | Purpose                          | Section          |
+|------------------|----------------------------------|------------------|
+| **Tutorial**     | Teach by walking through a task  | `tutorials/`     |
+| **How-to guide** | Solve a specific problem         | `how_to/`        |
+| **Explanation**  | Clarify design and architecture  | `concepts/`      |
+| **Reference**    | Describe the machinery           | `api_reference/` |
+
+Two sections are exceptions: `getting_started/` is an onboarding path that
+combines tutorial-style walkthroughs with setup instructions, and
+`integrations/` pages mix reference (capabilities, symbology) with how-to
+content (setup, configuration) so each venue page is self-contained.
+Standalone how-to content that is not venue-specific belongs in `how_to/`.
+
+### Choosing the right type
+
+- **Does your page walk a newcomer through a learning experience?** Tutorial.
+- **Does it answer "How do I...?" for someone who already knows the system?** How-to guide.
+- **Does it explain why something works the way it does?** Explanation.
+- **Does it list classes, config fields, enums, or capabilities?** Reference.
+
+A tutorial says "do this, then this, then this." The author picks the path.
+A how-to guide says "here is how to achieve X." The reader already knows
+they want X. Keep these distinct:
+
+- Tutorials should not assume prior knowledge.
+- How-to guides should not teach background concepts.
+
+When one type needs to reference another, link to it instead of inlining. For
+example, a how-to guide that configures `TradingNodeConfig` should link to the
+API reference for field definitions rather than listing them again.
+
 ## Language and tone
 
 - Use active voice when possible ("Configure the adapter" vs "The adapter should be configured").

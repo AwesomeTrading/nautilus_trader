@@ -284,6 +284,14 @@ max-complexity = 10
   "T20",
   "B018",
 ] # Jupytext tutorials: cell-split imports, asserts, print statements, bare expressions
+"docs/how_to/**/*.py" = [
+  "D",
+  "E402",
+  "I001",
+  "S101",
+  "T20",
+  "B018",
+] # Jupytext how-to guides: same exemptions as tutorials
 "examples/**/*.py" = [
   "DTZ",
   "S101",
@@ -317,7 +325,7 @@ warn_no_return = true
 warn_unused_configs = true
 warn_unused_ignores = true
 mypy_path = ["."]
-exclude = "(^python/examples/|^examples/|^docs/getting_started/|^docs/tutorials/)"
+exclude = "(^python/examples/|^examples/|^docs/getting_started/|^docs/tutorials/|^docs/how_to/)"
 
 [[tool.mypy.overrides]]
 strict_optional = false

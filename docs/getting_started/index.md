@@ -26,8 +26,11 @@ order book imbalance, grid market making) once the engine mechanics are clear.
 
 - **Backtesting** - learn the two API levels below, then work through the
   [tutorials](../tutorials/) for strategy pattern walkthroughs.
-- **Live trading** - see the [Live trading](../concepts/live.md) concept guide
+- **Live trading** - see the
+  [Configure a live trading node](../how_to/configure_live_trading.md) how-to
   and [Integrations](../integrations/) for supported venues.
+- **Data workflows** - see the [how-to guides](../how_to/) for loading
+  external data and setting up the Parquet data catalog.
 - **Building adapters** - see the [Developer guide](../developer_guide/).
 
 ## Backtesting API levels

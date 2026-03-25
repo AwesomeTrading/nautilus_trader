@@ -5,7 +5,7 @@
 # `BacktestNode`. This is a common workflow when you have historical data from an
 # external vendor that is not directly supported by a NautilusTrader adapter.
 #
-# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/loading_external_data.py).
+# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/how_to/loading_external_data.py).
 
 # %%
 import os

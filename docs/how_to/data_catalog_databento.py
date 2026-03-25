@@ -4,7 +4,7 @@
 # Set up a Nautilus Parquet data catalog with market data from Databento. The
 # catalog provides efficient storage and querying for backtests and research.
 #
-# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/tutorials/data_catalog_databento.py).
+# [View source on GitHub](https://github.com/nautechsystems/nautilus_trader/blob/develop/docs/how_to/data_catalog_databento.py).
 
 # %% [markdown]
 # ## Prerequisites

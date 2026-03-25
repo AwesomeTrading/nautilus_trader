@@ -191,6 +191,7 @@ Released on TBD (UTC).
 - Added end-to-end data flow and execution flow sequence diagrams to architecture concepts
 - Added Events concept guide with event catalog, handler dispatch, and fill-to-position chain
 - Added Rust concept guide with capability matrix, project setup, and feature flags
+- Added `how_to/configure_live_trading.md` extracted from `concepts/live.md` configuration content
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
@@ -202,6 +203,7 @@ Released on TBD (UTC).
 - Rewrote Custom Data architecture docs for two-mode (Rust/Python) registration
 - Improved Value Types concept guide with full arithmetic operator and unary operation docs
 - Improved accuracy of Greeks and Options concept guides, thanks @faysou
+- Improved `concepts/live.md` to focus on reconciliation explanation, linking to how-to for configuration
 - Updated all API reference links to Sphinx HTML paths
 - Migrated Python API reference from sphinx-markdown-builder to Sphinx HTML with Furo theme
 - Fixed actors timer example referencing nonexistent `on_timer` and `on_alert` hooks
