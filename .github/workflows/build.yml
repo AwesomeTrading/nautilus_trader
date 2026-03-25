@@ -201,8 +201,11 @@ jobs:
       - name: Set compile jobs from cache state
         run: bash scripts/ci/set-cargo-build-jobs.sh
 
-      - name: Run Rust tests
-        run: make cargo-test EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
+      - name: Run Rust tests (core)
+        run: make cargo-test-core EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
+
+      - name: Run Rust tests (adapters)
+        run: make cargo-test-adapters EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
       - name: Verify immutable CI inputs (pre-wheel build)
@@ -317,8 +320,14 @@ jobs:
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
-      - name: Run Rust tests
-        run: make cargo-test EXTRA_FEATURES="capnp" NEXTEST_PROFILE=ci
+      - name: Set compile jobs from cache state
+        run: bash scripts/ci/set-cargo-build-jobs.sh
+
+      - name: Run Rust tests (core)
+        run: make cargo-test-core EXTRA_FEATURES="capnp" NEXTEST_PROFILE=ci
+
+      - name: Run Rust tests (adapters)
+        run: make cargo-test-adapters EXTRA_FEATURES="capnp" NEXTEST_PROFILE=ci
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
       - name: Verify immutable CI inputs (pre-wheel build)
@@ -400,8 +409,11 @@ jobs:
       - name: Set compile jobs from cache state
         run: bash scripts/ci/set-cargo-build-jobs.sh
 
-      - name: Run Rust tests
-        run: make cargo-test EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
+      - name: Run Rust tests (core)
+        run: make cargo-test-core EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
+
+      - name: Run Rust tests (adapters)
+        run: make cargo-test-adapters EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
       - name: Verify immutable CI inputs (pre-wheel build)
@@ -616,6 +628,46 @@ jobs:
         run: |
           bash ./scripts/ci/publish-wheels-delete-artifacts.sh
 
+  security-gate-nightly:
+    name: security-gate-nightly
+    runs-on: ubuntu-latest
+    needs:
+      - build-linux-x86
+      - build-linux-arm
+      - build-macos
+      - build-windows
+    if: >
+      github.event_name == 'push' && github.ref == 'refs/heads/nightly'
+    steps:
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
+        with:
+          egress-policy: ${{ env.EGRESS_POLICY }}
+          allowed-endpoints: >-
+            ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
+            ${{ vars.SECURITY_AUDIT_ALLOWED_ENDPOINTS }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-audit
+        uses: ./.github/actions/cargo-tool-install
+        with:
+          tool-name: cargo-audit
+
+      - name: Run cargo-audit (fail on vulnerabilities)
+        run: cargo audit --deny unsound --deny yanked
+
+      - name: Run osv-scanner (fail on critical/high)
+        uses: google/osv-scanner-action/osv-scanner-action@c5996e0193a3df57d695c1b8a1dec2a4c62e8730 # v2.3.3
+        with:
+          scan-args: |
+            --config=osv-scanner.toml
+            --lockfile=Cargo.lock
+            --lockfile=uv.lock
+            --lockfile=python/uv.lock
+
   publish-wheels-nightly:
     name: publish-wheels-nightly
     runs-on: ubuntu-latest
@@ -626,10 +678,7 @@ jobs:
       id-token: write # Required for attestations
       attestations: write # Required for attestations
     needs:
-      - build-linux-x86
-      - build-linux-arm
-      - build-macos
-      - build-windows
+      - security-gate-nightly
     if: >
       github.event_name == 'push' && github.ref == 'refs/heads/nightly'
     env:

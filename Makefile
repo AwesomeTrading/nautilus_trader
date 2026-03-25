@@ -102,6 +102,12 @@ CORE_CRATES := nautilus-analysis nautilus-backtest nautilus-common nautilus-core
     nautilus-persistence nautilus-portfolio nautilus-risk nautilus-serialization \
     nautilus-system nautilus-testkit nautilus-trading
 
+# Adapter crates (crates/adapters/*)
+ADAPTER_CRATES := nautilus-architect-ax nautilus-betfair nautilus-binance \
+    nautilus-bitmex nautilus-blockchain nautilus-bybit nautilus-databento \
+    nautilus-deribit nautilus-dydx nautilus-hyperliquid nautilus-kraken \
+    nautilus-okx nautilus-polymarket nautilus-sandbox nautilus-tardis
+
 # > Colors
 # Use ANSI escape codes directly for cross-platform compatibility (Git Bash on Windows doesn't have tput)
 RED    := \033[0;31m
@@ -502,23 +508,41 @@ endif
 cargo-test-extras:  #-- Run all Rust tests with capnp and hypersync features (convenience shortcut)
 	$(MAKE) cargo-test EXTRA_FEATURES="capnp,hypersync"
 
+# Both core and adapter targets use identical --workspace --features flags so
+# cargo sees the same feature union and does not recompile between runs.
+# The -E filterset selects which tests to execute.
+CORE_FILTERSET := $(subst $(eval ) , + ,$(foreach crate,$(CORE_CRATES),package($(crate))))
+ADAPTER_FILTERSET := $(subst $(eval ) , + ,$(foreach crate,$(ADAPTER_CRATES),package($(crate))))
+
 .PHONY: cargo-test-core
 cargo-test-core: export RUST_BACKTRACE=1
 cargo-test-core: check-nextest-installed
 cargo-test-core:  #-- Run Rust tests for core crates only (excludes adapters)
 ifeq ($(VERBOSE),true)
 	$(info $(M) Running Rust tests for core crates...)
-	cargo nextest run $(foreach crate,$(CORE_CRATES),-p $(crate)) --features "$(CARGO_FEATURES)" $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --verbose
+	cargo nextest run --workspace --features "$(CARGO_FEATURES)" -E '$(CORE_FILTERSET)' $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --verbose
 else
 	$(info $(M) Running Rust tests for core crates (showing summary and failures only)...)
-	cargo nextest run $(foreach crate,$(CORE_CRATES),-p $(crate)) --features "$(CARGO_FEATURES)" $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --status-level fail --final-status-level flaky
+	cargo nextest run --workspace --features "$(CARGO_FEATURES)" -E '$(CORE_FILTERSET)' $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --status-level fail --final-status-level flaky
+endif
+
+.PHONY: cargo-test-adapters
+cargo-test-adapters: export RUST_BACKTRACE=1
+cargo-test-adapters: check-nextest-installed
+cargo-test-adapters:  #-- Run Rust tests for adapter crates only
+ifeq ($(VERBOSE),true)
+	$(info $(M) Running Rust tests for adapter crates...)
+	cargo nextest run --workspace --features "$(CARGO_FEATURES)" -E '$(ADAPTER_FILTERSET)' $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --verbose
+else
+	$(info $(M) Running Rust tests for adapter crates (showing summary and failures only)...)
+	cargo nextest run --workspace --features "$(CARGO_FEATURES)" -E '$(ADAPTER_FILTERSET)' $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --status-level fail --final-status-level flaky
 endif
 
 .PHONY: cargo-test-core-debug
 cargo-test-core-debug: export RUST_BACKTRACE=1
 cargo-test-core-debug: check-nextest-installed
 cargo-test-core-debug:  #-- Run Rust tests for core crates (debug profile)
-	cargo nextest run $(foreach crate,$(CORE_CRATES),-p $(crate)) --features "$(CARGO_FEATURES)" $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE)
+	cargo nextest run --workspace --features "$(CARGO_FEATURES)" -E '$(CORE_FILTERSET)' $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE)
 
 .PHONY: cargo-test-lib
 cargo-test-lib: export RUST_BACKTRACE=1
