@@ -397,7 +397,7 @@ jobs:
         shell: bash
     # Push events use Depot macOS runners for faster builds
     name: build - python ${{ matrix.python-version }} (macos)
-    runs-on: ${{ github.event_name == 'push' && 'depot-macos-14' || 'macos-latest' }}
+    runs-on: macos-latest
     needs:
       - plan
       - pre-commit
