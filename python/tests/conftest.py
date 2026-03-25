@@ -12,3 +12,47 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
+
+import pytest
+
+from nautilus_trader.model import AccountId
+from nautilus_trader.model import Currency
+from nautilus_trader.model import InstrumentId
+from nautilus_trader.model import StrategyId
+from nautilus_trader.model import TraderId
+from nautilus_trader.model import Venue
+
+
+@pytest.fixture
+def trader_id():
+    return TraderId("TRADER-001")
+
+
+@pytest.fixture
+def strategy_id():
+    return StrategyId("S-001")
+
+
+@pytest.fixture
+def account_id():
+    return AccountId("SIM-000")
+
+
+@pytest.fixture
+def venue():
+    return Venue("SIM")
+
+
+@pytest.fixture
+def usd():
+    return Currency.from_str("USD")
+
+
+@pytest.fixture
+def btc():
+    return Currency.from_str("BTC")
+
+
+@pytest.fixture
+def audusd_id():
+    return InstrumentId.from_str("AUD/USD.SIM")

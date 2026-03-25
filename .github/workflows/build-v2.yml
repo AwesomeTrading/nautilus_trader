@@ -211,6 +211,12 @@ jobs:
           pip install --upgrade maturin
           maturin build --release --out ../dist
 
+      - name: Run v2 Python tests
+        working-directory: ${{ env.PACKAGE_DIR }}
+        run: |
+          pip install ../dist/*.whl pytest
+          pytest tests/ -v
+
       # Temporary: show whether v2 stub or docstring generation dirtied tracked files while we isolate CI drift
       - name: Report generated v2 file drift
         if: always()

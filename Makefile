@@ -710,6 +710,13 @@ pytest-v2:  #-- Run v2 Python tests
 	$(info $(M) Running v2 Python tests...)
 	$Q cd python && uv run --no-sync pytest tests/ -v
 
+.PHONY: pre-flight-v2
+pre-flight-v2:  #-- Run v2 pre-flight checks (build, test)
+	$(info $(M) Running v2 pre-flight checks...)
+	@$(MAKE) --no-print-directory build-debug-v2
+	@$(MAKE) --no-print-directory pytest-v2
+	@printf "$(GREEN)All v2 pre-flight checks passed$(RESET)\n"
+
 #== CLI Tools
 
 .PHONY: install-cli
