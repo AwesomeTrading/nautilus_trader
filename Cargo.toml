@@ -395,7 +395,6 @@ strip = "debuginfo" # Improves compile times
 lto = false
 panic = "unwind"
 incremental = true
-codegen-units = 256
 
 [profile.debug-pyo3]
 inherits = "dev"
@@ -410,7 +409,6 @@ overflow-checks = true
 strip = false
 lto = false
 incremental = true
-codegen-units = 256
 
 [profile.nextest]
 inherits = "test"

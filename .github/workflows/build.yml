@@ -10,6 +10,10 @@ on:
   pull_request:
     branches: ['*']
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 env:
   # Fork PRs cannot access repo/org variables so allow lists are empty;
   # fall back to audit mode which logs calls without blocking them.
@@ -20,7 +24,7 @@ env:
 
 jobs:
   pre-commit:
-    runs-on: ubuntu-22.04 # (glibc 2.35) wider runtime range than 24.04/glibc 2.39
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-22.04-x64-8core' || 'ubuntu-22.04' }}
     steps:
       # https://github.com/step-security/harden-runner
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
@@ -46,7 +50,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           python-version: "3.13"
-          free-disk-space: "true"
+          free-disk-space: ${{ github.event_name == 'pull_request' }}
           build-type: "pre-commit"
 
       - name: Run pre-commit
@@ -116,8 +120,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-22.04 # (glibc 2.35) wider runtime range than 24.04/glibc 2.39
         python-version:
           - "3.12"
           - "3.13"
@@ -125,8 +127,10 @@ jobs:
     defaults:
       run:
         shell: bash
-    name: build - python ${{ matrix.python-version }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Ubuntu 22.04 (glibc 2.35) wider runtime range than 24.04/glibc 2.39
+    # Push events (develop/nightly/master) use 8-core runners for faster builds
+    name: build - python ${{ matrix.python-version }} (ubuntu-22.04)
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-22.04-x64-8core' || 'ubuntu-22.04' }}
     needs:
       - pre-commit
     env:
@@ -177,9 +181,10 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: "true"
+          free-disk-space: ${{ github.event_name == 'pull_request' }}
           rust-cache-key: build-linux-x86-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target/build-linux-x86-py${{ matrix.python-version }}
+          rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       - name: Install Nautilus CLI
         env:
@@ -229,8 +234,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-22.04-arm
         python-version:
           - "3.12"
           - "3.13"
@@ -238,8 +241,9 @@ jobs:
     defaults:
       run:
         shell: bash
-    name: build - python ${{ matrix.python-version }} (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    # Push events use 8-core runners for faster builds
+    name: build - python ${{ matrix.python-version }} (ubuntu-22.04-arm)
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-22.04-arm-8core' || 'ubuntu-22.04-arm' }}
     # Pause job on develop branch (takes ~1-1.5 hrs)
     # - test-pre-commit: only run linting jobs
     if: >
@@ -299,9 +303,10 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: "true"
+          free-disk-space: ${{ github.event_name == 'pull_request' }}
           rust-cache-key: build-linux-arm-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target/build-linux-arm-py${{ matrix.python-version }}
+          rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       - name: Install Nautilus CLI
         env:
@@ -402,6 +407,7 @@ jobs:
           rust-cache-key: build-macos-test-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target/build-macos-test-py${{ matrix.python-version }}
           rust-cache-on-failure: "false"
+          rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       - name: Cached test data
         uses: ./.github/actions/common-test-data
@@ -546,6 +552,7 @@ jobs:
           free-disk-space: "true"
           rust-cache-key: build-windows-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target/build-windows-py${{ matrix.python-version }}
+          rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
       - name: Verify immutable CI inputs (pre-wheel build)

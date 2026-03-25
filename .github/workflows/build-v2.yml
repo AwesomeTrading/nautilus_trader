@@ -21,7 +21,7 @@ env:
 
 jobs:
   pre-commit:
-    runs-on: ubuntu-22.04  # glibc 2.35 – larger runtime range
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-22.04-x64-8core' || 'ubuntu-22.04' }}
     steps:
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
         with:
@@ -43,7 +43,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: "3.13"
-          free-disk-space: "true"
+          free-disk-space: ${{ github.event_name == 'pull_request' }}
           build-type: "pre-commit"
 
       - name: Run pre-commit
@@ -55,12 +55,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04]
         python-version:
           - "3.12"
           - "3.13"
           - "3.14"
-    runs-on: ${{ matrix.os }}
+    # Push events (develop/nightly) use 8-core runners for faster builds
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-22.04-x64-8core' || 'ubuntu-22.04' }}
     defaults:
       run:
         shell: bash
@@ -116,7 +116,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: "true"
+          free-disk-space: ${{ github.event_name == 'pull_request' }}
           rust-cache-key: build-v2-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
           rust-cache-on-failure: "false"
@@ -153,12 +153,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04]
         python-version:
           - "3.12"
           - "3.13"
           - "3.14"
-    runs-on: ${{ matrix.os }}
+    # Push events (develop/nightly) use 8-core runners for faster builds
+    runs-on: ${{ github.event_name == 'push' && 'ubuntu-22.04-x64-8core' || 'ubuntu-22.04' }}
     defaults:
       run:
         shell: bash
@@ -188,7 +188,7 @@ jobs:
         uses: ./.github/actions/common-setup
         with:
           python-version: ${{ matrix.python-version }}
-          free-disk-space: "true"
+          free-disk-space: ${{ github.event_name == 'pull_request' }}
           rust-cache-key: build-v2-${{ matrix.python-version }}
           rust-cache-workspaces: . -> target-v2/py${{ matrix.python-version }}
           rust-cache-on-failure: "false"
@@ -214,7 +214,8 @@ jobs:
       - name: Run v2 Python tests
         working-directory: ${{ env.PACKAGE_DIR }}
         run: |
-          pip install ../dist/*.whl pytest
+          pip install ../dist/*.whl
+          uv pip install --system --group test
           pytest tests/ -v
 
       # Temporary: show whether v2 stub or docstring generation dirtied tracked files while we isolate CI drift
