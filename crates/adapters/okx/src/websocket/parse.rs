@@ -5800,6 +5800,181 @@ mod tests {
     }
 
     #[rstest]
+    fn test_quote_cache_complete_bbo_tbt_message() {
+        use nautilus_common::cache::quote::QuoteCache;
+
+        let mut cache = QuoteCache::new();
+        let instrument_id = InstrumentId::from("BTC-USD-260327-75000-C.OKX");
+        let msg = stub_book_msg(
+            vec![stub_book_entry("0.0035", "100")],
+            vec![stub_book_entry("0.0040", "200")],
+        );
+
+        let bid_price = Some(parse_price(&msg.bids[0].price, 4).unwrap());
+        let bid_size = Some(parse_quantity(&msg.bids[0].size, 0).unwrap());
+        let ask_price = Some(parse_price(&msg.asks[0].price, 4).unwrap());
+        let ask_size = Some(parse_quantity(&msg.asks[0].size, 0).unwrap());
+        let ts_event = parse_millisecond_timestamp(msg.ts);
+
+        let quote = cache
+            .process(
+                instrument_id,
+                bid_price,
+                ask_price,
+                bid_size,
+                ask_size,
+                ts_event,
+                UnixNanos::default(),
+            )
+            .unwrap();
+
+        assert_eq!(quote.bid_price, Price::from("0.0035"));
+        assert_eq!(quote.ask_price, Price::from("0.0040"));
+        assert_eq!(quote.bid_size, Quantity::from(100));
+        assert_eq!(quote.ask_size, Quantity::from(200));
+    }
+
+    #[rstest]
+    fn test_quote_cache_empty_bids_uses_cached_value() {
+        use nautilus_common::cache::quote::QuoteCache;
+
+        let mut cache = QuoteCache::new();
+        let instrument_id = InstrumentId::from("BTC-USD-260327-80000-C.OKX");
+
+        cache
+            .process(
+                instrument_id,
+                Some(Price::from("0.0010")),
+                Some(Price::from("0.0015")),
+                Some(Quantity::from(50)),
+                Some(Quantity::from(75)),
+                UnixNanos::default(),
+                UnixNanos::default(),
+            )
+            .unwrap();
+
+        let msg = stub_book_msg(vec![], vec![stub_book_entry("0.0020", "100")]);
+        let ask_price = Some(parse_price(&msg.asks[0].price, 4).unwrap());
+        let ask_size = Some(parse_quantity(&msg.asks[0].size, 0).unwrap());
+        let ts_event = parse_millisecond_timestamp(msg.ts);
+
+        let quote = cache
+            .process(
+                instrument_id,
+                None,
+                ask_price,
+                None,
+                ask_size,
+                ts_event,
+                UnixNanos::default(),
+            )
+            .unwrap();
+
+        assert_eq!(quote.bid_price, Price::from("0.0010"));
+        assert_eq!(quote.bid_size, Quantity::from(50));
+        assert_eq!(quote.ask_price, Price::from("0.0020"));
+        assert_eq!(quote.ask_size, Quantity::from(100));
+    }
+
+    #[rstest]
+    fn test_quote_cache_empty_asks_uses_cached_value() {
+        use nautilus_common::cache::quote::QuoteCache;
+
+        let mut cache = QuoteCache::new();
+        let instrument_id = InstrumentId::from("BTC-USD-260327-79000-P.OKX");
+
+        cache
+            .process(
+                instrument_id,
+                Some(Price::from("0.0010")),
+                Some(Price::from("0.0015")),
+                Some(Quantity::from(50)),
+                Some(Quantity::from(75)),
+                UnixNanos::default(),
+                UnixNanos::default(),
+            )
+            .unwrap();
+
+        let msg = stub_book_msg(vec![stub_book_entry("0.0012", "60")], vec![]);
+        let bid_price = Some(parse_price(&msg.bids[0].price, 4).unwrap());
+        let bid_size = Some(parse_quantity(&msg.bids[0].size, 0).unwrap());
+        let ts_event = parse_millisecond_timestamp(msg.ts);
+
+        let quote = cache
+            .process(
+                instrument_id,
+                bid_price,
+                None,
+                bid_size,
+                None,
+                ts_event,
+                UnixNanos::default(),
+            )
+            .unwrap();
+
+        assert_eq!(quote.bid_price, Price::from("0.0012"));
+        assert_eq!(quote.bid_size, Quantity::from(60));
+        assert_eq!(quote.ask_price, Price::from("0.0015"));
+        assert_eq!(quote.ask_size, Quantity::from(75));
+    }
+
+    #[rstest]
+    fn test_quote_cache_both_sides_empty_no_cache_returns_error() {
+        use nautilus_common::cache::quote::QuoteCache;
+
+        let mut cache = QuoteCache::new();
+        let instrument_id = InstrumentId::from("BTC-USD-260327-80000-C.OKX");
+
+        let result = cache.process(
+            instrument_id,
+            None,
+            None,
+            None,
+            None,
+            UnixNanos::default(),
+            UnixNanos::default(),
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn test_quote_cache_both_sides_empty_with_cache_returns_cached() {
+        use nautilus_common::cache::quote::QuoteCache;
+
+        let mut cache = QuoteCache::new();
+        let instrument_id = InstrumentId::from("BTC-USD-260327-80000-C.OKX");
+
+        cache
+            .process(
+                instrument_id,
+                Some(Price::from("0.0010")),
+                Some(Price::from("0.0015")),
+                Some(Quantity::from(50)),
+                Some(Quantity::from(75)),
+                UnixNanos::default(),
+                UnixNanos::default(),
+            )
+            .unwrap();
+
+        let quote = cache
+            .process(
+                instrument_id,
+                None,
+                None,
+                None,
+                None,
+                UnixNanos::from(1706000000000000000u64),
+                UnixNanos::from(1706000000000000000u64),
+            )
+            .unwrap();
+
+        assert_eq!(quote.bid_price, Price::from("0.0010"));
+        assert_eq!(quote.ask_price, Price::from("0.0015"));
+        assert_eq!(quote.ts_event, UnixNanos::from(1706000000000000000u64));
+    }
+
+    #[rstest]
     fn test_parse_instruments_channel_produces_status() {
         use nautilus_model::{enums::MarketStatusAction, identifiers::InstrumentId};
 
@@ -6080,5 +6255,144 @@ mod tests {
             parse_option_summary_greeks(&msgs[1], &instrument_id, ts_init).expect("parse failed");
 
         assert!((greeks.greeks.delta - (-0.4688)).abs() < 1e-10);
+    }
+
+    #[rstest]
+    fn test_option_greeks_filtering_only_subscribed_instruments() {
+        use ahash::AHashSet;
+
+        let json_str = load_test_json("ws_opt_summary.json");
+        let msgs: Vec<OKXOptionSummaryMsg> =
+            serde_json::from_str(&json_str).expect("Failed to deserialize");
+
+        let call_id = InstrumentId::from("BTC-USD-250328-92000-C.OKX");
+        let put_id = InstrumentId::from("BTC-USD-250328-92000-P.OKX");
+        let ts_init = UnixNanos::from(1_711_612_900_000_000_000u64);
+
+        // Subscribe to CALL only
+        let mut subs = AHashSet::new();
+        subs.insert(call_id);
+
+        let mut results = Vec::new();
+        for msg in &msgs {
+            let inst_id_str = format!("{}.OKX", msg.inst_id);
+            let instrument_id = InstrumentId::from(inst_id_str.as_str());
+            if !subs.contains(&instrument_id) {
+                continue;
+            }
+
+            if let Ok(greeks) = parse_option_summary_greeks(msg, &instrument_id, ts_init) {
+                results.push(greeks);
+            }
+        }
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].instrument_id, call_id);
+        assert!((results[0].greeks.delta - 0.5312).abs() < 1e-10);
+
+        // Now subscribe to both
+        subs.insert(put_id);
+
+        let mut results = Vec::new();
+        for msg in &msgs {
+            let inst_id_str = format!("{}.OKX", msg.inst_id);
+            let instrument_id = InstrumentId::from(inst_id_str.as_str());
+            if !subs.contains(&instrument_id) {
+                continue;
+            }
+
+            if let Ok(greeks) = parse_option_summary_greeks(msg, &instrument_id, ts_init) {
+                results.push(greeks);
+            }
+        }
+
+        assert_eq!(results.len(), 2);
+    }
+
+    #[rstest]
+    fn test_option_greeks_unsubscribed_instrument_filtered_out() {
+        use ahash::AHashSet;
+
+        let json_str = load_test_json("ws_opt_summary.json");
+        let msgs: Vec<OKXOptionSummaryMsg> =
+            serde_json::from_str(&json_str).expect("Failed to deserialize");
+
+        let ts_init = UnixNanos::default();
+
+        // Empty subscription set
+        let subs: AHashSet<InstrumentId> = AHashSet::new();
+
+        let mut results = Vec::new();
+        for msg in &msgs {
+            let inst_id_str = format!("{}.OKX", msg.inst_id);
+            let instrument_id = InstrumentId::from(inst_id_str.as_str());
+            if !subs.contains(&instrument_id) {
+                continue;
+            }
+
+            if let Ok(greeks) = parse_option_summary_greeks(msg, &instrument_id, ts_init) {
+                results.push(greeks);
+            }
+        }
+
+        assert!(results.is_empty());
+    }
+
+    #[rstest]
+    fn test_option_greeks_family_dedup_subscribe_count() {
+        use crate::common::parse::extract_inst_family;
+
+        let mut family_subs: AHashMap<Ustr, usize> = AHashMap::new();
+
+        let call_id = InstrumentId::from("BTC-USD-250328-92000-C.OKX");
+        let put_id = InstrumentId::from("BTC-USD-250328-92000-P.OKX");
+        let other_id = InstrumentId::from("BTC-USD-250328-80000-C.OKX");
+
+        // Subscribe first instrument: count goes to 1 (triggers WS subscribe)
+        let family = extract_inst_family(call_id.symbol.inner().as_str()).unwrap();
+        let count = family_subs.entry(family).or_default();
+        *count += 1;
+        assert_eq!(*count, 1);
+        let should_subscribe_ws = *count == 1;
+        assert!(should_subscribe_ws);
+
+        // Subscribe second instrument in same family: count goes to 2 (no WS subscribe)
+        let family = extract_inst_family(put_id.symbol.inner().as_str()).unwrap();
+        let count = family_subs.entry(family).or_default();
+        *count += 1;
+        assert_eq!(*count, 2);
+        let should_subscribe_ws = *count == 1;
+        assert!(!should_subscribe_ws);
+
+        // Subscribe third instrument in same family: count goes to 3
+        let family = extract_inst_family(other_id.symbol.inner().as_str()).unwrap();
+        let count = family_subs.entry(family).or_default();
+        *count += 1;
+        assert_eq!(*count, 3);
+
+        // Unsubscribe one: count goes to 2 (no WS unsubscribe)
+        let family = extract_inst_family(call_id.symbol.inner().as_str()).unwrap();
+        if let Some(count) = family_subs.get_mut(&family) {
+            *count = count.saturating_sub(1);
+            assert_eq!(*count, 2);
+            let should_unsubscribe_ws = *count == 0;
+            assert!(!should_unsubscribe_ws);
+        }
+
+        // Unsubscribe second: count goes to 1
+        let family = extract_inst_family(put_id.symbol.inner().as_str()).unwrap();
+        if let Some(count) = family_subs.get_mut(&family) {
+            *count = count.saturating_sub(1);
+            assert_eq!(*count, 1);
+        }
+
+        // Unsubscribe last: count goes to 0 (triggers WS unsubscribe)
+        let family = extract_inst_family(other_id.symbol.inner().as_str()).unwrap();
+        if let Some(count) = family_subs.get_mut(&family) {
+            *count = count.saturating_sub(1);
+            assert_eq!(*count, 0);
+            let should_unsubscribe_ws = *count == 0;
+            assert!(should_unsubscribe_ws);
+        }
     }
 }

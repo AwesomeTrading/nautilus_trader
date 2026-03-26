@@ -112,6 +112,7 @@ Released on TBD (UTC).
 - Fixed Bybit bulk order status reports silently missing conditional (stop/MIT) orders
 - Fixed Bybit account state free balance underflowing when locked margin exceeds wallet total during liquidation
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
+- Fixed OKX BboTbt quote parsing spamming errors on empty bid/ask arrays for illiquid options by adding `QuoteCache` for partial quote merging
 - Fixed OKX `_subscribe_instrument_status` raising `NotImplementedError` instead of being a no-op (status detected via polling)
 - Fixed OKX `batch_cancel_all_orders` and `batch_cancel_orders` not emitting `OrderCancelRejected` events for regular (non-algo) batch cancel failures
 - Fixed OKX `batch_submit_orders` not removing `order_identities` from dispatch state on batch submit failure
@@ -150,6 +151,7 @@ Released on TBD (UTC).
 - Added `WebSocketClient.notify_closed()` for stream-mode callers to signal reader EOF to the controller
 - Added `LiveNode` stop-handle timeout test for shutdown reliability
 - Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
+- Added OKX `QuoteCache` integration and option greeks subscription lifecycle tests
 - Added OKX reconciliation pagination cap warnings when fetches hit the maximum page limit
 - Added OKX trade-level fill dedup via `emitted_trades` DashSet with atomic insert for cross-stream safety
 - Added OKX `AlgoCancelContext` and `dispatch_algo_cancels` to centralize algo cancel partitioning and rejection handling

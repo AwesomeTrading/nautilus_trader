@@ -24,6 +24,7 @@ use ahash::{AHashMap, AHashSet};
 use anyhow::Context;
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::{
+    cache::quote::QuoteCache,
     clients::DataClient,
     live::{runner::get_data_event_sender, runtime::get_runtime},
     messages::{
@@ -65,6 +66,7 @@ use crate::{
         parse::{
             extract_inst_family, okx_instrument_type_from_symbol, okx_status_to_market_action,
             parse_base_quote_from_symbol, parse_instrument_any, parse_instrument_id,
+            parse_millisecond_timestamp, parse_price, parse_quantity,
         },
     },
     config::OKXDataClientConfig,
@@ -72,7 +74,7 @@ use crate::{
     websocket::{
         client::OKXWebSocketClient,
         enums::OKXWsChannel,
-        messages::{NautilusWsMessage, OKXOptionSummaryMsg, OKXWsMessage},
+        messages::{NautilusWsMessage, OKXBookMsg, OKXOptionSummaryMsg, OKXWsMessage},
         parse::{
             extract_fees_from_cached_instrument, parse_book_msg_vec, parse_index_price_msg_vec,
             parse_option_summary_greeks, parse_ws_message_data,
@@ -232,6 +234,7 @@ impl OKXDataClient {
         data_sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
         instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
         instruments_by_symbol: &mut AHashMap<Ustr, InstrumentAny>,
+        quote_cache: &mut QuoteCache,
         funding_cache: &mut AHashMap<Ustr, (Ustr, u64)>,
         index_ticker_map: &Arc<RwLock<AHashMap<Ustr, AHashSet<Ustr>>>>,
         option_greeks_subs: &Arc<RwLock<AHashSet<InstrumentId>>>,
@@ -359,6 +362,48 @@ impl OKXDataClient {
                 let price_precision = instrument.price_precision();
                 let size_precision = instrument.size_precision();
                 let ts_init = clock.get_time_ns();
+
+                if matches!(channel, OKXWsChannel::BboTbt) {
+                    let msgs: Vec<OKXBookMsg> = match serde_json::from_value(data) {
+                        Ok(m) => m,
+                        Err(e) => {
+                            log::error!("Failed to deserialize BboTbt data: {e}");
+                            return;
+                        }
+                    };
+
+                    for msg in &msgs {
+                        let bid = msg.bids.first();
+                        let ask = msg.asks.first();
+                        let bid_price =
+                            bid.and_then(|e| parse_price(&e.price, price_precision).ok());
+                        let bid_size =
+                            bid.and_then(|e| parse_quantity(&e.size, size_precision).ok());
+                        let ask_price =
+                            ask.and_then(|e| parse_price(&e.price, price_precision).ok());
+                        let ask_size =
+                            ask.and_then(|e| parse_quantity(&e.size, size_precision).ok());
+                        let ts_event = parse_millisecond_timestamp(msg.ts);
+
+                        match quote_cache.process(
+                            instrument_id,
+                            bid_price,
+                            ask_price,
+                            bid_size,
+                            ask_size,
+                            ts_event,
+                            ts_init,
+                        ) {
+                            Ok(quote) => Self::send_data(data_sender, Data::Quote(quote)),
+                            Err(e) => {
+                                log::debug!("Skipping partial BboTbt for {instrument_id}: {e}");
+                            }
+                        }
+                    }
+
+                    return;
+                }
+
                 match parse_ws_message_data(
                     &channel,
                     data,
@@ -733,6 +778,7 @@ impl DataClient for OKXDataClient {
                         .map(|i| (i.symbol().inner(), i.clone()))
                         .collect()
                 };
+                let mut quote_cache = QuoteCache::new();
                 let mut funding_cache: AHashMap<Ustr, (Ustr, u64)> = AHashMap::new();
                 pin_mut!(stream);
                 loop {
@@ -743,6 +789,7 @@ impl DataClient for OKXDataClient {
                                 &sender,
                                 &insts,
                                 &mut instruments_by_symbol,
+                                &mut quote_cache,
                                 &mut funding_cache,
                                 &idx_map,
                                 &greeks_subs,
@@ -800,6 +847,7 @@ impl DataClient for OKXDataClient {
                         .map(|i| (i.symbol().inner(), i.clone()))
                         .collect()
                 };
+                let mut quote_cache = QuoteCache::new();
                 let mut funding_cache: AHashMap<Ustr, (Ustr, u64)> = AHashMap::new();
                 pin_mut!(stream);
                 loop {
@@ -810,6 +858,7 @@ impl DataClient for OKXDataClient {
                                 &sender,
                                 &insts,
                                 &mut instruments_by_symbol,
+                                &mut quote_cache,
                                 &mut funding_cache,
                                 &idx_map,
                                 &greeks_subs,

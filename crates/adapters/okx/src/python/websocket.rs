@@ -45,9 +45,9 @@ use std::str::FromStr;
 
 use ahash::{AHashMap, AHashSet};
 use futures_util::StreamExt;
-use nautilus_common::live::get_runtime;
+use nautilus_common::{cache::quote::QuoteCache, live::get_runtime};
 use nautilus_core::{
-    UUID4,
+    UUID4, UnixNanos,
     python::{call_python_threadsafe, to_pyruntime_err, to_pyvalue_err},
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -73,7 +73,7 @@ use crate::{
         models::OKXInstrument,
         parse::{
             okx_status_to_market_action, parse_account_state, parse_instrument_any,
-            parse_position_status_report,
+            parse_millisecond_timestamp, parse_position_status_report, parse_price, parse_quantity,
         },
     },
     http::models::{OKXAccount, OKXPosition},
@@ -326,6 +326,7 @@ impl OKXWebSocketClient {
             get_runtime().spawn(async move {
                 let account_id = client.account_id;
                 let mut instruments_by_symbol = client.instruments_snapshot();
+                let mut quote_cache = QuoteCache::new();
                 let mut funding_cache: AHashMap<Ustr, (Ustr, u64)> = AHashMap::new();
                 let mut fee_cache: AHashMap<Ustr, Money> = AHashMap::new();
                 let mut filled_qty_cache: AHashMap<Ustr, Quantity> = AHashMap::new();
@@ -357,6 +358,7 @@ impl OKXWebSocketClient {
                                 inst_id,
                                 data,
                                 &mut instruments_by_symbol,
+                                &mut quote_cache,
                                 &mut funding_cache,
                                 &greeks_guard,
                                 clock,
@@ -449,7 +451,10 @@ impl OKXWebSocketClient {
                         OKXWsMessage::Error(msg) => {
                             call_python_with_data(&call_soon, &callback, |py| msg.into_py_any(py));
                         }
-                        OKXWsMessage::Reconnected | OKXWsMessage::Authenticated => {}
+                        OKXWsMessage::Reconnected => {
+                            quote_cache.clear();
+                        }
+                        OKXWsMessage::Authenticated => {}
                     }
                 }
             });
@@ -1444,6 +1449,7 @@ fn handle_channel_data(
     inst_id: Option<Ustr>,
     data: serde_json::Value,
     instruments_by_symbol: &mut AHashMap<Ustr, InstrumentAny>,
+    quote_cache: &mut QuoteCache,
     funding_cache: &mut AHashMap<Ustr, (Ustr, u64)>,
     option_greeks_subs: &AHashSet<InstrumentId>,
     clock: &AtomicTime,
@@ -1523,6 +1529,20 @@ fn handle_channel_data(
     let size_precision = instrument.size_precision();
     let ts_init = clock.get_time_ns();
 
+    if matches!(channel, OKXWsChannel::BboTbt) {
+        handle_bbo_tbt(
+            data,
+            instrument_id,
+            price_precision,
+            size_precision,
+            ts_init,
+            quote_cache,
+            call_soon,
+            callback,
+        );
+        return;
+    }
+
     match parse_ws_message_data(
         channel,
         data,
@@ -1539,6 +1559,57 @@ fn handle_channel_data(
         Ok(None) => {}
         Err(e) => {
             log::error!("Failed to parse {channel:?} data: {e}");
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn handle_bbo_tbt(
+    data: serde_json::Value,
+    instrument_id: InstrumentId,
+    price_precision: u8,
+    size_precision: u8,
+    ts_init: UnixNanos,
+    quote_cache: &mut QuoteCache,
+    call_soon: &Py<PyAny>,
+    callback: &Py<PyAny>,
+) {
+    let msgs: Vec<OKXBookMsg> = match serde_json::from_value(data) {
+        Ok(msgs) => msgs,
+        Err(e) => {
+            log::error!("Failed to deserialize BboTbt data: {e}");
+            return;
+        }
+    };
+
+    for msg in &msgs {
+        let bid = msg.bids.first();
+        let ask = msg.asks.first();
+
+        let bid_price = bid.and_then(|e| parse_price(&e.price, price_precision).ok());
+        let bid_size = bid.and_then(|e| parse_quantity(&e.size, size_precision).ok());
+        let ask_price = ask.and_then(|e| parse_price(&e.price, price_precision).ok());
+        let ask_size = ask.and_then(|e| parse_quantity(&e.size, size_precision).ok());
+        let ts_event = parse_millisecond_timestamp(msg.ts);
+
+        match quote_cache.process(
+            instrument_id,
+            bid_price,
+            ask_price,
+            bid_size,
+            ask_size,
+            ts_event,
+            ts_init,
+        ) {
+            Ok(quote) => {
+                Python::attach(|py| {
+                    let py_obj = data_to_pycapsule(py, Data::Quote(quote));
+                    call_python_threadsafe(py, call_soon, callback, py_obj);
+                });
+            }
+            Err(e) => {
+                log::debug!("Skipping partial BboTbt for {instrument_id}: {e}");
+            }
         }
     }
 }
