@@ -29,29 +29,15 @@ and won't need to work directly with these lower-level components.
 
 You can find live example scripts [here](https://github.com/nautechsystems/nautilus_trader/tree/develop/examples/live/hyperliquid/).
 
-## Revoking builder code approval
+## Builder attribution
 
-Previous versions of NautilusTrader required users to approve a builder code fee before trading.
-**This is no longer required.** If you previously approved the builder fee and wish to revoke it,
-you can run the revoke script.
+Orders submitted through the adapter include a NautilusTrader builder address with a zero fee
+rate. This is for attribution only and does not charge any additional fees. No builder code
+approval is required.
 
-The script reads your private key from environment variables (`HYPERLIQUID_PK` or `HYPERLIQUID_TESTNET_PK`).
-
-```bash
-python nautilus_trader/adapters/hyperliquid/scripts/builder_fee_revoke.py
-```
-
-Testnet:
-
-```bash
-HYPERLIQUID_TESTNET=true python nautilus_trader/adapters/hyperliquid/scripts/builder_fee_revoke.py
-```
-
-Alternatively, from Rust:
-
-```bash
-cargo run --bin hyperliquid-builder-fee-revoke
-```
+When trading via a vault (`vault_address` configured), the builder address is omitted from
+orders. Hyperliquid does not allow vaults to approve builder fees, so including the builder
+address would cause the exchange to reject the order.
 
 ## Testnet setup
 

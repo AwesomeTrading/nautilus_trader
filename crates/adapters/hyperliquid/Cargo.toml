@@ -61,7 +61,6 @@ anyhow = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-ctrlc = { workspace = true }
 dashmap = { workspace = true }
 derive_builder = { workspace = true }
 futures-util = { workspace = true }
@@ -124,11 +123,6 @@ doc = false
 [[bin]]
 name = "hyperliquid-capture-test-data"
 path = "bin/capture_test_data.rs"
-doc = false
-
-[[bin]]
-name = "hyperliquid-builder-fee-revoke"
-path = "bin/builder_fee_revoke.rs"
 doc = false
 
 # Run with `cargo run --example hyperliquid-data-tester --package nautilus-hyperliquid`.

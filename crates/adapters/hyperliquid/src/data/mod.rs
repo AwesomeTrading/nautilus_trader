@@ -268,7 +268,7 @@ impl HyperliquidDataClient {
                             }
                         } else {
                             // Connection closed or error
-                            log::warn!("WebSocket next_event returned None, connection may be closed");
+                            log::debug!("WebSocket next_event returned None, stream closed");
                             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                         }
                     }

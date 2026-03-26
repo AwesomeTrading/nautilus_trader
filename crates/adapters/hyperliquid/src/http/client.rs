@@ -269,6 +269,12 @@ impl HyperliquidRawHttpClient {
             .address()
     }
 
+    /// Returns `true` if a vault address is configured.
+    #[must_use]
+    pub fn has_vault_address(&self) -> bool {
+        self.vault_address.is_some()
+    }
+
     /// Gets the account address for queries: vault address if configured,
     /// otherwise the user (EOA) address.
     ///
@@ -994,6 +1000,12 @@ impl HyperliquidHttpClient {
     /// Returns [`Error::Auth`] if the client has no signer configured.
     pub fn get_user_address(&self) -> Result<String> {
         self.inner.get_user_address()
+    }
+
+    /// Returns `true` if a vault address is configured.
+    #[must_use]
+    pub fn has_vault_address(&self) -> bool {
+        self.inner.has_vault_address()
     }
 
     /// Gets the account address for queries: account_address if configured
@@ -2134,13 +2146,19 @@ impl HyperliquidHttpClient {
             cloid: Some(Cloid::from_client_order_id(client_order_id)),
         };
 
+        let builder = if self.has_vault_address() {
+            None
+        } else {
+            Some(HyperliquidExecBuilderFee {
+                address: NAUTILUS_BUILDER_ADDRESS.to_string(),
+                fee_tenths_bp: 0,
+            })
+        };
+
         let action = HyperliquidExecAction::Order {
             orders: vec![hyperliquid_order],
             grouping: HyperliquidExecGrouping::Na,
-            builder: Some(HyperliquidExecBuilderFee {
-                address: NAUTILUS_BUILDER_ADDRESS.to_string(),
-                fee_tenths_bp: 0,
-            }),
+            builder,
         };
 
         let response = self.inner.post_action_exec(&action).await?;
@@ -2334,13 +2352,19 @@ impl HyperliquidHttpClient {
             hyperliquid_orders.push(request);
         }
 
+        let builder = if self.has_vault_address() {
+            None
+        } else {
+            Some(HyperliquidExecBuilderFee {
+                address: NAUTILUS_BUILDER_ADDRESS.to_string(),
+                fee_tenths_bp: 0,
+            })
+        };
+
         let action = HyperliquidExecAction::Order {
             orders: hyperliquid_orders,
             grouping: HyperliquidExecGrouping::Na,
-            builder: Some(HyperliquidExecBuilderFee {
-                address: NAUTILUS_BUILDER_ADDRESS.to_string(),
-                fee_tenths_bp: 0,
-            }),
+            builder,
         };
 
         // Submit to exchange using the typed exec endpoint

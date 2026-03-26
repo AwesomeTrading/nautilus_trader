@@ -13,7 +13,6 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-pub mod builder_fee;
 pub mod consts;
 pub mod converters;
 pub mod credential;

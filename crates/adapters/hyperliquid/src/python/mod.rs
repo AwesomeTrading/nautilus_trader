@@ -36,7 +36,6 @@ use nautilus_system::{
 use pyo3::prelude::*;
 
 use crate::{
-    common::builder_fee::revoke_from_env,
     config::{HyperliquidDataClientConfig, HyperliquidExecClientConfig},
     factories::{
         HyperliquidDataClientFactory, HyperliquidExecFactoryConfig,
@@ -44,22 +43,6 @@ use crate::{
     },
     http::models::Cloid,
 };
-
-#[pyfunction]
-#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.adapters.hyperliquid")]
-#[pyo3(name = "revoke_hyperliquid_builder_fee", signature = (non_interactive = false))]
-fn py_revoke_hyperliquid_builder_fee(non_interactive: bool) -> PyResult<bool> {
-    std::thread::spawn(move || {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| to_pyruntime_err(format!("Failed to create runtime: {e}")))?;
-
-        Ok(runtime.block_on(revoke_from_env(non_interactive)))
-    })
-    .join()
-    .map_err(|_| to_pyruntime_err("Thread panicked"))?
-}
 
 /// Compute the cloid (hex hash) from a client_order_id.
 ///
@@ -161,7 +144,6 @@ pub fn hyperliquid(m: &Bound<'_, PyModule>) -> PyResult<()> {
         py_hyperliquid_cloid_from_client_order_id,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(py_revoke_hyperliquid_builder_fee, m)?)?;
     m.add_class::<HyperliquidDataClientConfig>()?;
     m.add_class::<HyperliquidExecClientConfig>()?;
     m.add_class::<HyperliquidExecFactoryConfig>()?;

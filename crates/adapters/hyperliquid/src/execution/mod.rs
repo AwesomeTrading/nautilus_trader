@@ -523,14 +523,22 @@ impl ExecutionClient for HyperliquidExecutionClient {
         let ws_client = self.ws_client.clone();
         let cloid_hex = Ustr::from(&cloid.to_hex());
 
+        // Vaults cannot approve builder fees, so skip builder attribution
+        // for vault orders to avoid "Builder fee has not been approved" rejection
+        let builder = if self.http_client.has_vault_address() {
+            None
+        } else {
+            Some(HyperliquidExecBuilderFee {
+                address: NAUTILUS_BUILDER_ADDRESS.to_string(),
+                fee_tenths_bp: 0,
+            })
+        };
+
         self.spawn_task("submit_order", async move {
             let action = HyperliquidExecAction::Order {
                 orders: vec![hyperliquid_order],
                 grouping: HyperliquidExecGrouping::Na,
-                builder: Some(HyperliquidExecBuilderFee {
-                    address: NAUTILUS_BUILDER_ADDRESS.to_string(),
-                    fee_tenths_bp: 0,
-                }),
+                builder,
             };
 
             match http_client.post_action_exec(&action).await {
@@ -630,14 +638,20 @@ impl ExecutionClient for HyperliquidExecutionClient {
             .map(|o| Ustr::from(&Cloid::from_client_order_id(o.client_order_id()).to_hex()))
             .collect();
 
+        let builder = if self.http_client.has_vault_address() {
+            None
+        } else {
+            Some(HyperliquidExecBuilderFee {
+                address: NAUTILUS_BUILDER_ADDRESS.to_string(),
+                fee_tenths_bp: 0,
+            })
+        };
+
         self.spawn_task("submit_order_list", async move {
             let action = HyperliquidExecAction::Order {
                 orders: hyperliquid_orders,
                 grouping: HyperliquidExecGrouping::Na,
-                builder: Some(HyperliquidExecBuilderFee {
-                    address: NAUTILUS_BUILDER_ADDRESS.to_string(),
-                    fee_tenths_bp: 0,
-                }),
+                builder,
             };
             match http_client.post_action_exec(&action).await {
                 Ok(response) => {
@@ -1398,7 +1412,7 @@ impl HyperliquidExecutionClient {
                         }
                     }
                     None => {
-                        log::warn!("WebSocket next_event returned None");
+                        log::debug!("WebSocket next_event returned None, stream closed");
                         break;
                     }
                 }
