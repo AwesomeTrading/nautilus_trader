@@ -383,7 +383,13 @@ jobs:
         uses: ./.github/actions/upload-artifact-wheel
 
   build-macos:
-    if: github.ref != 'refs/heads/test-pre-commit' && needs.plan.outputs.run-tests == 'true'
+    # macOS builds run on nightly/master pushes only (too slow for develop/PR).
+    # Develop-branch macOS coverage runs via nightly-tests.yml on a daily schedule.
+    if: >
+      needs.plan.outputs.run-tests == 'true' &&
+      github.event_name == 'push' &&
+      github.ref != 'refs/heads/develop' &&
+      github.ref != 'refs/heads/test-pre-commit'
     strategy:
       fail-fast: false
       matrix:
@@ -618,9 +624,9 @@ jobs:
       attestations: write # Required for attestations
     needs:
       - build-linux-x86
-      - build-macos
       - build-windows
       # - build-linux-arm # Keep for nightly only (slow build)
+      # - build-macos # macOS builds moved to nightly only
     if: >
       github.event_name == 'push' && github.ref == 'refs/heads/develop'
     env:
@@ -699,14 +705,22 @@ jobs:
       - name: Run cargo-audit (fail on vulnerabilities)
         run: cargo audit --deny unsound --deny yanked
 
-      - name: Run osv-scanner (fail on critical/high)
+      - name: Run osv-scanner
+        id: osv-scan
+        continue-on-error: true
         uses: google/osv-scanner-action/osv-scanner-action@c5996e0193a3df57d695c1b8a1dec2a4c62e8730 # v2.3.3
         with:
           scan-args: |
             --config=osv-scanner.toml
+            --format json
+            --output=${{ github.workspace }}/osv-results.json
             --lockfile=Cargo.lock
             --lockfile=uv.lock
             --lockfile=python/uv.lock
+
+      - name: Check OSV severity (fail on critical/high only)
+        if: steps.osv-scan.outcome == 'failure'
+        run: bash scripts/ci/osv-severity-gate.sh osv-results.json
 
   publish-wheels-nightly:
     name: publish-wheels-nightly

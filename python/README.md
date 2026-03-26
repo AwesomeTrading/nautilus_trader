@@ -104,7 +104,7 @@ pip install --index-url https://packages.nautechsystems.io/v2/simple/ --pre naut
 | Platform         | Python  | Develop | Nightly |
 | :--------------- | :------ | :------ | :------ |
 | `Linux (x86_64)` | 3.12-14 | ✓       | ✓       |
-| `macOS (ARM64)`  | 3.12-14 | ✓       | ✓       |
+| `macOS (ARM64)`  | 3.12-14 | -       | ✓       |
 
 The `--pre` flag is required because wheels are tagged as development releases.
 
