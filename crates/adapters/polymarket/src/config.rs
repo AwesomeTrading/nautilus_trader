@@ -46,7 +46,12 @@ pub struct PolymarketDataClientConfig {
     pub ws_max_subscriptions: usize,
     /// Instrument reload interval in minutes.
     pub update_instruments_interval_mins: Option<u64>,
+    /// Whether to subscribe to new market discovery events via WebSocket.
+    pub subscribe_new_markets: bool,
+    /// Instrument filters applied to all instruments during loading and discovery.
     pub filters: Vec<Arc<dyn InstrumentFilter>>,
+    /// Optional filter applied to newly discovered markets before instrument emission.
+    pub new_market_filter: Option<Arc<dyn InstrumentFilter>>,
 }
 
 impl Clone for PolymarketDataClientConfig {
@@ -60,7 +65,9 @@ impl Clone for PolymarketDataClientConfig {
             ws_timeout_secs: self.ws_timeout_secs,
             ws_max_subscriptions: self.ws_max_subscriptions,
             update_instruments_interval_mins: self.update_instruments_interval_mins,
+            subscribe_new_markets: self.subscribe_new_markets,
             filters: self.filters.clone(),
+            new_market_filter: self.new_market_filter.clone(),
         }
     }
 }
@@ -79,7 +86,9 @@ impl Debug for PolymarketDataClientConfig {
                 "update_instruments_interval_mins",
                 &self.update_instruments_interval_mins,
             )
+            .field("subscribe_new_markets", &self.subscribe_new_markets)
             .field("filters", &self.filters)
+            .field("new_market_filter", &self.new_market_filter)
             .finish()
     }
 }
@@ -95,7 +104,9 @@ impl Default for PolymarketDataClientConfig {
             ws_timeout_secs: Some(30),
             ws_max_subscriptions: crate::common::consts::WS_DEFAULT_SUBSCRIPTIONS,
             update_instruments_interval_mins: Some(60),
+            subscribe_new_markets: false,
             filters: Vec::new(),
+            new_market_filter: None,
         }
     }
 }

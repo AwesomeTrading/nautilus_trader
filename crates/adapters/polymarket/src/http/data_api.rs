@@ -108,8 +108,10 @@ impl PolymarketDataApiHttpClient {
 
     /// Fetches trades and converts them to [`TradeTick`] for the given instrument.
     ///
-    /// Filters by `token_id` (since the API returns trades for all outcomes
-    /// of the condition) and returns results in chronological order.
+    /// Automatically paginates through all available results (up to `limit`
+    /// if specified, with a safety cap of 100 pages). Filters by `token_id`
+    /// (since the API returns trades for all outcomes of the condition) and
+    /// returns results in chronological order.
     pub async fn request_trade_ticks(
         &self,
         instrument_id: InstrumentId,
@@ -119,12 +121,46 @@ impl PolymarketDataApiHttpClient {
         size_precision: u8,
         limit: Option<u32>,
     ) -> anyhow::Result<Vec<TradeTick>> {
-        let trades = self
-            .get_trades(condition_id, limit, None)
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+        const PAGE_SIZE: u32 = 500;
+        // Polymarket Data API rejects offsets >= 3000
+        const MAX_OFFSET: u32 = 3000;
 
-        let mut ticks: Vec<TradeTick> = trades
+        let page_size = limit.map_or(PAGE_SIZE, |l| l.min(PAGE_SIZE));
+        let mut all_trades: Vec<DataApiTrade> = Vec::new();
+        let mut offset: u32 = 0;
+
+        loop {
+            let page = self
+                .get_trades(condition_id, Some(page_size), Some(offset))
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?;
+
+            let count = page.len() as u32;
+            all_trades.extend(page);
+
+            // Partial page means no more data available
+            if count < page_size {
+                break;
+            }
+            // If we've collected enough for the caller's target, stop
+            if let Some(target) = limit
+                && all_trades.len() as u32 >= target
+            {
+                break;
+            }
+            offset += count;
+            // API hard limit on offset
+            if offset >= MAX_OFFSET {
+                break;
+            }
+        }
+
+        // Apply final truncation to honour the caller's limit
+        if let Some(target) = limit {
+            all_trades.truncate(target as usize);
+        }
+
+        let mut ticks: Vec<TradeTick> = all_trades
             .into_iter()
             .filter(|t| t.asset == token_id)
             .map(|t| {
