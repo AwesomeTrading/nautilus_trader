@@ -9,7 +9,7 @@ CI/CD, testing, publishing, and automation within the NautilusTrader repository.
 ## Composite actions (`.github/actions`)
 
 - **cargo-tool-install**: installs cargo tools (cargo-deny, cargo-vet) with caching.
-- **common-setup**: prepares the environment (OS packages, Rust toolchain, Python, sccache, pre-commit).
+- **common-setup**: prepares the environment (OS packages, Rust toolchain, Rust cache, Python, pre-commit, swap space).
 - **common-test-data**: caches large test data under `tests/test_data/large`.
 - **common-wheel-build**: builds and installs Python wheels across Linux, macOS, and Windows for multiple Python versions.
 - **install-capnp**: installs the Cap'n Proto compiler with caching across Linux, macOS, and Windows.
@@ -18,8 +18,8 @@ CI/CD, testing, publishing, and automation within the NautilusTrader repository.
 
 ## Workflows (`.github/workflows`)
 
-- **build.yml**: main CI pipeline - pre-commit, cargo-deny, Rust tests, Python tests, wheel builds, and artifact uploads.
-- **build-v2.yml**: CI pipeline for the v2 Rust-native system.
+- **build.yml**: main CI pipeline - plan, pre-commit, cargo-deny, Rust tests, Python tests, wheel builds, and artifact uploads. Uses Depot 8-core runners for Linux and Windows builds. Includes a plan step that skips builds on docs-only changes and skips Rust tests on Python-only changes.
+- **build-v2.yml**: CI pipeline for the v2 Rust-native system. Uses Depot 8-core runners for Linux builds.
 - **build-docs.yml**: dispatches documentation build on `master` and `nightly` pushes.
 - **cli-binaries.yml**: builds and publishes CLI binaries for multiple platforms.
 - **codeql-analysis.yml**: CodeQL security scans for Python and Rust on PRs and via cron.
@@ -53,7 +53,9 @@ CI/CD, testing, publishing, and automation within the NautilusTrader repository.
 - **Build attestations**: All published artifacts include cryptographic SLSA build provenance attestations, linking each artifact to a specific commit SHA. Verify via `gh attestation verify`.
 - **Immutable action pinning**: All third-party GitHub Actions are pinned to specific commit SHAs.
 - **Docker image pinning**: Base images in Dockerfiles and service containers in workflows are pinned to SHA256 digests to prevent supply-chain attacks via tag mutation.
-- **Caching**: Caches for sccache, pip/site-packages, pre-commit, and test data speed up workflows while preserving hermetic (reproducible) builds.
+- **Caching**: Rust target directory cache (`Swatinem/rust-cache`), pip/site-packages, pre-commit, and test data caches speed up workflows while preserving hermetic (reproducible) builds. Rust cache saves are restricted to push events to prevent PR cache pollution.
+- **Concurrency**: PR CI runs are cancelled when a new push arrives to the same PR. Push events to mainline branches are never cancelled.
+- **Runners**: Linux and Windows builds use Depot 8-core runners (32 GB RAM, 150 GB SSD). macOS builds use GitHub free runners. Lightweight jobs (plan, cargo-deny, cargo-vet, publish) use GitHub free runners. Custom runner labels are declared in `.github/actionlint.yaml`.
 
 ### Runtime hardening
 

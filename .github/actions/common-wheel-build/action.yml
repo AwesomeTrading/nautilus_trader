@@ -28,7 +28,7 @@ runs:
     - name: Generate updated lock file
       if: inputs.github_ref != 'refs/heads/master'
       shell: bash
-      run: uv lock --no-upgrade
+      run: bash scripts/ci/retry-on-corruption.sh uv lock --no-upgrade
 
     - name: Build Python wheel (Linux x86_64)
       if: runner.os == 'Linux' && runner.arch != 'ARM64' && runner.arch != 'aarch64'
@@ -102,4 +102,4 @@ runs:
       shell: bash
       run: |
         bash scripts/ci/retry-on-corruption.sh uv sync --all-groups --all-extras --no-install-package nautilus_trader
-        uv pip install dist/*.whl
+        bash scripts/ci/retry-on-corruption.sh uv pip install dist/*.whl

@@ -8,7 +8,7 @@ set -uo pipefail
 #
 # Usage: retry-on-corruption.sh <command> [args...]
 
-MAX_RETRIES=2
+MAX_RETRIES=3
 
 CORRUPTION_PATTERNS=(
   "cannot contain null bytes"

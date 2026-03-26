@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run-tests: ${{ steps.plan.outputs.run_tests }}
+      run-rust-tests: ${{ steps.plan.outputs.run_rust_tests }}
     steps:
       # https://github.com/step-security/harden-runner
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
@@ -52,7 +53,7 @@ jobs:
         run: bash scripts/ci/plan.sh
 
   pre-commit:
-    runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
+    runs-on: depot-ubuntu-22.04-8
     steps:
       # https://github.com/step-security/harden-runner
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
@@ -158,7 +159,7 @@ jobs:
     # Ubuntu 22.04 (glibc 2.35) wider runtime range than 24.04/glibc 2.39
     # Push events (develop/nightly/master) use 8-core runners for faster builds
     name: build - python ${{ matrix.python-version }} (ubuntu-22.04)
-    runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
+    runs-on: depot-ubuntu-22.04-8
     needs:
       - plan
       - pre-commit
@@ -232,13 +233,12 @@ jobs:
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
-      - name: Set compile jobs from cache state
-        run: bash scripts/ci/set-cargo-build-jobs.sh
-
       - name: Run Rust tests (core)
+        if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-core EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
       - name: Run Rust tests (adapters)
+        if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-adapters EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
@@ -272,7 +272,7 @@ jobs:
         shell: bash
     # Push events use 8-core runners for faster builds
     name: build - python ${{ matrix.python-version }} (ubuntu-22.04-arm)
-    runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-arm-8' || 'ubuntu-22.04-arm' }}
+    runs-on: depot-ubuntu-22.04-arm-8
     # Pause job on develop branch (takes ~1-1.5 hrs)
     # - test-pre-commit: only run linting jobs
     # yamllint disable-line rule:line-length
@@ -357,13 +357,12 @@ jobs:
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
-      - name: Set compile jobs from cache state
-        run: bash scripts/ci/set-cargo-build-jobs.sh
-
       - name: Run Rust tests (core)
+        if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-core EXTRA_FEATURES="capnp" NEXTEST_PROFILE=ci
 
       - name: Run Rust tests (adapters)
+        if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-adapters EXTRA_FEATURES="capnp" NEXTEST_PROFILE=ci
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
@@ -448,9 +447,11 @@ jobs:
         run: bash scripts/ci/set-cargo-build-jobs.sh
 
       - name: Run Rust tests (core)
+        if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-core EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
       - name: Run Rust tests (adapters)
+        if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-adapters EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
@@ -548,7 +549,7 @@ jobs:
         shell: bash
     # Push events use Depot Windows runners for faster builds
     name: build - python ${{ matrix.python-version }} (windows)
-    runs-on: ${{ github.event_name == 'push' && 'depot-windows-2022-8' || 'windows-latest' }}
+    runs-on: depot-windows-2022-8
     needs:
       - plan
       - pre-commit

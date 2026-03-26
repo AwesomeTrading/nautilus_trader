@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run-tests: ${{ steps.plan.outputs.run_tests }}
+      run-rust-tests: ${{ steps.plan.outputs.run_rust_tests }}
     steps:
       # https://github.com/step-security/harden-runner
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
@@ -49,7 +50,7 @@ jobs:
         run: bash scripts/ci/plan.sh
 
   pre-commit:
-    runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
+    runs-on: depot-ubuntu-22.04-8
     steps:
       - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
         with:
@@ -78,7 +79,7 @@ jobs:
         run: pre-commit run --all-files
 
   rust-tests:
-    if: needs.plan.outputs.run-tests == 'true'
+    if: needs.plan.outputs.run-rust-tests == 'true'
     needs:
       - plan
       - pre-commit
@@ -90,7 +91,7 @@ jobs:
           - "3.13"
           - "3.14"
     # Push events (develop/nightly) use 8-core runners for faster builds
-    runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
+    runs-on: depot-ubuntu-22.04-8
     defaults:
       run:
         shell: bash
@@ -168,9 +169,6 @@ jobs:
       - name: Cached test data
         uses: ./.github/actions/common-test-data
 
-      - name: Set compile jobs from cache state
-        run: bash scripts/ci/set-cargo-build-jobs.sh
-
       - name: Run Rust tests (core)
         run: make cargo-test-core HYPERSYNC=true NEXTEST_PROFILE=ci
 
@@ -178,9 +176,14 @@ jobs:
         run: make cargo-test-adapters HYPERSYNC=true NEXTEST_PROFILE=ci
 
   build:
-    if: needs.plan.outputs.run-tests == 'true'
+    if: >
+      always() &&
+      needs.plan.outputs.run-tests == 'true' &&
+      needs.pre-commit.result == 'success' &&
+      (needs.rust-tests.result == 'success' || needs.rust-tests.result == 'skipped')
     needs:
       - plan
+      - pre-commit
       - rust-tests
     strategy:
       fail-fast: false
@@ -190,7 +193,7 @@ jobs:
           - "3.13"
           - "3.14"
     # Push events (develop/nightly) use 8-core runners for faster builds
-    runs-on: ${{ github.event_name == 'push' && 'depot-ubuntu-22.04-8' || 'ubuntu-22.04' }}
+    runs-on: depot-ubuntu-22.04-8
     defaults:
       run:
         shell: bash
