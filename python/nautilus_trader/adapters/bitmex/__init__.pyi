@@ -7,6 +7,8 @@ import typing
 from nautilus_trader import model
 
 __all__ = [
+    "BITMEX_HTTP_URL",
+    "BITMEX_WS_URL",
     "BitmexDataClientConfig",
     "BitmexDataClientFactory",
     "BitmexExecClientConfig",
@@ -21,6 +23,9 @@ __all__ = [
     "get_bitmex_http_base_url",
     "get_bitmex_ws_url",
 ]
+
+BITMEX_HTTP_URL: str
+BITMEX_WS_URL: str
 
 @typing.final
 class BitmexDataClientConfig:
@@ -372,9 +377,9 @@ class BitmexPositionSide(enum.Enum):
 
 @typing.final
 class BitmexSymbolStatus(enum.Enum):
-    Open = ...
-    Closed = ...
-    Unlisted = ...
+    OPEN = ...
+    CLOSED = ...
+    UNLISTED = ...
 
     def __init__(self, value: typing.Any) -> None: ...
     def __hash__(self) -> int: ...

@@ -370,6 +370,7 @@ impl OKXHttpClient {
         })
     }
 
+    /// Requests an order book snapshot as `OrderBookDeltas` for the `instrument_id`.
     #[pyo3(name = "request_orderbook_snapshot")]
     #[pyo3(signature = (instrument_id, depth=None))]
     fn py_request_orderbook_snapshot<'py>(
@@ -390,6 +391,7 @@ impl OKXHttpClient {
         })
     }
 
+    /// Requests historical funding rates for the `instrument_id`.
     #[pyo3(name = "request_funding_rates")]
     #[pyo3(signature = (instrument_id, start=None, end=None, limit=None))]
     fn py_request_funding_rates<'py>(

@@ -224,7 +224,7 @@ class BacktestEngine:
         queue_position: bool = False,
         allow_cash_borrowing: bool = False,
         frozen_account: bool = False,
-        oto_trigger_mode: model.OtoTriggerMode = model.OtoTriggerMode.Partial,
+        oto_trigger_mode: model.OtoTriggerMode = model.OtoTriggerMode.PARTIAL,
         price_protection_points: int | None = None,
     ) -> None: ...
     def change_fill_model(self, venue: model.Venue, fill_model: typing.Any) -> None: ...

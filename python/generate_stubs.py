@@ -52,6 +52,53 @@ STUB_HEADER = """\
 """
 
 
+def to_screaming_snake_case(name: str) -> str:
+    """
+    Convert a PascalCase or camelCase name to SCREAMING_SNAKE_CASE.
+
+    Uses the same word-splitting algorithm as the ``heck`` crate (which PyO3
+    uses for ``rename_all``). Digits are treated as lowercase, so ``Level1``
+    becomes ``LEVEL1`` (no underscore before the digit).
+
+    """
+    if not name:
+        return name
+
+    words: list[str] = []
+    current: list[str] = []
+
+    for i, ch in enumerate(name):
+        if ch == "_":
+            if current:
+                words.append("".join(current))
+                current = []
+            continue
+
+        if ch.isupper() and current:
+            prev = name[i - 1]
+
+            if (
+                prev.islower()
+                or prev.isdigit()
+                or (
+                    prev.isupper()
+                    and i + 1 < len(name)
+                    and (name[i + 1].islower() or name[i + 1].isdigit())
+                )
+            ):
+                words.append("".join(current))
+                current = [ch]
+            else:
+                current.append(ch)
+        else:
+            current.append(ch)
+
+    if current:
+        words.append("".join(current))
+
+    return "_".join(word.upper() for word in words)
+
+
 @dataclass(frozen=True)
 class StubFixup:
     """
@@ -202,10 +249,12 @@ def generate_stubs() -> bool:
         return False
 
     # Post-process all stub files
+    workspace_root = Path(__file__).parent.parent
     root = dest_dir / "nautilus_trader"
     if root.exists():
         post_process_stubs(root)
         relocate_classes_from_libnautilus(root)
+        inject_module_constants(root, workspace_root)
         format_stub_files(root)
 
     relative_root = dest_dir.relative_to(Path(__file__).parent)
@@ -235,7 +284,9 @@ def generate_stubs() -> bool:
 
 def post_process_stubs(root: Path) -> None:
     """Post-process all stub files: fix headers, rename methods, fix return types."""
-    rust_fixups = collect_rust_class_fixups(Path(__file__).parent.parent)
+    workspace_root = Path(__file__).parent.parent
+    rust_fixups = collect_rust_class_fixups(workspace_root)
+    renamed_enums = collect_renamed_enums(workspace_root)
 
     for stub_file in root.rglob("*.pyi"):
         content = stub_file.read_text()
@@ -243,6 +294,9 @@ def post_process_stubs(root: Path) -> None:
 
         # Ensure proper header with D401 ignore
         content = fix_stub_header(content)
+
+        # Rename enum variants to match PyO3 rename_all = "SCREAMING_SNAKE_CASE"
+        content = rename_enum_variants(content, renamed_enums)
 
         # Rename methods (py_new -> __init__, etc.)
         content = rename_methods(content)
@@ -267,6 +321,9 @@ def post_process_stubs(root: Path) -> None:
 
         # Restore actual default values from #[pyo3(signature)] attributes
         content = apply_signature_defaults(content, rust_fixups)
+
+        # Fix enum variant names in default values (signature defaults use Rust names)
+        content = fix_enum_defaults_in_signatures(content, renamed_enums)
 
         # Import model symbols used without a module qualifier
         content = add_missing_model_imports(content)
@@ -477,6 +534,111 @@ def collect_rust_class_fixups(workspace_root: Path) -> dict[str, ClassMethodFixu
     return fixups
 
 
+PYCLASS_RENAME_ALL_RE = re.compile(r'pyclass\b.*rename_all\s*=\s*"SCREAMING_SNAKE_CASE"')
+RUST_ENUM_DECL_RE = re.compile(r"^\s*(?:pub\s+)?enum\s+([A-Za-z_][A-Za-z0-9_]*)\b")
+
+
+def collect_renamed_enums(workspace_root: Path) -> set[str]:
+    """
+    Collect enum names whose pyclass attribute includes ``rename_all =
+    "SCREAMING_SNAKE_CASE"``.
+    """
+    renamed: set[str] = set()
+
+    for rust_file in sorted(workspace_root.glob("crates/**/src/**/*.rs")):
+        source = rust_file.read_text()
+        lines = source.splitlines()
+        pending_attrs: list[str] = []
+        i = 0
+
+        while i < len(lines):
+            stripped = lines[i].strip()
+
+            if not stripped:
+                pending_attrs.clear()
+                i += 1
+                continue
+
+            if stripped.startswith(("///", "//!")):
+                i += 1
+                continue
+
+            if stripped.startswith("#["):
+                attribute, i = consume_rust_attribute(lines, i)
+                pending_attrs.append(attribute)
+                continue
+
+            enum_match = RUST_ENUM_DECL_RE.match(lines[i])
+            if enum_match is not None:
+                for attr in pending_attrs:
+                    if PYCLASS_RENAME_ALL_RE.search(attr):
+                        renamed.add(enum_match.group(1))
+                        break
+
+            pending_attrs.clear()
+            i += 1
+
+    return renamed
+
+
+def rename_enum_variants(content: str, renamed_enums: set[str]) -> str:
+    """
+    Rename enum variants from PascalCase to SCREAMING_SNAKE_CASE for enums whose pyclass
+    has ``rename_all = "SCREAMING_SNAKE_CASE"``.
+    """
+    if not renamed_enums:
+        return content
+
+    lines = content.split("\n")
+    result: list[str] = []
+    in_renamed_enum = False
+
+    for line in lines:
+        class_match = re.match(r"^class\s+(\w+)\s*\(", line)
+        if class_match:
+            class_name = class_match.group(1)
+            in_renamed_enum = (
+                class_name in renamed_enums
+                and re.search(r"\(\s*(?:enum\.)?Enum\s*\)", line) is not None
+            )
+
+        if in_renamed_enum:
+            variant_match = re.match(r"^(\s+)([A-Za-z_]\w*)(\s*=\s*\.\.\.\s*)$", line)
+            if variant_match:
+                indent = variant_match.group(1)
+                name = variant_match.group(2)
+                rest = variant_match.group(3)
+                new_name = to_screaming_snake_case(name)
+                line = f"{indent}{new_name}{rest}"  # noqa: PLW2901
+
+        result.append(line)
+
+    return "\n".join(result)
+
+
+def fix_enum_defaults_in_signatures(content: str, renamed_enums: set[str]) -> str:
+    """
+    Fix enum variant references in default values injected by
+    ``apply_signature_defaults``.
+
+    The defaults come from Rust source and use PascalCase variant names, but the stubs
+    have already been renamed to SCREAMING_SNAKE_CASE.
+
+    """
+    if not renamed_enums:
+        return content
+
+    for enum_name in sorted(renamed_enums, key=len, reverse=True):
+        pattern = rf"({re.escape(enum_name)}\.)([A-Z][A-Za-z0-9_]*)\b"
+
+        def _replace(m: re.Match[str]) -> str:
+            return f"{m.group(1)}{to_screaming_snake_case(m.group(2))}"
+
+        content = re.sub(pattern, _replace, content)
+
+    return content
+
+
 def _collect_pyclass_name_fixups(source: str, fixups: dict[str, ClassMethodFixup]) -> None:
     lines = source.splitlines()
     pending_attrs: list[str] = []
@@ -680,15 +842,41 @@ def consume_rust_attribute(lines: list[str], start: int) -> tuple[str, int]:
     Consume a Rust attribute, including multi-line forms such as `#[allow(...)]`.
     """
     attribute_lines = [lines[start].strip()]
-    bracket_depth = attribute_lines[0].count("[") - attribute_lines[0].count("]")
+    bracket_depth = _bracket_depth(attribute_lines[0])
     i = start + 1
 
     while i < len(lines) and bracket_depth > 0:
         attribute_lines.append(lines[i].strip())
-        bracket_depth += lines[i].count("[") - lines[i].count("]")
+        bracket_depth += _bracket_depth(lines[i])
         i += 1
 
     return " ".join(attribute_lines), i
+
+
+def _bracket_depth(line: str) -> int:
+    """
+    Count net bracket depth, skipping brackets inside double-quoted strings.
+    """
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for ch in line:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+        elif not in_string:
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+
+    return depth
 
 
 def consume_rust_method_signature(
@@ -1961,6 +2149,169 @@ def normalize_stub_content(content: str) -> str:
     content = content.rstrip() + "\n"
 
     return content
+
+
+RUST_TO_PYTHON_TYPE: dict[str, str] = {
+    "&str": "str",
+    "&'static str": "str",
+    "u8": "int",
+    "u16": "int",
+    "u32": "int",
+    "u64": "int",
+    "i8": "int",
+    "i16": "int",
+    "i32": "int",
+    "i64": "int",
+    "f32": "float",
+    "f64": "float",
+    "bool": "bool",
+}
+
+M_ADD_CONST_RE = re.compile(
+    r'm\.add\(\s*(?:stringify!\((\w+)\)|"(\w+)")\s*,\s*(.+?)\s*\)\s*\?',
+)
+
+RUST_CONST_DEF_RE = re.compile(
+    r"pub\s+(?:const|static)\s+(\w+)\s*:\s*([^=;]+)",
+)
+
+
+@dataclass(frozen=True)
+class ModuleConstant:
+    """
+    A constant exported to Python via ``m.add()``.
+    """
+
+    name: str
+    python_type: str
+
+
+def collect_module_constants(workspace_root: Path) -> dict[str, list[ModuleConstant]]:
+    """
+    Collect module-level constants exported via ``m.add()`` in pymodule definitions.
+
+    Returns a mapping of stub module path (e.g. ``"core"``, ``"adapters.hyperliquid"``)
+    to constant declarations.
+
+    """
+    constants: dict[str, list[ModuleConstant]] = {}
+
+    for mod_rs in sorted(workspace_root.glob("crates/**/src/python/mod.rs")):
+        crate_dir = mod_rs.parent.parent.parent
+        module_path = _derive_module_path(crate_dir, workspace_root)
+        source = mod_rs.read_text()
+
+        for match in M_ADD_CONST_RE.finditer(source):
+            name = match.group(1) or match.group(2)
+            value_expr = match.group(3).strip()
+
+            if "get_type" in value_expr:
+                continue
+
+            python_type = _infer_constant_python_type(name, value_expr, crate_dir)
+            constants.setdefault(module_path, []).append(
+                ModuleConstant(name, python_type),
+            )
+
+    return constants
+
+
+def _derive_module_path(crate_dir: Path, workspace_root: Path) -> str:
+    """
+    Derive the stub module path from a crate directory.
+    """
+    relative = crate_dir.relative_to(workspace_root / "crates")
+    return ".".join(relative.parts)
+
+
+def _infer_constant_python_type(
+    const_name: str,
+    value_expr: str,
+    crate_dir: Path,
+) -> str:
+    """
+    Look up a Rust constant definition and return its Python type.
+    """
+    # The Rust identifier may differ from the Python name (e.g. HIGH_PRECISION
+    # exports HIGH_PRECISION_MODE), so extract the last path segment from the
+    # value expression as a fallback lookup name.
+    rust_name = value_expr.rsplit("::", maxsplit=1)[-1].strip()
+    candidates = [const_name]
+    if rust_name != const_name and rust_name.isidentifier():
+        candidates.append(rust_name)
+
+    for rs_file in crate_dir.glob("src/**/*.rs"):
+        source_lines = rs_file.read_text().splitlines()
+        for name in candidates:
+            for line in source_lines:
+                match = re.match(
+                    rf"pub\s+(?:const|static)\s+{re.escape(name)}\s*:\s*([^=;]+)",
+                    line.strip(),
+                )
+
+                if match:
+                    rust_type = match.group(1).strip()
+                    return RUST_TO_PYTHON_TYPE.get(rust_type, "typing.Any")
+
+    return "typing.Any"
+
+
+def inject_module_constants(root: Path, workspace_root: Path) -> None:
+    """
+    Inject module-level constants into stub files and update ``__all__``.
+    """
+    constants = collect_module_constants(workspace_root)
+
+    for module_path, const_list in constants.items():
+        parts = module_path.split(".")
+        stub_file = root.joinpath(*parts, "__init__.pyi")
+
+        if not stub_file.exists():
+            continue
+
+        content = stub_file.read_text()
+        original = content
+
+        new_names = [c.name for c in const_list if f"\n{c.name}:" not in content]
+        if not new_names:
+            continue
+
+        content = _add_names_to_all(content, new_names)
+
+        const_block = "\n".join(f"{c.name}: {c.python_type}" for c in const_list)
+        content = _insert_constants_after_all(content, const_block)
+
+        if content != original:
+            stub_file.write_text(content)
+
+
+def _add_names_to_all(content: str, names: list[str]) -> str:
+    """
+    Add names to the ``__all__`` list, maintaining sorted order.
+    """
+    match = re.search(r"__all__\s*=\s*\[(.*?)]", content, re.DOTALL)
+    if match is None:
+        return content
+
+    existing = re.findall(r'"(\w+)"', match.group(1))
+    all_names = sorted(set(existing) | set(names))
+
+    items = ",\n".join(f'    "{n}"' for n in all_names)
+    new_all = f"__all__ = [\n{items},\n]"
+
+    return content[: match.start()] + new_all + content[match.end() :]
+
+
+def _insert_constants_after_all(content: str, const_block: str) -> str:
+    """
+    Insert constant declarations after the ``__all__`` block.
+    """
+    match = re.search(r"__all__\s*=\s*\[.*?]", content, re.DOTALL)
+    if match is None:
+        return content
+
+    insert_pos = match.end()
+    return content[:insert_pos] + "\n\n" + const_block + "\n" + content[insert_pos:]
 
 
 def format_stub_files(root: Path) -> None:

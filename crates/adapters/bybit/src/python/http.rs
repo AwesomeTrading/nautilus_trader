@@ -111,7 +111,7 @@ impl BybitRawHttpClient {
         self.recv_window_ms()
     }
 
-    /// Cancel all pending HTTP requests.
+    /// Cancels all pending HTTP requests.
     #[pyo3(name = "cancel_all_requests")]
     fn py_cancel_all_requests(&self) {
         self.cancel_all_requests();
