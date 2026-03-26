@@ -40,12 +40,12 @@ these lower-level components directly.
 
 ### Product support
 
-| Product Type                            | Supported | Notes                                 |
-|-----------------------------------------|-----------|---------------------------------------|
-| Spot Markets (incl. Binance US)         | ✓         |                                       |
-| Margin Accounts (Cross & Isolated)      | -         | *Not implemented.* Planned for v2.    |
-| USDT-Margined Futures (PERP & Delivery) | ✓         |                                       |
-| Coin-Margined Futures                   | ✓         |                                       |
+| Product Type                            | Supported | Notes                              |
+|-----------------------------------------|-----------|------------------------------------|
+| Spot Markets (incl. Binance US)         | ✓         |                                    |
+| Margin Accounts (Cross & Isolated)      | -         | *Not implemented.* Planned for v2. |
+| USDT-Margined Futures (PERP & Delivery) | ✓         |                                    |
+| Coin-Margined Futures                   | ✓         |                                    |
 
 :::note
 Margin account features (borrow, repay, isolated margin management) are not implemented.
@@ -80,8 +80,8 @@ time-in-force options across Binance account types.
 
 ### Order types
 
-| Order Type             | Spot | Margin | USDT Futures | Coin Futures | Notes                   |
-|------------------------|------|--------|--------------|--------------|-------------------------|
+| Order Type             | Spot | Margin | USDT Futures | Coin Futures | Notes                              |
+|------------------------|------|--------|--------------|--------------|------------------------------------|
 | `MARKET`               | ✓    | -      | ✓            | ✓            | Quote quantity support: Spot only. |
 | `LIMIT`                | ✓    | -      | ✓            | ✓            |                         |
 | `STOP_MARKET`          | -    | -      | ✓            | ✓            | Futures only.           |
@@ -351,6 +351,39 @@ encoding calls and recompiling. There is no technical limitation preventing
 either approach.
 :::
 
+### Decoding client order IDs
+
+When querying Binance directly (REST API, web UI, or your own HTTP code), the
+`clientOrderId` field contains the encoded form. Two utility functions recover
+the original Nautilus `ClientOrderId`:
+
+```python
+from nautilus_trader.adapters.binance import (
+    decode_binance_futures_client_order_id,
+    decode_binance_spot_client_order_id,
+)
+
+# Encoded ID from Binance REST response or web UI
+encoded = "x-TD67BGP9-T0A4b1H2vj50H"
+original = decode_binance_spot_client_order_id(encoded)
+# -> "O-20260305-120000-001-001-100"
+
+# Futures equivalent
+encoded_futures = "x-aHRE4BCj-U2xK9mPqR7sT1vW3y"
+original_futures = decode_binance_futures_client_order_id(encoded_futures)
+```
+
+Strings without the broker prefix pass through unchanged, so these are safe
+to call on any `clientOrderId` value.
+
+:::note
+The domain-level HTTP clients (`BinanceSpotHttpClient`,
+`BinanceFuturesHttpClient`) decode automatically when returning Nautilus
+types such as `OrderStatusReport`. Manual decoding is only needed when
+working outside the adapter: direct REST queries, the Binance web UI, or
+raw venue models.
+:::
+
 ## Order books
 
 Order books can be maintained at full or partial depths. WebSocket stream
@@ -524,25 +557,25 @@ These are the primary limits shared across all endpoints:
 
 Some endpoints have higher weight costs per request:
 
-| Endpoint                  | Weight | Notes                                                  |
-|---------------------------|--------|--------------------------------------------------------|
-| `/api/v3/order`           | 1      | Spot order placement.                                  |
-| `/api/v3/allOrders`       | 20     | Spot historical orders (expensive).                    |
-| `/api/v3/klines`          | 2+     | Scales with `limit` parameter.                         |
-| `/fapi/v1/order`          | 1      | Futures order placement.                               |
-| `/fapi/v1/allOrders`      | 20     | Futures historical orders (expensive).                 |
-| `/fapi/v1/commissionRate` | 20     | Futures commission rate query.                         |
-| `/fapi/v1/klines`         | 5+     | Scales with `limit` parameter.                         |
+| Endpoint                  | Weight | Notes                                  |
+|---------------------------|--------|----------------------------------------|
+| `/api/v3/order`           | 1      | Spot order placement.                  |
+| `/api/v3/allOrders`       | 20     | Spot historical orders (expensive).    |
+| `/api/v3/klines`          | 2+     | Scales with `limit` parameter.         |
+| `/fapi/v1/order`          | 1      | Futures order placement.               |
+| `/fapi/v1/allOrders`      | 20     | Futures historical orders (expensive). |
+| `/fapi/v1/commissionRate` | 20     | Futures commission rate query.         |
+| `/fapi/v1/klines`         | 5+     | Scales with `limit` parameter.         |
 
 ### WebSocket API limits
 
 The WebSocket API (used for user data streams) shares the same weight quota as the REST API:
 
-| Limit Type       | Value  | Notes                                      |
-|------------------|--------|--------------------------------------------|
-| Request weight   | Shared | Counts against REST API weight quota.      |
-| Handshake        | 5      | Weight cost per connection attempt.        |
-| Ping/pong frames | 5/sec  | Maximum ping/pong rate.                    |
+| Limit Type       | Value  | Notes                                 |
+|------------------|--------|---------------------------------------|
+| Request weight   | Shared | Counts against REST API weight quota. |
+| Handshake        | 5      | Weight cost per connection attempt.   |
+| Ping/pong frames | 5/sec  | Maximum ping/pong rate.               |
 
 ### Adapter behavior
 
@@ -878,11 +911,11 @@ config = BinanceExecClientConfig(
 )
 ```
 
-| Variable                             | Description                      |
-|--------------------------------------|----------------------------------|
-| `BINANCE_TESTNET_API_KEY`            | Spot testnet API key.            |
-| `BINANCE_TESTNET_API_SECRET`         | Spot testnet API secret.         |
-| `BINANCE_FUTURES_TESTNET_API_KEY`    | Futures testnet API key (deprecated, use demo). |
+| Variable                             | Description                                        |
+|--------------------------------------|----------------------------------------------------|
+| `BINANCE_TESTNET_API_KEY`            | Spot testnet API key.                              |
+| `BINANCE_TESTNET_API_SECRET`         | Spot testnet API secret.                           |
+| `BINANCE_FUTURES_TESTNET_API_KEY`    | Futures testnet API key (deprecated, use demo).    |
 | `BINANCE_FUTURES_TESTNET_API_SECRET` | Futures testnet API secret (deprecated, use demo). |
 
 :::note

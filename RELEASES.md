@@ -11,6 +11,7 @@ Released on TBD (UTC).
 - Added `BookImbalanceActor` example actor for order book quoted volume imbalance in Rust
 - Added `ExecTesterConfig.test_reject_post_only` implicitly setting `post_only` on orders without requiring `use_post_only` (Python and Rust)
 - Added Betfair backtest example streaming raw `.gz` data through `BacktestEngine` in Rust
+- Added Binance `decode_binance_spot_client_order_id` and `decode_binance_futures_client_order_id` utility functions for decoding Link & Trade encoded `clientOrderId` values from raw Binance API responses
 - Added Binance instrument status polling in Rust
 - Added Binance Futures `close_position` parameter for algo stop orders to close an entire position at trigger price (Python and Rust) (#3751), thanks for reporting @dodge-basic
 - Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
@@ -75,6 +76,7 @@ Released on TBD (UTC).
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
 - Fixed option chains emitting data after expiry (#3735), thanks @filipmacek
 - Fixed Betfair order modify `Quantity` serialization for partial cancel size reduction
+- Fixed Binance Spot SBE schema version mismatch after Binance upgraded to schema 3:3 (released 2026-03-25)
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
 - Fixed Binance SBE price/quantity precision derivation (#3670), thanks @husariancom
 - Fixed Databento price precision truncation for fractional tick sizes (#3696), thanks @pandashark
@@ -145,6 +147,7 @@ Released on TBD (UTC).
 
 ### Internal Improvements
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
+- Replaced Binance `WsDispatchState` `DashSet` dedup with `FifoCache` from `nautilus_common` for bounded FIFO eviction with proper `remove()` cleanup
 - Added `BINANCE_GTX_ORDER_REJECT_CODE` and `BINANCE_SPOT_POST_ONLY_REJECT_MSG` constants for reliable post-only rejection detection in Rust
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
 - Added Python strategy support to v2 `LiveNode` with `add_strategy_from_config`
@@ -200,6 +203,7 @@ Released on TBD (UTC).
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
 - Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
+- Added Binance Link & Trade `clientOrderId` decoding section with usage examples to integration docs
 - Added Bybit options support matrix and trading limitations to integration docs
 - Added OKX to adapter support tables in Options and Greeks concept guides
 - Added option greeks test cases (TC-D62, TC-D63) with config examples to the data testing spec

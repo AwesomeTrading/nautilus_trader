@@ -2194,8 +2194,8 @@ fn dispatch_order_update(
 
         match order.execution_type {
             BinanceExecutionType::New => {
-                if dispatch_state.emitted_accepted.contains(&client_order_id)
-                    || dispatch_state.filled_orders.contains(&client_order_id)
+                if dispatch_state.has_emitted_accepted(&client_order_id)
+                    || dispatch_state.has_filled(&client_order_id)
                 {
                     log::debug!("Skipping duplicate Accepted for {client_order_id}");
                     return;
