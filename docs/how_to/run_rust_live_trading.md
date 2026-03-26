@@ -1,4 +1,4 @@
-# Run live trading in Rust
+# Run Live Trading (Rust)
 
 The `LiveNode` connects to real venues through adapter clients. This guide
 walks through a complete live trading setup using OKX as an example.

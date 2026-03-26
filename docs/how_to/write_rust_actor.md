@@ -1,4 +1,4 @@
-# Write a Rust actor
+# Write an Actor (Rust)
 
 An actor receives market data, custom data/signals, and system events but does not manage orders.
 This guide walks through building a `SpreadMonitor` that subscribes to quotes

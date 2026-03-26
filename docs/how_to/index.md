@@ -23,7 +23,7 @@ path and [tutorials](../tutorials/) first.
 
 | Guide                                                     | Description                                            |
 |:----------------------------------------------------------|:-------------------------------------------------------|
-| [Write a Rust actor](write_rust_actor)                    | Build a data actor with subscriptions and handlers.    |
-| [Write a Rust strategy](write_rust_strategy)              | Build a strategy with order management.                |
-| [Run a backtest in Rust](run_rust_backtest)               | Use BacktestEngine or BacktestNode with a catalog.     |
-| [Run live trading in Rust](run_rust_live_trading)         | Connect to a venue with LiveNode.                      |
+| [Write an Actor (Rust)](write_rust_actor)                 | Build a data actor with subscriptions and handlers.    |
+| [Write a Strategy (Rust)](write_rust_strategy)            | Build a strategy with order management.                |
+| [Run a Backtest (Rust)](run_rust_backtest)                | Use BacktestEngine or BacktestNode with a catalog.     |
+| [Run Live Trading (Rust)](run_rust_live_trading)          | Connect to a venue with LiveNode.                      |

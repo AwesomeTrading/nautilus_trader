@@ -1,4 +1,4 @@
-# Run a backtest in Rust
+# Run a Backtest (Rust)
 
 Nautilus provides two Rust APIs for backtesting: `BacktestEngine`
 (low-level) and `BacktestNode` (high-level with catalog streaming). This

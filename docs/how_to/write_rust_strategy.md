@@ -1,8 +1,8 @@
-# Write a Rust strategy
+# Write a Strategy (Rust)
 
 A strategy extends an actor with order management. This guide walks through
 building a minimal strategy that subscribes to quotes and submits market
-orders. Read [Write a Rust actor](write_rust_actor.md) first.
+orders. Read [Write an Actor (Rust)](write_rust_actor.md) first.
 
 For background on strategy concepts and order management, see the
 [Strategies](../concepts/strategies.md) and [Rust](../concepts/rust.md)
