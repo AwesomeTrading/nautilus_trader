@@ -56,16 +56,8 @@ nautilus-network = { workspace = true }
 nautilus-system = { workspace = true }
 
 ahash = { workspace = true }
-alloy = { workspace = true, features = [
-  "provider-http",
-  "signer-local",
-  "network",
-  "reqwest",
-] }
+alloy = { workspace = true, features = ["provider-http", "network", "reqwest"] }
 alloy-primitives = { workspace = true }
-alloy-signer = { workspace = true }
-alloy-signer-local = { workspace = true }
-alloy-sol-types = { workspace = true }
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }

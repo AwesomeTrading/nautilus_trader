@@ -25,10 +25,11 @@
 
 use std::str::FromStr;
 
+use alloy::{
+    signers::{SignerSync, local::PrivateKeySigner},
+    sol_types::{SolStruct, eip712_domain},
+};
 use alloy_primitives::{Address, B256, U256, address};
-use alloy_signer::SignerSync;
-use alloy_signer_local::PrivateKeySigner;
-use alloy_sol_types::{SolStruct, eip712_domain};
 use rust_decimal::Decimal;
 
 use crate::{
@@ -57,7 +58,7 @@ const POLYGON_CHAIN_ID: u64 = 137;
 // EIP-712 ClobAuth struct for L1 API authentication.
 //
 // Reference: <https://docs.polymarket.com/api-reference/authentication#l1-authentication>
-alloy_sol_types::sol! {
+alloy::sol! {
     struct ClobAuth {
         address address;
         string timestamp;
@@ -69,7 +70,7 @@ alloy_sol_types::sol! {
 // EIP-712 Order struct matching the CTFExchange contract.
 //
 // Reference: <https://github.com/Polymarket/ctf-exchange/blob/main/src/exchange/libraries/OrderStructs.sol>
-alloy_sol_types::sol! {
+alloy::sol! {
     struct Order {
         uint256 salt;
         address maker;
