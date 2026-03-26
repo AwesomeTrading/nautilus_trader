@@ -224,7 +224,7 @@ impl HyperliquidExecutionClient {
             log::info!("Initialized {} instruments", instruments.len());
 
             for instrument in &instruments {
-                self.http_client.cache_instrument(instrument.clone());
+                self.http_client.cache_instrument(instrument);
             }
         }
 

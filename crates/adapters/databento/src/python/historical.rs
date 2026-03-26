@@ -113,9 +113,7 @@ impl DatabentoHistoricalClient {
         limit: Option<u64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -160,9 +158,7 @@ impl DatabentoHistoricalClient {
         schema: Option<String>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -197,9 +193,7 @@ impl DatabentoHistoricalClient {
         price_precision: Option<u8>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -236,9 +230,7 @@ impl DatabentoHistoricalClient {
         timestamp_on_close: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -271,9 +263,7 @@ impl DatabentoHistoricalClient {
         depth: Option<usize>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -308,9 +298,7 @@ impl DatabentoHistoricalClient {
         price_precision: Option<u8>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -345,9 +333,7 @@ impl DatabentoHistoricalClient {
         price_precision: Option<u8>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -382,9 +368,7 @@ impl DatabentoHistoricalClient {
         price_precision: Option<u8>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,
@@ -418,9 +402,7 @@ impl DatabentoHistoricalClient {
         limit: Option<u64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let inner = self.inner.clone();
-        let symbols = inner
-            .prepare_symbols_from_instrument_ids(&instrument_ids)
-            .map_err(to_pyvalue_err)?;
+        let symbols = inner.prepare_symbols_from_instrument_ids(&instrument_ids);
 
         let params = RangeQueryParams {
             dataset,

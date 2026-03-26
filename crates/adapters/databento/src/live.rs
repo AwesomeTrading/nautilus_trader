@@ -13,10 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration as StdDuration,
-};
+use std::sync::Arc;
 
 use ahash::{AHashMap, HashSet, HashSetExt};
 use databento::{
@@ -24,7 +21,9 @@ use databento::{
     live::Subscription,
 };
 use indexmap::IndexMap;
-use nautilus_core::{UnixNanos, consts::NAUTILUS_USER_AGENT, time::get_atomic_clock_realtime};
+use nautilus_core::{
+    AtomicMap, UnixNanos, consts::NAUTILUS_USER_AGENT, time::get_atomic_clock_realtime,
+};
 use nautilus_model::{
     data::{Data, InstrumentStatus, OrderBookDelta, OrderBookDeltas, OrderBookDeltas_API},
     enums::RecordFlag,
@@ -89,7 +88,7 @@ pub struct DatabentoFeedHandler {
     cmd_rx: tokio::sync::mpsc::UnboundedReceiver<LiveCommand>,
     msg_tx: tokio::sync::mpsc::Sender<LiveMessage>,
     publisher_venue_map: IndexMap<PublisherId, Venue>,
-    symbol_venue_map: Arc<RwLock<AHashMap<Symbol, Venue>>>,
+    symbol_venue_map: Arc<AtomicMap<Symbol, Venue>>,
     replay: bool,
     use_exchange_as_venue: bool,
     bars_timestamp_on_close: bool,
@@ -113,7 +112,7 @@ impl DatabentoFeedHandler {
         rx: tokio::sync::mpsc::UnboundedReceiver<LiveCommand>,
         tx: tokio::sync::mpsc::Sender<LiveMessage>,
         publisher_venue_map: IndexMap<PublisherId, Venue>,
-        symbol_venue_map: Arc<RwLock<AHashMap<Symbol, Venue>>>,
+        symbol_venue_map: Arc<AtomicMap<Symbol, Venue>>,
         use_exchange_as_venue: bool,
         bars_timestamp_on_close: bool,
         reconnect_timeout_mins: Option<u64>,
@@ -440,7 +439,7 @@ impl DatabentoFeedHandler {
                     }
                 }
                 let data = {
-                    let sym_map = self.read_symbol_venue_map()?;
+                    let sym_map = self.symbol_venue_map.load();
                     handle_instrument_def_msg(
                         msg,
                         &record,
@@ -455,7 +454,7 @@ impl DatabentoFeedHandler {
                 self.send_msg(LiveMessage::Instrument(data)).await;
             } else if let Some(msg) = record.get::<dbn::StatusMsg>() {
                 let data = {
-                    let sym_map = self.read_symbol_venue_map()?;
+                    let sym_map = self.symbol_venue_map.load();
                     handle_status_msg(
                         msg,
                         &record,
@@ -469,7 +468,7 @@ impl DatabentoFeedHandler {
                 self.send_msg(LiveMessage::Status(data)).await;
             } else if let Some(msg) = record.get::<dbn::ImbalanceMsg>() {
                 let data = {
-                    let sym_map = self.read_symbol_venue_map()?;
+                    let sym_map = self.symbol_venue_map.load();
                     handle_imbalance_msg(
                         msg,
                         &record,
@@ -484,7 +483,7 @@ impl DatabentoFeedHandler {
                 self.send_msg(LiveMessage::Imbalance(data)).await;
             } else if let Some(msg) = record.get::<dbn::StatMsg>() {
                 let data = {
-                    let sym_map = self.read_symbol_venue_map()?;
+                    let sym_map = self.symbol_venue_map.load();
                     handle_statistics_msg(
                         msg,
                         &record,
@@ -500,7 +499,7 @@ impl DatabentoFeedHandler {
             } else {
                 // Decode a generic record with possible errors
                 let res = {
-                    let sym_map = self.read_symbol_venue_map()?;
+                    let sym_map = self.symbol_venue_map.load();
                     handle_record(
                         record,
                         &symbol_map,
@@ -592,53 +591,6 @@ impl DatabentoFeedHandler {
             Err(e) => log::error!("Error sending message: {e}"),
         }
     }
-
-    /// Acquires a read lock on the symbol-venue map with exponential backoff and timeout.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the read lock cannot be acquired within the deadline.
-    fn read_symbol_venue_map(
-        &self,
-    ) -> anyhow::Result<std::sync::RwLockReadGuard<'_, AHashMap<Symbol, Venue>>> {
-        // Try to acquire the lock with exponential backoff and deadline
-        const MAX_WAIT_MS: u64 = 500; // Total maximum wait time
-        const INITIAL_DELAY_MICROS: u64 = 10;
-        const MAX_DELAY_MICROS: u64 = 1000;
-
-        let deadline = std::time::Instant::now() + StdDuration::from_millis(MAX_WAIT_MS);
-        let mut delay = INITIAL_DELAY_MICROS;
-
-        loop {
-            match self.symbol_venue_map.try_read() {
-                Ok(guard) => return Ok(guard),
-                Err(std::sync::TryLockError::WouldBlock) => {
-                    if std::time::Instant::now() >= deadline {
-                        break;
-                    }
-
-                    // Yield to other threads first
-                    std::thread::yield_now();
-
-                    // Then sleep with exponential backoff if still blocked
-                    if std::time::Instant::now() < deadline {
-                        let remaining = deadline - std::time::Instant::now();
-                        let sleep_duration = StdDuration::from_micros(delay).min(remaining);
-                        std::thread::sleep(sleep_duration);
-                        // Exponential backoff with cap and jitter
-                        delay = ((delay * 2) + delay / 4).min(MAX_DELAY_MICROS);
-                    }
-                }
-                Err(std::sync::TryLockError::Poisoned(e)) => {
-                    anyhow::bail!("symbol_venue_map lock poisoned: {e}");
-                }
-            }
-        }
-
-        anyhow::bail!(
-            "Failed to acquire read lock on symbol_venue_map after {MAX_WAIT_MS}ms deadline"
-        )
-    }
 }
 
 /// Handles Databento error messages by logging them.
@@ -713,7 +665,7 @@ fn handle_symbol_mapping_msg(
 /// Updates the instrument ID map using exchange information from the symbol map.
 fn update_instrument_id_map_with_exchange(
     symbol_map: &PitSymbolMap,
-    symbol_venue_map: &RwLock<AHashMap<Symbol, Venue>>,
+    symbol_venue_map: &AtomicMap<Symbol, Venue>,
     instrument_id_map: &mut AHashMap<u32, InstrumentId>,
     raw_instrument_id: u32,
     exchange: &str,
@@ -725,10 +677,9 @@ fn update_instrument_id_map_with_exchange(
     let venue = Venue::from_code(exchange)
         .map_err(|e| anyhow::anyhow!("Invalid venue code '{exchange}': {e}"))?;
     let instrument_id = InstrumentId::new(symbol, venue);
-    let mut map = symbol_venue_map
-        .write()
-        .map_err(|e| anyhow::anyhow!("symbol_venue_map lock poisoned: {e}"))?;
-    map.entry(symbol).or_insert(venue);
+    symbol_venue_map.rcu(|m| {
+        m.entry(symbol).or_insert(venue);
+    });
     instrument_id_map.insert(raw_instrument_id, instrument_id);
     Ok(instrument_id)
 }
@@ -935,7 +886,7 @@ mod tests {
             cmd_rx,
             msg_tx,
             IndexMap::new(),
-            Arc::new(RwLock::new(AHashMap::new())),
+            Arc::new(AtomicMap::new()),
             false,
             false,
             reconnect_timeout_mins,

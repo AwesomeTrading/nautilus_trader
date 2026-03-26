@@ -102,7 +102,7 @@ impl HyperliquidHttpClient {
     /// Any existing instrument with the same symbol will be replaced.
     #[pyo3(name = "cache_instrument")]
     fn py_cache_instrument(&self, py: Python<'_>, instrument: Py<PyAny>) -> PyResult<()> {
-        self.cache_instrument(pyobject_to_instrument_any(py, instrument)?);
+        self.cache_instrument(&pyobject_to_instrument_any(py, instrument)?);
         Ok(())
     }
 

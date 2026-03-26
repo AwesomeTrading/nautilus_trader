@@ -24,14 +24,14 @@ use std::{
     collections::HashMap,
     env,
     num::NonZeroU32,
-    sync::{Arc, LazyLock, RwLock},
+    sync::{Arc, LazyLock},
     time::Duration,
 };
 
 use ahash::AHashMap;
 use anyhow::Context;
 use nautilus_core::{
-    UUID4, UnixNanos,
+    AtomicMap, UUID4, UnixNanos,
     consts::NAUTILUS_USER_AGENT,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -759,12 +759,12 @@ impl HyperliquidRawHttpClient {
 pub struct HyperliquidHttpClient {
     pub(crate) inner: Arc<HyperliquidRawHttpClient>,
     clock: &'static AtomicTime,
-    instruments: Arc<RwLock<AHashMap<Ustr, InstrumentAny>>>,
-    instruments_by_coin: Arc<RwLock<AHashMap<(Ustr, HyperliquidProductType), InstrumentAny>>>,
+    instruments: Arc<AtomicMap<Ustr, InstrumentAny>>,
+    instruments_by_coin: Arc<AtomicMap<(Ustr, HyperliquidProductType), InstrumentAny>>,
     /// Mapping from symbol to asset index for order submission.
-    asset_indices: Arc<RwLock<AHashMap<Ustr, u32>>>,
+    asset_indices: Arc<AtomicMap<Ustr, u32>>,
     /// Mapping from spot fill coin (`@{pair_index}`) to instrument symbol.
-    spot_fill_coins: Arc<RwLock<AHashMap<Ustr, Ustr>>>,
+    spot_fill_coins: Arc<AtomicMap<Ustr, Ustr>>,
     account_id: Option<AccountId>,
     /// Optional override address for queries (agent wallet / API sub-key support).
     /// When set, used for balance queries, position reports, and WS subscriptions
@@ -813,10 +813,10 @@ impl HyperliquidHttpClient {
         Self {
             inner: Arc::new(raw_client),
             clock: get_atomic_clock_realtime(),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            instruments_by_coin: Arc::new(RwLock::new(AHashMap::new())),
-            asset_indices: Arc::new(RwLock::new(AHashMap::new())),
-            spot_fill_coins: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            instruments_by_coin: Arc::new(AtomicMap::new()),
+            asset_indices: Arc::new(AtomicMap::new()),
+            spot_fill_coins: Arc::new(AtomicMap::new()),
             account_id: None,
             account_address: None,
             normalize_prices: true,
@@ -855,10 +855,10 @@ impl HyperliquidHttpClient {
         Ok(Self {
             inner: Arc::new(raw_client),
             clock: get_atomic_clock_realtime(),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            instruments_by_coin: Arc::new(RwLock::new(AHashMap::new())),
-            asset_indices: Arc::new(RwLock::new(AHashMap::new())),
-            spot_fill_coins: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            instruments_by_coin: Arc::new(AtomicMap::new()),
+            asset_indices: Arc::new(AtomicMap::new()),
+            spot_fill_coins: Arc::new(AtomicMap::new()),
             account_id: None,
             account_address: None,
             normalize_prices: true,
@@ -927,10 +927,10 @@ impl HyperliquidHttpClient {
                 Ok(Self {
                     inner: Arc::new(raw_client),
                     clock: get_atomic_clock_realtime(),
-                    instruments: Arc::new(RwLock::new(AHashMap::new())),
-                    instruments_by_coin: Arc::new(RwLock::new(AHashMap::new())),
-                    asset_indices: Arc::new(RwLock::new(AHashMap::new())),
-                    spot_fill_coins: Arc::new(RwLock::new(AHashMap::new())),
+                    instruments: Arc::new(AtomicMap::new()),
+                    instruments_by_coin: Arc::new(AtomicMap::new()),
+                    asset_indices: Arc::new(AtomicMap::new()),
+                    spot_fill_coins: Arc::new(AtomicMap::new()),
                     account_id: None,
                     account_address: resolved_account_address,
                     normalize_prices: true,
@@ -966,10 +966,10 @@ impl HyperliquidHttpClient {
         Ok(Self {
             inner: Arc::new(raw_client),
             clock: get_atomic_clock_realtime(),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            instruments_by_coin: Arc::new(RwLock::new(AHashMap::new())),
-            asset_indices: Arc::new(RwLock::new(AHashMap::new())),
-            spot_fill_coins: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            instruments_by_coin: Arc::new(AtomicMap::new()),
+            asset_indices: Arc::new(AtomicMap::new()),
+            spot_fill_coins: Arc::new(AtomicMap::new()),
             account_id: None,
             account_address: None,
             normalize_prices: true,
@@ -1031,45 +1031,33 @@ impl HyperliquidHttpClient {
     ///
     /// This is required for parsing orders, fills, and positions into reports.
     /// Any existing instrument with the same symbol will be replaced.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the instrument lock cannot be acquired.
-    pub fn cache_instrument(&self, instrument: InstrumentAny) {
+    pub fn cache_instrument(&self, instrument: &InstrumentAny) {
         let full_symbol = instrument.symbol().inner();
         let coin = instrument.raw_symbol().inner();
 
-        {
-            let mut instruments = self
-                .instruments
-                .write()
-                .expect("Failed to acquire write lock");
-
-            instruments.insert(full_symbol, instrument.clone());
-
+        self.instruments.rcu(|m| {
+            m.insert(full_symbol, instrument.clone());
             // HTTP responses only include coins, external code may lookup by coin
-            instruments.insert(coin, instrument.clone());
-        }
+            m.insert(coin, instrument.clone());
+        });
 
         // Composite key allows disambiguating same coin across PERP and SPOT
         if let Ok(product_type) = HyperliquidProductType::from_symbol(full_symbol.as_str()) {
-            let mut instruments_by_coin = self
-                .instruments_by_coin
-                .write()
-                .expect("Failed to acquire write lock");
-            instruments_by_coin.insert((coin, product_type), instrument.clone());
+            self.instruments_by_coin.rcu(|m| {
+                m.insert((coin, product_type), instrument.clone());
 
-            // Spot raw_symbols use @{pair_index} format (e.g., "@107") but
-            // callers often extract the base currency from the symbol (e.g.,
-            // "HYPE" from "HYPE-USDC-SPOT"), so also index by base name
-            if coin.as_str().starts_with('@')
-                && let Some(base) = full_symbol.as_str().split('-').next()
-            {
-                let base_ustr = Ustr::from(base);
-                if base_ustr != coin {
-                    instruments_by_coin.insert((base_ustr, product_type), instrument);
+                // Spot raw_symbols use @{pair_index} format (e.g., "@107") but
+                // callers often extract the base currency from the symbol (e.g.,
+                // "HYPE" from "HYPE-USDC-SPOT"), so also index by base name
+                if coin.as_str().starts_with('@')
+                    && let Some(base) = full_symbol.as_str().split('-').next()
+                {
+                    let base_ustr = Ustr::from(base);
+                    if base_ustr != coin {
+                        m.insert((base_ustr, product_type), instrument.clone());
+                    }
                 }
-            }
+            });
         } else {
             log::warn!("Unable to determine product type for symbol: {full_symbol}");
         }
@@ -1080,55 +1068,33 @@ impl HyperliquidHttpClient {
         coin: &Ustr,
         product_type: Option<HyperliquidProductType>,
     ) -> Option<InstrumentAny> {
-        if let Some(pt) = product_type {
-            let instruments_by_coin = self
-                .instruments_by_coin
-                .read()
-                .expect("Failed to acquire read lock");
-
-            if let Some(instrument) = instruments_by_coin.get(&(*coin, pt)) {
-                return Some(instrument.clone());
-            }
+        if let Some(pt) = product_type
+            && let Some(instrument) = self.instruments_by_coin.load().get(&(*coin, pt))
+        {
+            return Some(instrument.clone());
         }
 
         // HTTP responses lack product type context, try PERP then SPOT
         if product_type.is_none() {
-            let instruments_by_coin = self
-                .instruments_by_coin
-                .read()
-                .expect("Failed to acquire read lock");
+            let guard = self.instruments_by_coin.load();
 
-            if let Some(instrument) =
-                instruments_by_coin.get(&(*coin, HyperliquidProductType::Perp))
-            {
+            if let Some(instrument) = guard.get(&(*coin, HyperliquidProductType::Perp)) {
                 return Some(instrument.clone());
             }
 
-            if let Some(instrument) =
-                instruments_by_coin.get(&(*coin, HyperliquidProductType::Spot))
-            {
+            if let Some(instrument) = guard.get(&(*coin, HyperliquidProductType::Spot)) {
                 return Some(instrument.clone());
             }
         }
 
         // Spot fills use @{pair_index} format, translate to full symbol and look up
-        if coin.as_str().starts_with('@') {
-            let spot_fill_coins = self
-                .spot_fill_coins
-                .read()
-                .expect("Failed to acquire read lock");
-
-            if let Some(symbol) = spot_fill_coins.get(coin) {
-                // Look up by full symbol in instruments map (not instruments_by_coin
-                // which uses raw_symbol)
-                let instruments = self
-                    .instruments
-                    .read()
-                    .expect("Failed to acquire read lock");
-
-                if let Some(instrument) = instruments.get(symbol) {
-                    return Some(instrument.clone());
-                }
+        if coin.as_str().starts_with('@')
+            && let Some(symbol) = self.spot_fill_coins.load().get(coin)
+        {
+            // Look up by full symbol in instruments map (not instruments_by_coin
+            // which uses raw_symbol)
+            if let Some(instrument) = self.instruments.load().get(symbol) {
+                return Some(instrument.clone());
             }
         }
 
@@ -1190,7 +1156,7 @@ impl HyperliquidHttpClient {
                 ts_event,
             ));
 
-            self.cache_instrument(instrument.clone());
+            self.cache_instrument(&instrument);
 
             Some(instrument)
         } else {
@@ -1208,8 +1174,6 @@ impl HyperliquidHttpClient {
     }
 
     /// Fetch and parse all available instrument definitions from Hyperliquid.
-    // Mutex/RwLock poisoning is not documented individually
-    #[allow(clippy::missing_panics_doc)]
     pub async fn request_instruments(&self) -> Result<Vec<InstrumentAny>> {
         let mut defs: Vec<HyperliquidInstrumentDef> = Vec::new();
 
@@ -1250,19 +1214,15 @@ impl HyperliquidHttpClient {
         }
 
         // Populate asset indices map before converting to instruments
-        {
-            let mut asset_indices = self
-                .asset_indices
-                .write()
-                .expect("Failed to acquire write lock");
+        self.asset_indices.rcu(|m| {
             for def in &defs {
-                asset_indices.insert(def.symbol, def.asset_index);
+                m.insert(def.symbol, def.asset_index);
             }
-            log::debug!(
-                "Populated asset indices map (count={})",
-                asset_indices.len()
-            );
-        }
+        });
+        log::debug!(
+            "Populated asset indices map (count={})",
+            self.asset_indices.len()
+        );
 
         let ts_init = self.clock.get_time_ns();
         Ok(instruments_from_defs_owned(defs, ts_init))
@@ -1275,29 +1235,14 @@ impl HyperliquidHttpClient {
     /// For spot: 10000 + index in spotMeta.universe.
     ///
     /// Returns `None` if the symbol is not found in the map.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal read lock cannot be acquired.
     pub fn get_asset_index(&self, symbol: &str) -> Option<u32> {
-        let asset_indices = self
-            .asset_indices
-            .read()
-            .expect("Failed to acquire read lock");
-        asset_indices.get(&Ustr::from(symbol)).copied()
+        self.asset_indices.load().get(&Ustr::from(symbol)).copied()
     }
 
     /// Get the price precision for a cached instrument by symbol.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal read lock cannot be acquired.
     pub fn get_price_precision(&self, symbol: &str) -> Option<u8> {
-        let instruments = self
-            .instruments
-            .read()
-            .expect("Failed to acquire read lock");
-        instruments
+        self.instruments
+            .load()
             .get(&Ustr::from(symbol))
             .map(|inst| inst.price_precision())
     }
@@ -1309,21 +1254,14 @@ impl HyperliquidHttpClient {
     /// This mapping allows looking up the instrument from a spot fill.
     ///
     /// This method also caches the mapping internally for use by fill parsing methods.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal locks cannot be acquired.
     #[must_use]
     pub fn get_spot_fill_coin_mapping(&self) -> AHashMap<Ustr, Ustr> {
         const SPOT_INDEX_OFFSET: u32 = 10000;
 
-        let asset_indices = self
-            .asset_indices
-            .read()
-            .expect("Failed to acquire read lock");
+        let guard = self.asset_indices.load();
 
         let mut mapping = AHashMap::new();
-        for (symbol, &asset_index) in asset_indices.iter() {
+        for (symbol, &asset_index) in guard.iter() {
             // Spot instruments have asset_index >= 10000
             if asset_index >= SPOT_INDEX_OFFSET {
                 let pair_index = asset_index - SPOT_INDEX_OFFSET;
@@ -1333,13 +1271,7 @@ impl HyperliquidHttpClient {
         }
 
         // Cache the mapping internally for fill parsing
-        {
-            let mut spot_fill_coins = self
-                .spot_fill_coins
-                .write()
-                .expect("Failed to acquire write lock");
-            *spot_fill_coins = mapping.clone();
-        }
+        self.spot_fill_coins.store(mapping.clone());
 
         mapping
     }
@@ -1641,8 +1573,6 @@ impl HyperliquidHttpClient {
     /// # Errors
     ///
     /// Returns an error if the API request fails or parsing fails.
-    // Mutex/RwLock poisoning is not documented individually
-    #[allow(clippy::missing_panics_doc)]
     pub async fn request_order_status_reports(
         &self,
         user: &str,
@@ -2582,10 +2512,10 @@ mod tests {
         ));
 
         // Cache the instrument
-        client.cache_instrument(instrument.clone());
+        client.cache_instrument(&instrument);
 
         // Verify it can be looked up by full symbol
-        let instruments = client.instruments.read().unwrap();
+        let instruments = client.instruments.load();
         let by_full_symbol = instruments.get(&Ustr::from("vntls:vCURSOR-USDC-SPOT"));
         assert!(
             by_full_symbol.is_some(),
@@ -2603,7 +2533,7 @@ mod tests {
         drop(instruments);
 
         // Verify it can be looked up by composite key (coin, product_type)
-        let instruments_by_coin = client.instruments_by_coin.read().unwrap();
+        let instruments_by_coin = client.instruments_by_coin.load();
         let by_coin =
             instruments_by_coin.get(&(Ustr::from("vntls:vCURSOR"), HyperliquidProductType::Spot));
         assert!(

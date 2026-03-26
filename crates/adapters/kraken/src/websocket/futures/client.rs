@@ -23,9 +23,9 @@ use std::{
     },
 };
 
-use ahash::AHashMap;
 use arc_swap::ArcSwap;
 use nautilus_common::live::get_runtime;
+use nautilus_core::AtomicMap;
 use nautilus_model::{
     identifiers::{
         AccountId, ClientOrderId, InstrumentId, StrategyId, Symbol, TraderId, VenueOrderId,
@@ -83,9 +83,9 @@ pub struct KrakenFuturesWebSocketClient {
     original_challenge: Arc<tokio::sync::RwLock<Option<String>>>,
     signed_challenge: Arc<tokio::sync::RwLock<Option<String>>>,
     account_id: Arc<RwLock<Option<AccountId>>>,
-    truncated_id_map: Arc<RwLock<AHashMap<String, ClientOrderId>>>,
-    order_instrument_map: Arc<RwLock<AHashMap<String, InstrumentId>>>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    truncated_id_map: Arc<AtomicMap<String, ClientOrderId>>,
+    order_instrument_map: Arc<AtomicMap<String, InstrumentId>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
 }
 
 impl Clone for KrakenFuturesWebSocketClient {
@@ -147,9 +147,9 @@ impl KrakenFuturesWebSocketClient {
             original_challenge: Arc::new(tokio::sync::RwLock::new(None)),
             signed_challenge: Arc::new(tokio::sync::RwLock::new(None)),
             account_id: Arc::new(RwLock::new(None)),
-            truncated_id_map: Arc::new(RwLock::new(AHashMap::new())),
-            order_instrument_map: Arc::new(RwLock::new(AHashMap::new())),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
+            truncated_id_map: Arc::new(AtomicMap::new()),
+            order_instrument_map: Arc::new(AtomicMap::new()),
+            instruments: Arc::new(AtomicMap::new()),
         }
     }
 
@@ -858,19 +858,19 @@ impl KrakenFuturesWebSocketClient {
 
     /// Returns a reference to the truncated ID map.
     #[must_use]
-    pub fn truncated_id_map(&self) -> &Arc<RwLock<AHashMap<String, ClientOrderId>>> {
+    pub fn truncated_id_map(&self) -> &Arc<AtomicMap<String, ClientOrderId>> {
         &self.truncated_id_map
     }
 
     /// Returns a reference to the order-to-instrument map.
     #[must_use]
-    pub fn order_instrument_map(&self) -> &Arc<RwLock<AHashMap<String, InstrumentId>>> {
+    pub fn order_instrument_map(&self) -> &Arc<AtomicMap<String, InstrumentId>> {
         &self.order_instrument_map
     }
 
     /// Returns a reference to the shared instruments map.
     #[must_use]
-    pub fn instruments_shared(&self) -> &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>> {
+    pub fn instruments_shared(&self) -> &Arc<AtomicMap<InstrumentId, InstrumentAny>> {
         &self.instruments
     }
 
@@ -882,18 +882,16 @@ impl KrakenFuturesWebSocketClient {
 
     /// Caches an instrument for execution report parsing.
     pub fn cache_instrument(&self, instrument: InstrumentAny) {
-        if let Ok(mut guard) = self.instruments.write() {
-            guard.insert(instrument.id(), instrument);
-        }
+        self.instruments.insert(instrument.id(), instrument);
     }
 
     /// Caches multiple instruments for execution report parsing.
-    pub fn cache_instruments(&self, instruments: Vec<InstrumentAny>) {
-        if let Ok(mut guard) = self.instruments.write() {
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments.rcu(|m| {
             for instrument in instruments {
-                guard.insert(instrument.id(), instrument);
+                m.insert(instrument.id(), instrument.clone());
             }
-        }
+        });
     }
 
     /// Caches a client order for truncated ID resolution and instrument lookup.
@@ -911,16 +909,13 @@ impl KrakenFuturesWebSocketClient {
     ) {
         let truncated = truncate_cl_ord_id(&client_order_id);
 
-        if truncated != client_order_id.as_str()
-            && let Ok(mut map) = self.truncated_id_map.write()
-        {
-            map.insert(truncated, client_order_id);
+        if truncated != client_order_id.as_str() {
+            self.truncated_id_map.insert(truncated, client_order_id);
         }
 
-        if let Some(venue_id) = venue_order_id
-            && let Ok(mut map) = self.order_instrument_map.write()
-        {
-            map.insert(venue_id.to_string(), instrument_id);
+        if let Some(venue_id) = venue_order_id {
+            self.order_instrument_map
+                .insert(venue_id.to_string(), instrument_id);
         }
     }
 

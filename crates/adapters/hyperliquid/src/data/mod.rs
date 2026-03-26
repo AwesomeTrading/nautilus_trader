@@ -14,7 +14,7 @@
 // -------------------------------------------------------------------------------------------------
 
 use std::sync::{
-    Arc, RwLock,
+    Arc,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -37,7 +37,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    MUTEX_POISONED, UnixNanos,
+    AtomicMap, UnixNanos,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -80,9 +80,9 @@ pub struct HyperliquidDataClient {
     cancellation_token: CancellationToken,
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
     // Maps coin symbols (e.g., "BTC") to instrument IDs (e.g., "BTC-PERP")
-    coin_to_instrument_id: Arc<RwLock<AHashMap<Ustr, InstrumentId>>>,
+    coin_to_instrument_id: Arc<AtomicMap<Ustr, InstrumentId>>,
     clock: &'static AtomicTime,
     #[allow(dead_code)]
     instrument_refresh_active: bool,
@@ -135,8 +135,8 @@ impl HyperliquidDataClient {
             cancellation_token: CancellationToken::new(),
             tasks: Vec::new(),
             data_sender,
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            coin_to_instrument_id: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            coin_to_instrument_id: Arc::new(AtomicMap::new()),
             clock,
             instrument_refresh_active: false,
         })
@@ -153,23 +153,26 @@ impl HyperliquidDataClient {
             .await
             .context("failed to fetch instruments during bootstrap")?;
 
-        let mut instruments_map = self.instruments.write().unwrap();
-        let mut coin_map = self.coin_to_instrument_id.write().unwrap();
+        self.instruments.rcu(|m| {
+            for instrument in &instruments {
+                m.insert(instrument.id(), instrument.clone());
+            }
+        });
+
+        self.coin_to_instrument_id.rcu(|m| {
+            for instrument in &instruments {
+                m.insert(instrument.raw_symbol().inner(), instrument.id());
+            }
+        });
 
         for instrument in &instruments {
-            let instrument_id = instrument.id();
-            instruments_map.insert(instrument_id, instrument.clone());
-
-            let coin = instrument.raw_symbol().inner();
-            coin_map.insert(coin, instrument_id);
-
             self.ws_client.cache_instrument(instrument.clone());
         }
 
         log::info!(
             "Bootstrapped {} instruments with {} coin mappings",
-            instruments_map.len(),
-            coin_map.len()
+            self.instruments.len(),
+            self.coin_to_instrument_id.len()
         );
         Ok(instruments)
     }
@@ -289,8 +292,8 @@ impl HyperliquidDataClient {
         msg: HyperliquidWsMessage,
         ws_client: &HyperliquidWebSocketClient,
         data_sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-        coin_to_instrument_id: &Arc<RwLock<AHashMap<Ustr, InstrumentId>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
+        coin_to_instrument_id: &Arc<AtomicMap<Ustr, InstrumentId>>,
         _venue: Venue,
         clock: &'static AtomicTime,
     ) {
@@ -299,11 +302,11 @@ impl HyperliquidDataClient {
                 let coin = data.coin;
                 log::debug!("Received BBO message for coin: {coin}");
 
-                let coin_map = coin_to_instrument_id.read().unwrap();
+                let coin_map = coin_to_instrument_id.load();
                 let instrument_id = coin_map.get(&data.coin);
 
                 if let Some(&instrument_id) = instrument_id {
-                    let instruments_map = instruments.read().unwrap();
+                    let instruments_map = instruments.load();
                     if let Some(instrument) = instruments_map.get(&instrument_id) {
                         let ts_init = clock.get_time_ns();
 
@@ -340,10 +343,10 @@ impl HyperliquidDataClient {
 
                 for trade_data in data {
                     let coin = trade_data.coin;
-                    let coin_map = coin_to_instrument_id.read().unwrap();
+                    let coin_map = coin_to_instrument_id.load();
 
                     if let Some(&instrument_id) = coin_map.get(&coin) {
-                        let instruments_map = instruments.read().unwrap();
+                        let instruments_map = instruments.load();
                         if let Some(instrument) = instruments_map.get(&instrument_id) {
                             let ts_init = clock.get_time_ns();
 
@@ -369,9 +372,9 @@ impl HyperliquidDataClient {
                 let coin = data.coin;
                 log::debug!("Received L2 book update for coin: {coin}");
 
-                let coin_map = coin_to_instrument_id.read().unwrap();
+                let coin_map = coin_to_instrument_id.load();
                 if let Some(&instrument_id) = coin_map.get(&data.coin) {
-                    let instruments_map = instruments.read().unwrap();
+                    let instruments_map = instruments.load();
                     if let Some(instrument) = instruments_map.get(&instrument_id) {
                         let ts_init = clock.get_time_ns();
 
@@ -402,10 +405,10 @@ impl HyperliquidDataClient {
 
                 if let Some(bar_type) = ws_client.get_bar_type(&data.s, &data.i) {
                     let coin = Ustr::from(&data.s);
-                    let coin_map = coin_to_instrument_id.read().unwrap();
+                    let coin_map = coin_to_instrument_id.load();
 
                     if let Some(&instrument_id) = coin_map.get(&coin) {
-                        let instruments_map = instruments.read().unwrap();
+                        let instruments_map = instruments.load();
                         if let Some(instrument) = instruments_map.get(&instrument_id) {
                             let ts_init = clock.get_time_ns();
 
@@ -537,10 +540,7 @@ impl DataClient for HyperliquidDataClient {
             log::error!("Error disconnecting WebSocket client: {e}");
         }
 
-        {
-            let mut instruments = self.instruments.write().unwrap();
-            instruments.clear();
-        }
+        self.instruments.store(AHashMap::new());
 
         self.is_connected.store(false, Ordering::Relaxed);
         log::info!("Disconnected: client_id={}", self.client_id);
@@ -567,18 +567,17 @@ impl DataClient for HyperliquidDataClient {
         get_runtime().spawn(async move {
             match http.request_instruments().await {
                 Ok(instruments) => {
-                    {
-                        let mut instruments_map = instruments_cache.write().expect(MUTEX_POISONED);
-                        let mut coin_to_id = coin_map.write().expect(MUTEX_POISONED);
-
-                        for instrument in &instruments {
-                            let instrument_id = instrument.id();
-                            instruments_map.insert(instrument_id, instrument.clone());
-                            let coin = instrument.raw_symbol().inner();
-                            coin_to_id.insert(coin, instrument_id);
-                            ws_instruments.insert(coin, instrument.clone());
-                        }
-                    }
+                    instruments_cache.rcu(|instruments_map| {
+                        coin_map.rcu(|coin_to_id| {
+                            for instrument in &instruments {
+                                let instrument_id = instrument.id();
+                                instruments_map.insert(instrument_id, instrument.clone());
+                                let coin = instrument.raw_symbol().inner();
+                                coin_to_id.insert(coin, instrument_id);
+                                ws_instruments.insert(coin, instrument.clone());
+                            }
+                        });
+                    });
 
                     let response = DataResponse::Instruments(InstrumentsResponse::new(
                         request_id,
@@ -623,18 +622,17 @@ impl DataClient for HyperliquidDataClient {
         get_runtime().spawn(async move {
             match http.request_instruments().await {
                 Ok(all_instruments) => {
-                    {
-                        let mut instruments_map = instruments_cache.write().expect(MUTEX_POISONED);
-                        let mut coin_to_id = coin_map.write().expect(MUTEX_POISONED);
-
-                        for instrument in &all_instruments {
-                            let id = instrument.id();
-                            instruments_map.insert(id, instrument.clone());
-                            let coin = instrument.raw_symbol().inner();
-                            coin_to_id.insert(coin, id);
-                            ws_instruments.insert(coin, instrument.clone());
-                        }
-                    }
+                    instruments_cache.rcu(|instruments_map| {
+                        coin_map.rcu(|coin_to_id| {
+                            for instrument in &all_instruments {
+                                let id = instrument.id();
+                                instruments_map.insert(id, instrument.clone());
+                                let coin = instrument.raw_symbol().inner();
+                                coin_to_id.insert(coin, id);
+                                ws_instruments.insert(coin, instrument.clone());
+                            }
+                        });
+                    });
 
                     if let Some(instrument) = all_instruments
                         .into_iter()
@@ -742,7 +740,7 @@ impl DataClient for HyperliquidDataClient {
     }
 
     fn subscribe_instrument(&mut self, cmd: &SubscribeInstrument) -> anyhow::Result<()> {
-        let instruments = self.instruments.read().unwrap();
+        let instruments = self.instruments.load();
         if let Some(instrument) = instruments.get(&cmd.instrument_id) {
             if let Err(e) = self
                 .data_sender
@@ -943,13 +941,10 @@ impl DataClient for HyperliquidDataClient {
     fn subscribe_bars(&mut self, subscription: &SubscribeBars) -> anyhow::Result<()> {
         log::debug!("Subscribing to bars: {}", subscription.bar_type);
 
-        let instruments = self.instruments.read().unwrap();
         let instrument_id = subscription.bar_type.instrument_id();
-        if !instruments.contains_key(&instrument_id) {
+        if !self.instruments.contains_key(&instrument_id) {
             anyhow::bail!("Instrument {instrument_id} not found");
         }
-
-        drop(instruments);
 
         let bar_type = subscription.bar_type;
         let ws = self.ws_client.clone();
@@ -1013,17 +1008,15 @@ async fn request_bars_from_http(
     start: Option<DateTime<Utc>>,
     end: Option<DateTime<Utc>>,
     limit: Option<u32>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
 ) -> anyhow::Result<Vec<Bar>> {
     // Get instrument details for precision
     let instrument_id = bar_type.instrument_id();
-    let instrument = {
-        let guard = instruments.read().unwrap();
-        guard
-            .get(&instrument_id)
-            .cloned()
-            .context("instrument not found in cache")?
-    };
+    let instrument = instruments
+        .load()
+        .get(&instrument_id)
+        .cloned()
+        .context("instrument not found in cache")?;
 
     let price_precision = instrument.price_precision();
     let size_precision = instrument.size_precision();

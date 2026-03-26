@@ -22,7 +22,7 @@ use std::{
     fmt::Debug,
     path::PathBuf,
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -43,7 +43,7 @@ use nautilus_common::{
         },
     },
 };
-use nautilus_core::{MUTEX_POISONED, string::REDACTED, time::AtomicTime};
+use nautilus_core::{AtomicMap, MUTEX_POISONED, string::REDACTED, time::AtomicTime};
 use nautilus_model::{
     enums::BarAggregation,
     identifiers::{ClientId, Symbol, Venue},
@@ -158,7 +158,7 @@ pub struct DatabentoDataClient {
     /// Publisher to venue mapping.
     publisher_venue_map: Arc<IndexMap<PublisherId, Venue>>,
     /// Symbol to venue mapping (for caching).
-    symbol_venue_map: Arc<RwLock<AHashMap<Symbol, Venue>>>,
+    symbol_venue_map: Arc<AtomicMap<Symbol, Venue>>,
     /// Data event sender for forwarding data to the async runner.
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
 }
@@ -206,7 +206,7 @@ impl DatabentoDataClient {
             task_handles: Arc::new(Mutex::new(Vec::new())),
             cancellation_token: CancellationToken::new(),
             publisher_venue_map: Arc::new(publisher_venue_map),
-            symbol_venue_map: Arc::new(RwLock::new(AHashMap::new())),
+            symbol_venue_map: Arc::new(AtomicMap::new()),
             data_sender,
         })
     }
@@ -495,10 +495,9 @@ impl DataClient for DatabentoDataClient {
             self.send_command_to_dataset(&dataset, LiveCommand::Start)?;
         }
 
-        let symbol = instrument_id_to_symbol_string(
-            cmd.instrument_id,
-            &mut self.symbol_venue_map.write().unwrap(),
-        );
+        self.symbol_venue_map
+            .insert(cmd.instrument_id.symbol, cmd.instrument_id.venue);
+        let symbol = cmd.instrument_id.symbol.to_string();
 
         let subscription = Subscription::builder()
             .schema(databento::dbn::Schema::Definition)
@@ -531,10 +530,9 @@ impl DataClient for DatabentoDataClient {
             self.send_command_to_dataset(&dataset, LiveCommand::Start)?;
         }
 
-        let symbol = instrument_id_to_symbol_string(
-            cmd.instrument_id,
-            &mut self.symbol_venue_map.write().unwrap(),
-        );
+        self.symbol_venue_map
+            .insert(cmd.instrument_id.symbol, cmd.instrument_id.venue);
+        let symbol = cmd.instrument_id.symbol.to_string();
 
         let subscription = Subscription::builder()
             .schema(databento::dbn::Schema::Mbp1) // Market by price level 1 for quotes
@@ -567,10 +565,9 @@ impl DataClient for DatabentoDataClient {
             self.send_command_to_dataset(&dataset, LiveCommand::Start)?;
         }
 
-        let symbol = instrument_id_to_symbol_string(
-            cmd.instrument_id,
-            &mut self.symbol_venue_map.write().unwrap(),
-        );
+        self.symbol_venue_map
+            .insert(cmd.instrument_id.symbol, cmd.instrument_id.venue);
+        let symbol = cmd.instrument_id.symbol.to_string();
 
         let subscription = Subscription::builder()
             .schema(databento::dbn::Schema::Trades)
@@ -603,10 +600,9 @@ impl DataClient for DatabentoDataClient {
             self.send_command_to_dataset(&dataset, LiveCommand::Start)?;
         }
 
-        let symbol = instrument_id_to_symbol_string(
-            cmd.instrument_id,
-            &mut self.symbol_venue_map.write().unwrap(),
-        );
+        self.symbol_venue_map
+            .insert(cmd.instrument_id.symbol, cmd.instrument_id.venue);
+        let symbol = cmd.instrument_id.symbol.to_string();
 
         let subscription = Subscription::builder()
             .schema(databento::dbn::Schema::Mbo) // Market by order for book deltas
@@ -642,10 +638,9 @@ impl DataClient for DatabentoDataClient {
             self.send_command_to_dataset(&dataset, LiveCommand::Start)?;
         }
 
-        let symbol = instrument_id_to_symbol_string(
-            cmd.instrument_id,
-            &mut self.symbol_venue_map.write().unwrap(),
-        );
+        self.symbol_venue_map
+            .insert(cmd.instrument_id.symbol, cmd.instrument_id.venue);
+        let symbol = cmd.instrument_id.symbol.to_string();
 
         let subscription = Subscription::builder()
             .schema(databento::dbn::Schema::Status)

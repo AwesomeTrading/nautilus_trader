@@ -18,7 +18,7 @@
 use std::{
     future::Future,
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
@@ -43,7 +43,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    UnixNanos,
+    AtomicMap, UnixNanos,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -85,7 +85,7 @@ pub struct KrakenSpotDataClient {
     is_connected: AtomicBool,
     cancellation_token: CancellationToken,
     tasks: Vec<JoinHandle<()>>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
 }
 
@@ -116,7 +116,7 @@ impl KrakenSpotDataClient {
             is_connected: AtomicBool::new(false),
             cancellation_token,
             tasks: Vec::new(),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
             data_sender: get_data_event_sender(),
         })
     }
@@ -124,19 +124,13 @@ impl KrakenSpotDataClient {
     /// Returns the cached instruments.
     #[must_use]
     pub fn instruments(&self) -> Vec<InstrumentAny> {
-        self.instruments
-            .read()
-            .map(|guard| guard.values().cloned().collect())
-            .unwrap_or_default()
+        self.instruments.load().values().cloned().collect()
     }
 
     /// Returns a cached instrument by ID.
     #[must_use]
     pub fn get_instrument(&self, instrument_id: &InstrumentId) -> Option<InstrumentAny> {
-        self.instruments
-            .read()
-            .ok()
-            .and_then(|guard| guard.get(instrument_id).cloned())
+        self.instruments.load().get(instrument_id).cloned()
     }
 
     async fn load_instruments(&self) -> anyhow::Result<Vec<InstrumentAny>> {
@@ -146,11 +140,11 @@ impl KrakenSpotDataClient {
             .await
             .context("Failed to load spot instruments")?;
 
-        if let Ok(mut guard) = self.instruments.write() {
+        self.instruments.rcu(|m| {
             for instrument in &instruments {
-                guard.insert(instrument.id(), instrument.clone());
+                m.insert(instrument.id(), instrument.clone());
             }
-        }
+        });
 
         self.http.cache_instruments(&instruments);
 
@@ -221,14 +215,11 @@ impl KrakenSpotDataClient {
     }
 
     fn lookup_instrument(
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
         symbol: &str,
     ) -> Option<InstrumentAny> {
         let instrument_id = InstrumentId::new(Symbol::new(symbol), *KRAKEN_VENUE);
-        instruments
-            .read()
-            .ok()
-            .and_then(|guard| guard.get(&instrument_id).cloned())
+        instruments.load().get(&instrument_id).cloned()
     }
 
     fn flush_ohlc_buffer(
@@ -249,7 +240,7 @@ impl KrakenSpotDataClient {
     fn handle_ws_message(
         msg: KrakenSpotWsMessage,
         sender: &tokio::sync::mpsc::UnboundedSender<DataEvent>,
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
         book_sequence: &Arc<AtomicU64>,
         ohlc_buffer: &OhlcBuffer,
         clock: &'static AtomicTime,
@@ -401,9 +392,7 @@ impl DataClient for KrakenSpotDataClient {
             let _ = ws.close().await;
         });
 
-        if let Ok(mut instruments) = self.instruments.write() {
-            instruments.clear();
-        }
+        self.instruments.store(ahash::AHashMap::new());
 
         self.is_connected.store(false, Ordering::Relaxed);
         self.cancellation_token = CancellationToken::new();
@@ -685,11 +674,11 @@ impl DataClient for KrakenSpotDataClient {
         get_runtime().spawn(async move {
             match http.request_instruments(None).await {
                 Ok(instruments) => {
-                    if let Ok(mut guard) = instruments_cache.write() {
+                    instruments_cache.rcu(|m| {
                         for instrument in &instruments {
-                            guard.insert(instrument.id(), instrument.clone());
+                            m.insert(instrument.id(), instrument.clone());
                         }
-                    }
+                    });
                     http.cache_instruments(&instruments);
 
                     let response = DataResponse::Instruments(InstrumentsResponse::new(
@@ -727,35 +716,31 @@ impl DataClient for KrakenSpotDataClient {
         let clock = self.clock;
 
         get_runtime().spawn(async move {
-            {
-                if let Ok(guard) = instruments.read()
-                    && let Some(instrument) = guard.get(&instrument_id)
-                {
-                    let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
-                        request_id,
-                        client_id,
-                        instrument.id(),
-                        instrument.clone(),
-                        start_nanos,
-                        end_nanos,
-                        clock.get_time_ns(),
-                        params,
-                    )));
+            if let Some(instrument) = instruments.load().get(&instrument_id) {
+                let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
+                    request_id,
+                    client_id,
+                    instrument.id(),
+                    instrument.clone(),
+                    start_nanos,
+                    end_nanos,
+                    clock.get_time_ns(),
+                    params,
+                )));
 
-                    if let Err(e) = sender.send(DataEvent::Response(response)) {
-                        log::error!("Failed to send instrument response: {e}");
-                    }
-                    return;
+                if let Err(e) = sender.send(DataEvent::Response(response)) {
+                    log::error!("Failed to send instrument response: {e}");
                 }
+                return;
             }
 
             match http.request_instruments(None).await {
                 Ok(all_instruments) => {
-                    if let Ok(mut guard) = instruments.write() {
+                    instruments.rcu(|m| {
                         for instrument in &all_instruments {
-                            guard.insert(instrument.id(), instrument.clone());
+                            m.insert(instrument.id(), instrument.clone());
                         }
-                    }
+                    });
                     http.cache_instruments(&all_instruments);
 
                     let instrument = all_instruments

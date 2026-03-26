@@ -15,17 +15,14 @@
 
 //! Python bindings for the Databento live client.
 
-use std::{
-    fs,
-    path::PathBuf,
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::{fs, path::PathBuf, str::FromStr, sync::Arc};
 
-use ahash::AHashMap;
 use databento::{dbn, live::Subscription};
 use indexmap::IndexMap;
-use nautilus_core::python::{IntoPyObjectNautilusExt, to_pyruntime_err, to_pyvalue_err};
+use nautilus_core::{
+    AtomicMap,
+    python::{IntoPyObjectNautilusExt, to_pyruntime_err, to_pyvalue_err},
+};
 use nautilus_model::{
     identifiers::{InstrumentId, Symbol, Venue},
     python::{data::data_to_pycapsule, instruments::instrument_any_to_pyobject},
@@ -36,7 +33,7 @@ use time::OffsetDateTime;
 use super::types::DatabentoSubscriptionAck;
 use crate::{
     live::{DatabentoFeedHandler, LiveCommand, LiveMessage},
-    symbology::{check_consistent_symbology, infer_symbology_type, instrument_id_to_symbol_string},
+    symbology::{check_consistent_symbology, infer_symbology_type},
     types::DatabentoPublisher,
 };
 
@@ -60,7 +57,7 @@ pub struct DatabentoLiveClient {
     cmd_rx: Option<tokio::sync::mpsc::UnboundedReceiver<LiveCommand>>,
     buffer_size: usize,
     publisher_venue_map: IndexMap<u16, Venue>,
-    symbol_venue_map: Arc<RwLock<AHashMap<Symbol, Venue>>>,
+    symbol_venue_map: Arc<AtomicMap<Symbol, Venue>>,
     use_exchange_as_venue: bool,
     bars_timestamp_on_close: bool,
     reconnect_timeout_mins: Option<u64>,
@@ -183,7 +180,7 @@ impl DatabentoLiveClient {
             is_running: false,
             is_closed: false,
             publisher_venue_map,
-            symbol_venue_map: Arc::new(RwLock::new(AHashMap::new())),
+            symbol_venue_map: Arc::new(AtomicMap::new()),
             use_exchange_as_venue,
             bars_timestamp_on_close: bars_timestamp_on_close.unwrap_or(true),
             reconnect_timeout_mins,
@@ -210,15 +207,14 @@ impl DatabentoLiveClient {
         start: Option<u64>,
         snapshot: Option<bool>,
     ) -> PyResult<()> {
-        let mut symbol_venue_map = self
-            .symbol_venue_map
-            .write()
-            .map_err(|e| to_pyruntime_err(format!("symbol_venue_map lock poisoned: {e}")))?;
+        self.symbol_venue_map.rcu(|m| {
+            for id in &instrument_ids {
+                m.entry(id.symbol).or_insert(id.venue);
+            }
+        });
         let symbols: Vec<String> = instrument_ids
             .iter()
-            .map(|instrument_id| {
-                instrument_id_to_symbol_string(*instrument_id, &mut symbol_venue_map)
-            })
+            .map(|id| id.symbol.to_string())
             .collect();
         let first_symbol = symbols
             .first()

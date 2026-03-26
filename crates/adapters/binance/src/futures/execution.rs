@@ -24,7 +24,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use ahash::AHashSet;
 use anyhow::Context;
 use async_trait::async_trait;
 use futures_util::{StreamExt, pin_mut};
@@ -39,7 +38,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    MUTEX_POISONED, UUID4, UnixNanos,
+    AtomicSet, MUTEX_POISONED, UUID4, UnixNanos,
     datetime::{NANOSECONDS_IN_MILLISECOND, mins_to_nanos},
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -145,8 +144,8 @@ pub struct BinanceFuturesExecutionClient {
     ws_trading_handle: Mutex<Option<JoinHandle<()>>>,
     listen_key: Arc<RwLock<Option<String>>>,
     cancellation_token: CancellationToken,
-    triggered_algo_order_ids: Arc<RwLock<AHashSet<ClientOrderId>>>,
-    algo_client_order_ids: Arc<RwLock<AHashSet<ClientOrderId>>>,
+    triggered_algo_order_ids: Arc<AtomicSet<ClientOrderId>>,
+    algo_client_order_ids: Arc<AtomicSet<ClientOrderId>>,
     ws_task: Mutex<Option<JoinHandle<()>>>,
     keepalive_task: Mutex<Option<JoinHandle<()>>>,
     pending_tasks: Mutex<Vec<JoinHandle<()>>>,
@@ -243,8 +242,8 @@ impl BinanceFuturesExecutionClient {
             ws_trading_handle: Mutex::new(None),
             listen_key: Arc::new(RwLock::new(None)),
             cancellation_token: CancellationToken::new(),
-            triggered_algo_order_ids: Arc::new(RwLock::new(AHashSet::new())),
-            algo_client_order_ids: Arc::new(RwLock::new(AHashSet::new())),
+            triggered_algo_order_ids: Arc::new(AtomicSet::new()),
+            algo_client_order_ids: Arc::new(AtomicSet::new()),
             ws_task: Mutex::new(None),
             keepalive_task: Mutex::new(None),
             pending_tasks: Mutex::new(Vec::new()),
@@ -650,8 +649,6 @@ impl BinanceFuturesExecutionClient {
             .is_some_and(|order| is_algo_order_type(order.order_type()));
         let is_triggered = self
             .triggered_algo_order_ids
-            .read()
-            .expect("triggered_algo_order_ids lock poisoned")
             .contains(&command.client_order_id);
         let use_algo_cancel = is_algo && !is_triggered;
 
@@ -2059,8 +2056,8 @@ fn dispatch_ws_message(
     product_type: BinanceProductType,
     clock: &'static AtomicTime,
     dispatch_state: &WsDispatchState,
-    triggered_algo_ids: &Arc<RwLock<AHashSet<ClientOrderId>>>,
-    algo_client_ids: &Arc<RwLock<AHashSet<ClientOrderId>>>,
+    triggered_algo_ids: &Arc<AtomicSet<ClientOrderId>>,
+    algo_client_ids: &Arc<AtomicSet<ClientOrderId>>,
 ) {
     match msg {
         BinanceFuturesWsStreamsMessage::OrderUpdate(update) => {
@@ -2395,8 +2392,8 @@ fn dispatch_algo_update(
     product_type: BinanceProductType,
     clock: &'static AtomicTime,
     dispatch_state: &WsDispatchState,
-    triggered_algo_ids: &Arc<RwLock<AHashSet<ClientOrderId>>>,
-    algo_client_ids: &Arc<RwLock<AHashSet<ClientOrderId>>>,
+    triggered_algo_ids: &Arc<AtomicSet<ClientOrderId>>,
+    algo_client_ids: &Arc<AtomicSet<ClientOrderId>>,
 ) {
     use crate::common::enums::BinanceAlgoStatus;
 
@@ -2429,10 +2426,7 @@ fn dispatch_algo_update(
 
     match algo_data.algo_status {
         BinanceAlgoStatus::New => {
-            algo_client_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .insert(client_order_id);
+            algo_client_ids.insert(client_order_id);
         }
         BinanceAlgoStatus::Triggering => {
             log::info!(
@@ -2443,10 +2437,7 @@ fn dispatch_algo_update(
             );
         }
         BinanceAlgoStatus::Triggered => {
-            triggered_algo_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .insert(client_order_id);
+            triggered_algo_ids.insert(client_order_id);
             log::info!(
                 "Algo order triggered: client_order_id={}, algo_id={}, actual_order_id={:?}",
                 algo_data.client_algo_id,
@@ -2455,14 +2446,8 @@ fn dispatch_algo_update(
             );
         }
         BinanceAlgoStatus::Canceled | BinanceAlgoStatus::Expired => {
-            algo_client_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .remove(&client_order_id);
-            triggered_algo_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .remove(&client_order_id);
+            algo_client_ids.remove(&client_order_id);
+            triggered_algo_ids.remove(&client_order_id);
 
             if let Some(identity) = identity {
                 let venue_order_id = algo_data
@@ -2498,14 +2483,8 @@ fn dispatch_algo_update(
             }
         }
         BinanceAlgoStatus::Rejected => {
-            algo_client_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .remove(&client_order_id);
-            triggered_algo_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .remove(&client_order_id);
+            algo_client_ids.remove(&client_order_id);
+            triggered_algo_ids.remove(&client_order_id);
 
             if let Some(identity) = identity {
                 dispatch_state.cleanup_terminal(client_order_id);
@@ -2530,14 +2509,8 @@ fn dispatch_algo_update(
             }
         }
         BinanceAlgoStatus::Finished => {
-            algo_client_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .remove(&client_order_id);
-            triggered_algo_ids
-                .write()
-                .expect(MUTEX_POISONED)
-                .remove(&client_order_id);
+            algo_client_ids.remove(&client_order_id);
+            triggered_algo_ids.remove(&client_order_id);
             dispatch_state.cleanup_terminal(client_order_id);
 
             let executed_qty: f64 = algo_data

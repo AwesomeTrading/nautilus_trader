@@ -23,9 +23,9 @@ use std::{
     },
 };
 
-use ahash::AHashMap;
 use arc_swap::ArcSwap;
 use nautilus_common::live::get_runtime;
+use nautilus_core::AtomicMap;
 use nautilus_model::{
     data::BarType,
     enums::BarAggregation,
@@ -83,8 +83,8 @@ pub struct KrakenSpotWebSocketClient {
     req_id_counter: Arc<tokio::sync::RwLock<u64>>,
     auth_token: Arc<tokio::sync::RwLock<Option<String>>>,
     account_id: Arc<RwLock<Option<AccountId>>>,
-    truncated_id_map: Arc<RwLock<AHashMap<String, ClientOrderId>>>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    truncated_id_map: Arc<AtomicMap<String, ClientOrderId>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
 }
 
 impl Clone for KrakenSpotWebSocketClient {
@@ -138,8 +138,8 @@ impl KrakenSpotWebSocketClient {
             req_id_counter: Arc::new(tokio::sync::RwLock::new(0)),
             auth_token: Arc::new(tokio::sync::RwLock::new(None)),
             account_id: Arc::new(RwLock::new(None)),
-            truncated_id_map: Arc::new(RwLock::new(AHashMap::new())),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
+            truncated_id_map: Arc::new(AtomicMap::new()),
+            instruments: Arc::new(AtomicMap::new()),
         }
     }
 
@@ -772,9 +772,7 @@ impl KrakenSpotWebSocketClient {
 
     /// Caches an instrument for execution report parsing.
     pub fn cache_instrument(&self, instrument: InstrumentAny) {
-        if let Ok(mut guard) = self.instruments.write() {
-            guard.insert(instrument.id(), instrument);
-        }
+        self.instruments.insert(instrument.id(), instrument);
     }
 
     /// Returns a shared reference to the account ID.
@@ -783,7 +781,7 @@ impl KrakenSpotWebSocketClient {
     }
 
     /// Returns a shared reference to the truncated ID map.
-    pub fn truncated_id_map(&self) -> &Arc<RwLock<AHashMap<String, ClientOrderId>>> {
+    pub fn truncated_id_map(&self) -> &Arc<AtomicMap<String, ClientOrderId>> {
         &self.truncated_id_map
     }
 
@@ -798,10 +796,8 @@ impl KrakenSpotWebSocketClient {
     ) {
         let truncated = crate::common::parse::truncate_cl_ord_id(&client_order_id);
 
-        if truncated != client_order_id.as_str()
-            && let Ok(mut map) = self.truncated_id_map.write()
-        {
-            map.insert(truncated, client_order_id);
+        if truncated != client_order_id.as_str() {
+            self.truncated_id_map.insert(truncated, client_order_id);
         }
     }
 

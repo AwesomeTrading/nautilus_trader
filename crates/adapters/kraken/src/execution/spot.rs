@@ -17,11 +17,10 @@
 
 use std::{
     future::Future,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use ahash::AHashMap;
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -36,7 +35,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    UnixNanos,
+    AtomicMap, UnixNanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
@@ -83,9 +82,9 @@ pub struct KrakenSpotExecutionClient {
     cancellation_token: CancellationToken,
     ws_stream_handle: Option<JoinHandle<()>>,
     pending_tasks: Mutex<Vec<JoinHandle<()>>>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-    order_qty_cache: Arc<RwLock<AHashMap<String, f64>>>,
-    truncated_id_map: Arc<RwLock<AHashMap<String, ClientOrderId>>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
+    order_qty_cache: Arc<AtomicMap<String, f64>>,
+    truncated_id_map: Arc<AtomicMap<String, ClientOrderId>>,
 }
 
 impl KrakenSpotExecutionClient {
@@ -141,9 +140,9 @@ impl KrakenSpotExecutionClient {
             cancellation_token,
             ws_stream_handle: None,
             pending_tasks: Mutex::new(Vec::new()),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            order_qty_cache: Arc::new(RwLock::new(AHashMap::new())),
-            truncated_id_map: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            order_qty_cache: Arc::new(AtomicMap::new()),
+            truncated_id_map: Arc::new(AtomicMap::new()),
         })
     }
 
@@ -213,14 +212,12 @@ impl KrakenSpotExecutionClient {
 
         let kraken_cl_ord_id = truncate_cl_ord_id(&client_order_id);
 
-        if let Ok(mut cache) = self.order_qty_cache.write() {
-            cache.insert(kraken_cl_ord_id.clone(), quantity.as_f64());
-        }
+        self.order_qty_cache
+            .insert(kraken_cl_ord_id.clone(), quantity.as_f64());
 
-        if kraken_cl_ord_id != client_order_id.as_str()
-            && let Ok(mut map) = self.truncated_id_map.write()
-        {
-            map.insert(kraken_cl_ord_id, client_order_id);
+        if kraken_cl_ord_id != client_order_id.as_str() {
+            self.truncated_id_map
+                .insert(kraken_cl_ord_id, client_order_id);
         }
 
         let http = self.http.clone();
@@ -426,33 +423,30 @@ impl KrakenSpotExecutionClient {
     }
 
     fn lookup_instrument(
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
         symbol: &str,
     ) -> Option<InstrumentAny> {
         let instrument_id = InstrumentId::new(Symbol::new(symbol), *KRAKEN_VENUE);
-        instruments
-            .read()
-            .ok()
-            .and_then(|guard| guard.get(&instrument_id).cloned())
+        instruments.load().get(&instrument_id).cloned()
     }
 
     fn resolve_client_order_id(
         truncated: &str,
-        truncated_id_map: &Arc<RwLock<AHashMap<String, ClientOrderId>>>,
+        truncated_id_map: &Arc<AtomicMap<String, ClientOrderId>>,
     ) -> ClientOrderId {
         truncated_id_map
-            .read()
-            .ok()
-            .and_then(|map| map.get(truncated).copied())
+            .load()
+            .get(truncated)
+            .copied()
             .unwrap_or_else(|| ClientOrderId::new(truncated))
     }
 
     fn handle_ws_message(
         msg: KrakenSpotWsMessage,
         emitter: &ExecutionEventEmitter,
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-        order_qty_cache: &Arc<RwLock<AHashMap<String, f64>>>,
-        truncated_id_map: &Arc<RwLock<AHashMap<String, ClientOrderId>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
+        order_qty_cache: &Arc<AtomicMap<String, f64>>,
+        truncated_id_map: &Arc<AtomicMap<String, ClientOrderId>>,
         account_id: AccountId,
         clock: &'static AtomicTime,
     ) {
@@ -477,14 +471,13 @@ impl KrakenSpotExecutionClient {
                         continue;
                     };
 
-                    let cached_qty = exec.cl_ord_id.as_ref().and_then(|id| {
-                        order_qty_cache.read().ok().and_then(|c| c.get(id).copied())
-                    });
+                    let cached_qty = exec
+                        .cl_ord_id
+                        .as_ref()
+                        .and_then(|id| order_qty_cache.load().get(id).copied());
 
-                    if let (Some(qty), Some(cl_ord_id)) = (exec.order_qty, &exec.cl_ord_id)
-                        && let Ok(mut cache) = order_qty_cache.write()
-                    {
-                        cache.insert(cl_ord_id.clone(), qty);
+                    if let (Some(qty), Some(cl_ord_id)) = (exec.order_qty, &exec.cl_ord_id) {
+                        order_qty_cache.insert(cl_ord_id.clone(), qty);
                     }
 
                     match parse_ws_order_status_report(
@@ -654,11 +647,11 @@ impl ExecutionClient for KrakenSpotExecutionClient {
 
         self.spawn_message_handler()?;
 
-        if let Ok(mut guard) = self.instruments.write() {
+        self.instruments.rcu(|m| {
             for instrument in self.http.instruments_cache.load().values() {
-                guard.insert(instrument.id(), instrument.clone());
+                m.insert(instrument.id(), instrument.clone());
             }
-        }
+        });
 
         self.ws
             .subscribe_executions(false, false)

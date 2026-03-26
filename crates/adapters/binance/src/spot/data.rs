@@ -16,7 +16,7 @@
 //! Live market data client implementation for the Binance Spot adapter.
 
 use std::sync::{
-    Arc, RwLock,
+    Arc,
     atomic::{AtomicBool, Ordering},
 };
 
@@ -39,7 +39,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    AtomicMap, MUTEX_POISONED,
+    AtomicMap,
     datetime::datetime_to_unix_nanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
@@ -82,8 +82,8 @@ pub struct BinanceSpotDataClient {
     cancellation_token: CancellationToken,
     tasks: Vec<JoinHandle<()>>,
     data_sender: tokio::sync::mpsc::UnboundedSender<DataEvent>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-    status_cache: Arc<RwLock<AHashMap<InstrumentId, MarketStatusAction>>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
+    status_cache: Arc<AtomicMap<InstrumentId, MarketStatusAction>>,
 }
 
 impl BinanceSpotDataClient {
@@ -139,8 +139,8 @@ impl BinanceSpotDataClient {
             cancellation_token: CancellationToken::new(),
             tasks: Vec::new(),
             data_sender,
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            status_cache: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            status_cache: Arc::new(AtomicMap::new()),
         })
     }
 
@@ -224,11 +224,10 @@ impl BinanceSpotDataClient {
 }
 
 fn upsert_instrument(
-    cache: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+    cache: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
     instrument: InstrumentAny,
 ) {
-    let mut guard = cache.write().expect(MUTEX_POISONED);
-    guard.insert(instrument.id(), instrument);
+    cache.insert(instrument.id(), instrument);
 }
 
 #[async_trait::async_trait(?Send)]
@@ -306,11 +305,11 @@ impl DataClient for BinanceSpotDataClient {
         self.http_client.cache_instruments(instruments.clone());
 
         {
-            let mut inst_guard = self.instruments.write().expect(MUTEX_POISONED);
-            let mut status_guard = self.status_cache.write().expect(MUTEX_POISONED);
+            let mut inst_map = AHashMap::new();
+            let mut status_map = AHashMap::new();
 
             for instrument in &instruments {
-                inst_guard.insert(instrument.id(), instrument.clone());
+                inst_map.insert(instrument.id(), instrument.clone());
             }
 
             // Seed status cache from exchange info (no events emitted on initial connect)
@@ -318,11 +317,14 @@ impl DataClient for BinanceSpotDataClient {
                 let instrument_id =
                     InstrumentId::new(Symbol::from(symbol_info.symbol.as_str()), *BINANCE_VENUE);
 
-                if inst_guard.contains_key(&instrument_id) {
+                if inst_map.contains_key(&instrument_id) {
                     let action = MarketStatusAction::from(SymbolStatus::from(symbol_info.status));
-                    status_guard.insert(instrument_id, action);
+                    status_map.insert(instrument_id, action);
                 }
             }
+
+            self.instruments.store(inst_map);
+            self.status_cache.store(status_map);
         }
 
         for instrument in instruments.clone() {
@@ -382,8 +384,7 @@ impl DataClient for BinanceSpotDataClient {
                             match http.exchange_info().await {
                                 Ok(info) => {
                                     let ts = clock.get_time_ns();
-                                    let inst_guard = poll_instruments.read()
-                                        .expect(MUTEX_POISONED);
+                                    let inst_guard = poll_instruments.load();
 
                                     let mut new_statuses = AHashMap::new();
                                     for symbol_info in &info.symbols {
@@ -403,11 +404,12 @@ impl DataClient for BinanceSpotDataClient {
                                     }
                                     drop(inst_guard);
 
-                                    let mut cache = poll_status_cache.write()
-                                        .expect(MUTEX_POISONED);
+                                    let mut cache =
+                                        (**poll_status_cache.load()).clone();
                                     diff_and_emit_statuses(
                                         &new_statuses, &mut cache, &poll_sender, ts, ts,
                                     );
+                                    poll_status_cache.store(cache);
                                 }
                                 Err(e) => {
                                     log::warn!("Instrument status poll failed: {e}");

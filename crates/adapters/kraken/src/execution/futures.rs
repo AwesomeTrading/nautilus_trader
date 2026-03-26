@@ -17,11 +17,10 @@
 
 use std::{
     future::Future,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use ahash::AHashMap;
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -35,7 +34,7 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    UnixNanos,
+    AtomicMap, UnixNanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
@@ -80,11 +79,11 @@ pub struct KrakenFuturesExecutionClient {
     cancellation_token: CancellationToken,
     ws_stream_handle: Option<JoinHandle<()>>,
     pending_tasks: Mutex<Vec<JoinHandle<()>>>,
-    instruments: Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-    truncated_id_map: Arc<RwLock<AHashMap<String, ClientOrderId>>>,
-    order_instrument_map: Arc<RwLock<AHashMap<String, InstrumentId>>>,
-    venue_client_map: Arc<RwLock<AHashMap<String, ClientOrderId>>>,
-    venue_order_qty: Arc<RwLock<AHashMap<String, Quantity>>>,
+    instruments: Arc<AtomicMap<InstrumentId, InstrumentAny>>,
+    truncated_id_map: Arc<AtomicMap<String, ClientOrderId>>,
+    order_instrument_map: Arc<AtomicMap<String, InstrumentId>>,
+    venue_client_map: Arc<AtomicMap<String, ClientOrderId>>,
+    venue_order_qty: Arc<AtomicMap<String, Quantity>>,
 }
 
 impl KrakenFuturesExecutionClient {
@@ -131,11 +130,11 @@ impl KrakenFuturesExecutionClient {
             cancellation_token,
             ws_stream_handle: None,
             pending_tasks: Mutex::new(Vec::new()),
-            instruments: Arc::new(RwLock::new(AHashMap::new())),
-            truncated_id_map: Arc::new(RwLock::new(AHashMap::new())),
-            order_instrument_map: Arc::new(RwLock::new(AHashMap::new())),
-            venue_client_map: Arc::new(RwLock::new(AHashMap::new())),
-            venue_order_qty: Arc::new(RwLock::new(AHashMap::new())),
+            instruments: Arc::new(AtomicMap::new()),
+            truncated_id_map: Arc::new(AtomicMap::new()),
+            order_instrument_map: Arc::new(AtomicMap::new()),
+            venue_client_map: Arc::new(AtomicMap::new()),
+            venue_order_qty: Arc::new(AtomicMap::new()),
         })
     }
 
@@ -194,10 +193,9 @@ impl KrakenFuturesExecutionClient {
 
         let kraken_cl_ord_id = truncate_cl_ord_id(&client_order_id);
 
-        if kraken_cl_ord_id != client_order_id.as_str()
-            && let Ok(mut map) = self.truncated_id_map.write()
-        {
-            map.insert(kraken_cl_ord_id, client_order_id);
+        if kraken_cl_ord_id != client_order_id.as_str() {
+            self.truncated_id_map
+                .insert(kraken_cl_ord_id, client_order_id);
         }
 
         let http = self.http.clone();
@@ -334,24 +332,21 @@ impl KrakenFuturesExecutionClient {
     }
 
     fn lookup_instrument(
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
         product_id: &str,
     ) -> Option<InstrumentAny> {
         let instrument_id = InstrumentId::new(Symbol::new(product_id), *KRAKEN_VENUE);
-        instruments
-            .read()
-            .ok()
-            .and_then(|guard| guard.get(&instrument_id).cloned())
+        instruments.load().get(&instrument_id).cloned()
     }
 
     fn resolve_client_order_id(
         truncated: &str,
-        truncated_id_map: &Arc<RwLock<AHashMap<String, ClientOrderId>>>,
+        truncated_id_map: &Arc<AtomicMap<String, ClientOrderId>>,
     ) -> ClientOrderId {
         truncated_id_map
-            .read()
-            .ok()
-            .and_then(|map| map.get(truncated).copied())
+            .load()
+            .get(truncated)
+            .copied()
             .unwrap_or_else(|| ClientOrderId::new(truncated))
     }
 
@@ -359,11 +354,11 @@ impl KrakenFuturesExecutionClient {
     fn handle_ws_message(
         msg: KrakenFuturesWsMessage,
         emitter: &ExecutionEventEmitter,
-        instruments: &Arc<RwLock<AHashMap<InstrumentId, InstrumentAny>>>,
-        truncated_id_map: &Arc<RwLock<AHashMap<String, ClientOrderId>>>,
-        order_instrument_map: &Arc<RwLock<AHashMap<String, InstrumentId>>>,
-        venue_client_map: &Arc<RwLock<AHashMap<String, ClientOrderId>>>,
-        venue_order_qty: &Arc<RwLock<AHashMap<String, Quantity>>>,
+        instruments: &Arc<AtomicMap<InstrumentId, InstrumentAny>>,
+        truncated_id_map: &Arc<AtomicMap<String, ClientOrderId>>,
+        order_instrument_map: &Arc<AtomicMap<String, InstrumentId>>,
+        venue_client_map: &Arc<AtomicMap<String, ClientOrderId>>,
+        venue_order_qty: &Arc<AtomicMap<String, Quantity>>,
         account_id: AccountId,
         clock: &'static AtomicTime,
     ) {
@@ -379,14 +374,10 @@ impl KrakenFuturesExecutionClient {
                 };
 
                 // Cache order_id -> instrument_id for cancel-only messages
-                if let Ok(mut map) = order_instrument_map.write() {
-                    map.insert(delta.order.order_id.clone(), instrument.id());
-                }
+                order_instrument_map.insert(delta.order.order_id.clone(), instrument.id());
 
-                if let Ok(mut map) = venue_order_qty.write() {
-                    let qty = Quantity::new(delta.order.qty, instrument.size_precision());
-                    map.insert(delta.order.order_id.clone(), qty);
-                }
+                let qty = Quantity::new(delta.order.qty, instrument.size_precision());
+                venue_order_qty.insert(delta.order.order_id.clone(), qty);
 
                 match parse_futures_ws_order_status_report(
                     &delta.order,
@@ -402,9 +393,7 @@ impl KrakenFuturesExecutionClient {
                                 Self::resolve_client_order_id(cl_ord_id, truncated_id_map);
                             report = report.with_client_order_id(full_id);
 
-                            if let Ok(mut map) = venue_client_map.write() {
-                                map.insert(delta.order.order_id.clone(), full_id);
-                            }
+                            venue_client_map.insert(delta.order.order_id.clone(), full_id);
                         }
                         emitter.send_order_status_report(report);
                     }
@@ -424,10 +413,7 @@ impl KrakenFuturesExecutionClient {
 
                 let venue_order_id = VenueOrderId::new(&cancel.order_id);
 
-                let instrument_id = order_instrument_map
-                    .read()
-                    .ok()
-                    .and_then(|map| map.get(&cancel.order_id).copied());
+                let instrument_id = order_instrument_map.load().get(&cancel.order_id).copied();
 
                 let Some(instrument_id) = instrument_id else {
                     log::warn!(
@@ -442,18 +428,9 @@ impl KrakenFuturesExecutionClient {
                     .cli_ord_id
                     .as_ref()
                     .map(|id| Self::resolve_client_order_id(id, truncated_id_map))
-                    .or_else(|| {
-                        venue_client_map
-                            .read()
-                            .ok()
-                            .and_then(|map| map.get(&cancel.order_id).copied())
-                    });
+                    .or_else(|| venue_client_map.load().get(&cancel.order_id).copied());
 
-                let Some(quantity) = venue_order_qty
-                    .read()
-                    .ok()
-                    .and_then(|map| map.get(&cancel.order_id).copied())
-                else {
+                let Some(quantity) = venue_order_qty.load().get(&cancel.order_id).copied() else {
                     log::warn!(
                         "Cannot resolve quantity for cancel: order_id={}, skipping",
                         cancel.order_id
@@ -685,11 +662,11 @@ impl ExecutionClient for KrakenFuturesExecutionClient {
             self.core.set_instruments_initialized();
         }
 
-        if let Ok(mut guard) = self.instruments.write() {
+        self.instruments.rcu(|m| {
             for instrument in self.http.instruments_cache.load().values() {
-                guard.insert(instrument.id(), instrument.clone());
+                m.insert(instrument.id(), instrument.clone());
             }
-        }
+        });
 
         self.ws
             .connect()
@@ -960,10 +937,9 @@ impl ExecutionClient for KrakenFuturesExecutionClient {
             let client_order_id = order.client_order_id();
             let kraken_cl_ord_id = truncate_cl_ord_id(&client_order_id);
 
-            if kraken_cl_ord_id != client_order_id.as_str()
-                && let Ok(mut map) = self.truncated_id_map.write()
-            {
-                map.insert(kraken_cl_ord_id, client_order_id);
+            if kraken_cl_ord_id != client_order_id.as_str() {
+                self.truncated_id_map
+                    .insert(kraken_cl_ord_id, client_order_id);
             }
 
             self.emitter.emit_order_submitted(order);
