@@ -180,6 +180,8 @@ Released on TBD (UTC).
 - Moved cache purge timers to base `ExecutionEngine` in Python
 - Improved socket clients reconnect and shutdown reliability
 - Improved `LiveNode` event loop to use biased `select!` with pinned `ctrl_c` for reliable signal handling
+- Added Databento feed handler integration tests with mock LSG server
+- Added Databento MBO buffering unit tests and proptests
 - Improved Databento live price precision handling with maps populated from instrument definitions
 - Improved Polymarket Rust adapter (#3726), thanks @filipmacek
 - Improved Polymarket execution client (#3734), thanks @filipmacek
