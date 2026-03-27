@@ -148,6 +148,8 @@ Released on TBD (UTC).
 
 ### Internal Improvements
 - Added `SpreadQuoteAggregator` (#3698), thanks @faysou
+- Regenerated Binance Spot SBE codecs from schema 3:3 XML using Real Logic SBE tool v1.37.1
+- Improved Binance Spot SBE HTTP parsers to use `block_length` from the message header for end-of-block skip, making decoders forward-compatible with future schema additions
 - Replaced Binance `WsDispatchState` `DashSet` dedup with `FifoCache` from `nautilus_common` for bounded FIFO eviction with proper `remove()` cleanup
 - Added `BINANCE_GTX_ORDER_REJECT_CODE` and `BINANCE_SPOT_POST_ONLY_REJECT_MSG` constants for reliable post-only rejection detection in Rust
 - Added `batch_submit_limit_pair` to `ExecTesterConfig` for order list testing
