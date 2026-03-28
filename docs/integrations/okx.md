@@ -21,14 +21,13 @@ You can find live example scripts [here](https://github.com/nautechsystems/nauti
 | Perpetual Swaps   | ✓         | ✓       | Linear and inverse contracts.                    |
 | Futures           | ✓         | ✓       | Specific expiration dates.                       |
 | Margin            | ✓         | ✓       | Spot trading with margin/leverage (spot margin). |
-| Options           | ✓         | -       | Data, greeks; *trading coming soon*.             |
+| Options           | ✓         | ✓       | Limit orders only; no market or conditional.     |
 
 :::note
-**Options support**: You can subscribe to options market data, venue-provided Greeks
-(`subscribe_option_greeks`), and receive real-time delta, gamma, vega, theta, and
-implied volatility updates via the OKX `opt-summary` channel. Order execution for
-options is not yet implemented. See the [Options](../concepts/options.md) guide for
-subscription patterns.
+**Options support**: The adapter supports options market data, venue-provided Greeks
+(`subscribe_option_greeks`), and order execution for options instruments. See the
+[Options trading](#options-trading) section below for details and the
+[Options](../concepts/options.md) guide for subscription patterns.
 :::
 
 :::info
@@ -439,6 +438,96 @@ The OKX adapter automatically detects and handles exchange-initiated risk manage
 
 The adapter handles these exchange-generated orders, generating appropriate `OrderFilled` events and updating positions accordingly. No special handling is required in your strategy code.
 :::
+
+## Options trading
+
+The OKX adapter supports trading options (OPTION instrument type) with some differences from
+other derivatives. OKX options are inverse contracts settled in the underlying cryptocurrency.
+For full API details see the
+[OKX Options Trading documentation](https://www.okx.com/docs-v5/en/#order-book-trading-trade-post-place-order).
+
+### Supported order types
+
+Only limit-style orders are supported. OKX does not allow market orders for options.
+
+| Order Type | Supported | Notes                                             |
+|------------|-----------|---------------------------------------------------|
+| `LIMIT`    | ✓         | Standard limit order.                             |
+| `MARKET`   | -         | Rejected by the adapter before reaching the API.  |
+
+Options support FOK and IOC time-in-force. OKX uses a dedicated `op_fok` order type for
+options FOK orders; the adapter handles this mapping automatically.
+
+Conditional/algo orders (`STOP_MARKET`, `STOP_LIMIT`, `MARKET_IF_TOUCHED`,
+`LIMIT_IF_TOUCHED`, `TRAILING_STOP_MARKET`) are not supported for options and will be denied.
+
+### Pricing modes
+
+Options orders can be priced in three mutually exclusive ways. Pass the pricing mode via
+order `params`:
+
+| Mode  | Parameter | Description                                             |
+|-------|-----------|---------------------------------------------------------|
+| Price | (default) | Standard limit price in the contract's currency.        |
+| USD   | `px_usd`  | Price in USD terms.                                     |
+| IV    | `px_vol`  | Price in implied volatility (1.0 = 100%).               |
+
+```python
+# Price in USD
+order = strategy.order_factory.limit(
+    instrument_id=InstrumentId.from_str("BTC-USD-250328-50000-C.OKX"),
+    order_side=OrderSide.BUY,
+    quantity=Quantity.from_int(1),
+    price=Price.from_str("0"),  # Placeholder; px_usd takes precedence
+    params={"px_usd": "100.5"},
+)
+
+# Price in implied volatility
+order = strategy.order_factory.limit(
+    instrument_id=InstrumentId.from_str("BTC-USD-250328-50000-C.OKX"),
+    order_side=OrderSide.BUY,
+    quantity=Quantity.from_int(1),
+    price=Price.from_str("0"),  # Placeholder; px_vol takes precedence
+    params={"px_vol": "0.55"},
+)
+```
+
+When modifying an order, the same `px_usd` or `px_vol` params can be passed to the modify
+command to amend the price in the original pricing mode.
+
+### Position Greeks
+
+The adapter exposes position-level Black-Scholes Greeks (`delta_bs`, `gamma_bs`, `theta_bs`,
+`vega_bs`) from OKX position data. These are available through the standard position reporting
+pipeline.
+
+### Restrictions
+
+- `reduce_only` is not applicable to options and is automatically stripped.
+- Position side defaults to `Net`.
+
+### Configuration
+
+Options require the `instrument_families` config parameter to scope which underlyings to load:
+
+```python
+config = TradingNodeConfig(
+    data_clients={
+        OKX: OKXDataClientConfig(
+            instrument_types=(OKXInstrumentType.OPTION,),
+            instrument_families=("BTC-USD", "ETH-USD"),
+            instrument_provider=InstrumentProviderConfig(load_all=True),
+        ),
+    },
+    exec_clients={
+        OKX: OKXExecClientConfig(
+            instrument_types=(OKXInstrumentType.OPTION,),
+            instrument_families=("BTC-USD", "ETH-USD"),
+            margin_mode=OKXMarginMode.CROSS,
+        ),
+    },
+)
+```
 
 ## Authentication
 
