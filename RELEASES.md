@@ -11,6 +11,7 @@ Released on TBD (UTC).
 - Added `BookImbalanceActor` example actor for order book quoted volume imbalance in Rust
 - Added `ExecTesterConfig.test_reject_post_only` implicitly setting `post_only` on orders without requiring `use_post_only` (Python and Rust)
 - Added `TieredTickScheme` and `TickScheme::Tiered` for price-dependent tick sizes (Rust)
+- Added `TokenizedAsset` instrument type with configurable `asset_class` field for tokenized equities, ETFs, commodities, and other real-world assets
 - Added Betfair backtest example streaming raw `.gz` data through `BacktestEngine` (Rust)
 - Added Binance `decode_binance_spot_client_order_id` and `decode_binance_futures_client_order_id` utility functions for decoding Link & Trade encoded `clientOrderId` values from raw Binance API responses
 - Added Binance Futures `subscribe_funding_rates` and `unsubscribe_funding_rates` with `FundingRateUpdate` emission via the mark price stream (Rust)
@@ -27,6 +28,7 @@ Released on TBD (UTC).
 - Added Deribit `LimitIfTouched` and `MarketIfTouched` order type support (`take_limit`/`take_market`)
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
 - Added Kraken FOK, `LimitIfTouched` orders, and batch submit
+- Added Kraken tokenized equity (xStocks) support via `aclass_base=tokenized_asset` with automatic dual-fetch on instrument loading (#3455), thanks for reporting @jilongjia
 - Added OKX `submit_order_list` via WebSocket batch endpoint for regular GTC orders
 - Added OKX support for bracket order submission with attached TP/SL (#3701), thanks @Nickonomic
 - Added OKX `subscribe_option_greeks` for venue-provided Greeks via the `opt-summary` WebSocket channel
