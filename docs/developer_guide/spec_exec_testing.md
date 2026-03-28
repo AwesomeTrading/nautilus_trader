@@ -1648,7 +1648,7 @@ reasonable liquidity for fills.
 |---------|-------------------------------|------------------------------------------------------------------|------------------------|
 | TC-E90  | Limit BUY option              | Place a limit buy on an option instrument.                       | No options support.    |
 | TC-E91  | Limit SELL option             | Place a limit sell on an option instrument.                      | No options support.    |
-| TC-E92  | Limit with alt pricing        | Place a limit order with adapter-specific pricing via `order_params`. | No alt pricing.    |
+| TC-E92  | Limit with alt pricing        | Place a limit order with adapter‑specific pricing via `order_params`. | No alt pricing.    |
 | TC-E94  | Unsupported order type denied | Submit an order type the adapter rejects for options.            | No options support.    |
 | TC-E96  | Conditional order rejected    | Submit a stop/conditional order on an option; expect rejection.  | No options support.    |
 | TC-E99  | FOK limit option              | Place a FOK limit order on an option instrument.                 | No FOK options.        |
@@ -1657,13 +1657,13 @@ reasonable liquidity for fills.
 
 ### TC-E90: Limit BUY option
 
-| Field              | Value                                                                  |
-|--------------------|------------------------------------------------------------------------|
-| **Prerequisite**   | Adapter connected, option instrument loaded, quotes flowing.           |
-| **Action**         | ExecTester places a limit buy on the option at a passive price.        |
-| **Event sequence** | `OrderInitialized` → `OrderSubmitted` → `OrderAccepted`.               |
+| Field              | Value                                                                       |
+|--------------------|-----------------------------------------------------------------------------|
+| **Prerequisite**   | Adapter connected, option instrument loaded, quotes flowing.                |
+| **Action**         | ExecTester places a limit buy on the option at a passive price.             |
+| **Event sequence** | `OrderInitialized` → `OrderSubmitted` → `OrderAccepted`.                    |
 | **Pass criteria**  | Order accepted by venue with correct instrument, side, price, and quantity. |
-| **Skip when**      | Adapter does not support options trading.                              |
+| **Skip when**      | Adapter does not support options trading.                                   |
 
 **Python config:**
 
@@ -1679,13 +1679,13 @@ ExecTesterConfig(
 
 ### TC-E91: Limit SELL option
 
-| Field              | Value                                                                  |
-|--------------------|------------------------------------------------------------------------|
-| **Prerequisite**   | Adapter connected, option instrument loaded, quotes flowing.           |
-| **Action**         | ExecTester places a limit sell on the option at a passive price.       |
-| **Event sequence** | `OrderInitialized` → `OrderSubmitted` → `OrderAccepted`.               |
+| Field              | Value                                                                       |
+|--------------------|-----------------------------------------------------------------------------|
+| **Prerequisite**   | Adapter connected, option instrument loaded, quotes flowing.                |
+| **Action**         | ExecTester places a limit sell on the option at a passive price.            |
+| **Event sequence** | `OrderInitialized` → `OrderSubmitted` → `OrderAccepted`.                    |
 | **Pass criteria**  | Order accepted by venue with correct instrument, side, price, and quantity. |
-| **Skip when**      | Adapter does not support options trading.                              |
+| **Skip when**      | Adapter does not support options trading.                                   |
 
 **Python config:**
 
@@ -1701,13 +1701,13 @@ ExecTesterConfig(
 
 ### TC-E92: Limit with alternative pricing
 
-| Field              | Value                                                                  |
-|--------------------|------------------------------------------------------------------------|
-| **Prerequisite**   | Adapter connected, option instrument loaded.                           |
-| **Action**         | Place limit order with adapter-specific pricing via `order_params`.    |
-| **Event sequence** | `OrderInitialized` → `OrderSubmitted` → `OrderAccepted`.               |
-| **Pass criteria**  | Order accepted; venue acknowledges the alternative pricing mode.       |
-| **Skip when**      | Adapter does not support alternative pricing modes for options.        |
+| Field              | Value                                                               |
+|--------------------|---------------------------------------------------------------------|
+| **Prerequisite**   | Adapter connected, option instrument loaded.                        |
+| **Action**         | Place limit order with adapter‑specific pricing via `order_params`. |
+| **Event sequence** | `OrderInitialized` → `OrderSubmitted` → `OrderAccepted`.            |
+| **Pass criteria**  | Order accepted; venue acknowledges the alternative pricing mode.    |
+| **Skip when**      | Adapter does not support alternative pricing modes for options.     |
 
 **Considerations:**
 
@@ -1734,7 +1734,7 @@ ExecTesterConfig(
 |--------------------|------------------------------------------------------------------------|
 | **Prerequisite**   | Adapter connected, option instrument loaded.                           |
 | **Action**         | Submit an order type the venue does not support for options (e.g. market order). |
-| **Event sequence** | Adapter-dependent: `OrderDenied` (pre-submission) or `OrderSubmitted` → `OrderRejected` (post-submission). |
+| **Event sequence** | Adapter‑dependent: `OrderDenied` (pre‑submission) or `OrderSubmitted` → `OrderRejected` (post‑submission). |
 | **Pass criteria**  | Order does not fill. Denial or rejection reason references the unsupported order type. |
 | **Skip when**      | Adapter does not support options.                                      |
 
@@ -1753,7 +1753,7 @@ ExecTesterConfig(
 |--------------------|------------------------------------------------------------------------|
 | **Prerequisite**   | Adapter connected, option instrument loaded.                           |
 | **Action**         | Submit a conditional order on an option instrument.                    |
-| **Event sequence** | Adapter-dependent: `OrderDenied` (pre-submission) or `OrderSubmitted` → `OrderRejected` (post-submission). |
+| **Event sequence** | Adapter‑dependent: `OrderDenied` (pre‑submission) or `OrderSubmitted` → `OrderRejected` (post‑submission). |
 | **Pass criteria**  | Order does not fill. Reason references unsupported conditional order type. |
 | **Skip when**      | Adapter does not support options, or adapter supports conditionals for options. |
 
