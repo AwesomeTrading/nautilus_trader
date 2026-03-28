@@ -313,12 +313,14 @@ impl BacktestEngine {
     pub fn add_instrument(&mut self, instrument: &InstrumentAny) -> anyhow::Result<()> {
         let instrument_id = instrument.id();
         if let Some(exchange) = self.venues.get_mut(&instrument.id().venue) {
-            if matches!(instrument, InstrumentAny::CurrencyPair(_))
-                && exchange.borrow().account_type != AccountType::Margin
+            if matches!(
+                instrument,
+                InstrumentAny::CurrencyPair(_) | InstrumentAny::TokenizedAsset(_)
+            ) && exchange.borrow().account_type != AccountType::Margin
                 && exchange.borrow().base_currency.is_some()
             {
                 anyhow::bail!(
-                    "Cannot add a `CurrencyPair` instrument {instrument_id} for a venue with a single-currency CASH account"
+                    "Cannot add a multi-currency spot instrument {instrument_id} for a venue with a single-currency CASH account"
                 )
             }
             exchange.borrow_mut().add_instrument(instrument.clone())?;
