@@ -175,12 +175,13 @@ Released on TBD (UTC).
 - Added Python exec algorithm support to v2 `LiveNode` with `add_exec_algorithm_from_config`
 - Added `LiveNode` integration tests for actor, strategy, and exec algorithm registration
 - Added `LiveNode::add_exec_algorithm` for registering execution algorithms on the Rust live trading node
+- Added `LiveNode` stop-handle timeout test for shutdown reliability
+- Added `ExecutionEngine` runtime external order creation from `OrderStatusReport` for exchange-generated orders (liquidation, ADL, settlement) not previously in cache (Rust)
 - Added `add_exec_algorithm_from_config` PyO3 binding on `LiveNode` with `ImportableExecAlgorithmConfig`
 - Added `msgbus::has_endpoint` for endpoint existence checks
 - Added backtest margin models, `FXRolloverInterestModule`, `PerContractFeeModel`, and `SimulationModule` trait in Rust
 - Added `subscribe_option_greeks` support to `DataTester` in Rust
 - Added `WebSocketClient.notify_closed()` for stream-mode callers to signal reader EOF to the controller
-- Added `LiveNode` stop-handle timeout test for shutdown reliability
 - Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
 - Added `LimitIfTouched`, `MarketToLimit`, `TrailingStopMarket`, and `TrailingStopLimit` to `transform_order_to_pyo3` Cython-to-PyO3 order converter
 - Added PyO3 type assertions to adapter submit-order tests (Hyperliquid, Bybit, Kraken, Architect AX) to catch Cython/PyO3 type boundary regressions

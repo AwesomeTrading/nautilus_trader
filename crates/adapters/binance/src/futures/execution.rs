@@ -79,7 +79,10 @@ use super::{
     websocket::{
         streams::{
             client::BinanceFuturesWebSocketClient,
-            messages::{BinanceExecutionType, BinanceFuturesWsStreamsMessage},
+            messages::{
+                BinanceExecutionType, BinanceFuturesAlgoUpdateMsg, BinanceFuturesOrderUpdateMsg,
+                BinanceFuturesWsStreamsMessage,
+            },
             parse_exec::{
                 decode_algo_client_id, parse_futures_account_update,
                 parse_futures_algo_update_to_order_status, parse_futures_order_update_to_fill,
@@ -2137,7 +2140,7 @@ fn dispatch_ws_message(
 /// to execution reports for reconciliation.
 #[allow(clippy::too_many_arguments)]
 fn dispatch_order_update(
-    msg: &super::websocket::streams::messages::BinanceFuturesOrderUpdateMsg,
+    msg: &BinanceFuturesOrderUpdateMsg,
     emitter: &ExecutionEventEmitter,
     http_client: &BinanceFuturesHttpClient,
     account_id: AccountId,
@@ -2406,19 +2409,16 @@ fn dispatch_order_update(
 
 /// Dispatches exchange-generated order fills (liquidation, ADL, settlement).
 ///
-/// Sends a `FillReport` first, then an `OrderStatusReport`. The fill must
-/// arrive before the status report because a Filled status triggers inferred
-/// fill generation in the reconciliation engine, which would consume the
-/// fill quantity and cause the real fill to be rejected as an overfill.
-///
-/// The execution engine processes these reports only when the order already
-/// exists in cache (e.g. from startup reconciliation). First-seen exchange-
-/// generated orders require engine-level support for creating orders from
-/// runtime status reports, which is not yet implemented.
+/// Sends a `FillReport` first, then an `OrderStatusReport`. The fill report
+/// is dropped by the engine (order not yet in cache). The status report
+/// triggers `create_external_order`, which builds the order and applies an
+/// inferred fill from `avg_px`/`filled_qty`. Real fill metadata (commission,
+/// trade_id) is lost; see `engine-bundled-fill-reconciliation` plan for the
+/// path to preserving it.
 ///
 /// Skips events with zero fill quantity (pending liquidation notifications).
 fn dispatch_exchange_generated_fill(
-    msg: &super::websocket::streams::messages::BinanceFuturesOrderUpdateMsg,
+    msg: &BinanceFuturesOrderUpdateMsg,
     emitter: &ExecutionEventEmitter,
     instrument_id: InstrumentId,
     price_precision: u8,
@@ -2481,7 +2481,7 @@ fn dispatch_exchange_generated_fill(
 
 #[allow(clippy::too_many_arguments)]
 fn dispatch_algo_update(
-    msg: &super::websocket::streams::messages::BinanceFuturesAlgoUpdateMsg,
+    msg: &BinanceFuturesAlgoUpdateMsg,
     emitter: &ExecutionEventEmitter,
     http_client: &BinanceFuturesHttpClient,
     account_id: AccountId,

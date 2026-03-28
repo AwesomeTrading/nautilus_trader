@@ -8312,3 +8312,147 @@ fn test_purge_closed_orders_timer_fires_callback() {
         0
     );
 }
+
+#[rstest]
+fn test_reconcile_order_status_report_creates_external_order_when_filled(
+    mut execution_engine: ExecutionEngine,
+) {
+    let instrument = audusd_sim();
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_instrument(instrument.clone().into())
+        .unwrap();
+
+    let report = create_order_status_report(
+        Some(ClientOrderId::from("autoclose-001")),
+        VenueOrderId::from("V-EXT-001"),
+        instrument.id(),
+        OrderStatus::Filled,
+        Quantity::from(100_000),
+        Quantity::from(100_000),
+    );
+
+    execution_engine.reconcile_order_status_report(&report);
+
+    let cache = execution_engine.cache().borrow();
+    let order = cache
+        .order(&ClientOrderId::from("autoclose-001"))
+        .expect("external order should be in cache");
+    assert_eq!(order.status(), OrderStatus::Filled);
+    assert_eq!(order.strategy_id(), StrategyId::from("EXTERNAL"));
+}
+
+#[rstest]
+fn test_reconcile_order_status_report_creates_external_order_accepted(
+    mut execution_engine: ExecutionEngine,
+) {
+    let instrument = audusd_sim();
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_instrument(instrument.clone().into())
+        .unwrap();
+
+    let report = create_order_status_report(
+        None,
+        VenueOrderId::from("V-EXT-002"),
+        instrument.id(),
+        OrderStatus::Accepted,
+        Quantity::from(50_000),
+        Quantity::from(0),
+    );
+
+    execution_engine.reconcile_order_status_report(&report);
+
+    let cache = execution_engine.cache().borrow();
+    let client_order_id = ClientOrderId::from("V-EXT-002");
+    let order = cache
+        .order(&client_order_id)
+        .expect("external order should be in cache");
+    assert_eq!(order.status(), OrderStatus::Accepted);
+    assert_eq!(order.quantity(), Quantity::from(50_000));
+}
+
+#[rstest]
+fn test_reconcile_order_status_report_external_order_uses_claimed_strategy(
+    mut execution_engine: ExecutionEngine,
+) {
+    let instrument = audusd_sim();
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_instrument(instrument.clone().into())
+        .unwrap();
+
+    let strategy_id = StrategyId::from("MyStrategy-001");
+    let mut instruments = HashSet::new();
+    instruments.insert(instrument.id());
+    execution_engine
+        .register_external_order_claims(strategy_id, &instruments)
+        .unwrap();
+
+    let report = create_order_status_report(
+        Some(ClientOrderId::from("adl_autoclose-001")),
+        VenueOrderId::from("V-EXT-003"),
+        instrument.id(),
+        OrderStatus::Filled,
+        Quantity::from(100_000),
+        Quantity::from(100_000),
+    );
+
+    execution_engine.reconcile_order_status_report(&report);
+
+    let cache = execution_engine.cache().borrow();
+    let order = cache
+        .order(&ClientOrderId::from("adl_autoclose-001"))
+        .expect("external order should be in cache");
+    assert_eq!(order.strategy_id(), strategy_id);
+    assert_eq!(order.status(), OrderStatus::Filled);
+}
+
+#[rstest]
+fn test_reconcile_order_status_report_external_order_adds_venue_order_id_index(
+    mut execution_engine: ExecutionEngine,
+) {
+    let instrument = audusd_sim();
+    execution_engine
+        .cache()
+        .borrow_mut()
+        .add_instrument(instrument.clone().into())
+        .unwrap();
+
+    let report = create_order_status_report(
+        Some(ClientOrderId::from("settlement-001")),
+        VenueOrderId::from("V-EXT-004"),
+        instrument.id(),
+        OrderStatus::Filled,
+        Quantity::from(100_000),
+        Quantity::from(100_000),
+    );
+
+    execution_engine.reconcile_order_status_report(&report);
+
+    let cache = execution_engine.cache().borrow();
+    let resolved = cache.client_order_id(&VenueOrderId::from("V-EXT-004"));
+    assert_eq!(resolved, Some(&ClientOrderId::from("settlement-001")));
+}
+
+#[rstest]
+fn test_reconcile_order_status_report_external_order_skipped_without_instrument(
+    mut execution_engine: ExecutionEngine,
+) {
+    let report = create_order_status_report(
+        Some(ClientOrderId::from("autoclose-999")),
+        VenueOrderId::from("V-EXT-999"),
+        audusd_sim().id(),
+        OrderStatus::Filled,
+        Quantity::from(100_000),
+        Quantity::from(100_000),
+    );
+
+    execution_engine.reconcile_order_status_report(&report);
+
+    let cache = execution_engine.cache().borrow();
+    assert!(cache.order(&ClientOrderId::from("autoclose-999")).is_none());
+}
