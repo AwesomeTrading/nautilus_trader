@@ -707,11 +707,17 @@ test-performance:  #-- Run performance tests with codspeed benchmarking
 	uv run --active --no-sync pytest tests/performance_tests --benchmark-disable-gc --codspeed
 
 #== v2 (python/)
+# Unset VIRTUAL_ENV so uv targets the python/.venv, not the parent v1 venv.
+
+.PHONY: sync-v2
+sync-v2:  #-- Sync v2 Python dependencies (without building the package)
+	$(info $(M) Syncing v2 Python dependencies...)
+	$Q cd python && VIRTUAL_ENV= uv sync --all-groups --no-install-package nautilus-trader --inexact
 
 .PHONY: build-debug-v2
-build-debug-v2:  #-- Build the v2 Python package in debug mode (fast incremental builds)
+build-debug-v2: sync-v2  #-- Build the v2 Python package in debug mode (fast incremental builds)
 	$(info $(M) Building v2 extension in debug mode...)
-	$Q cd python && CARGO_TARGET_DIR=../target-v2 uv run maturin develop
+	$Q cd python && VIRTUAL_ENV= CARGO_TARGET_DIR=../target-v2 uv run --no-sync maturin develop
 
 .PHONY: py-stubs-v2
 py-stubs-v2:  #-- Regenerate v2 Python type stubs from Rust bindings
@@ -721,12 +727,13 @@ py-stubs-v2:  #-- Regenerate v2 Python type stubs from Rust bindings
 .PHONY: update-v2
 update-v2: cargo-update  #-- Update v2 dependencies (cargo and uv)
 	$(info $(M) Updating v2 uv lockfile...)
-	$Q cd python && uv lock --upgrade
+	$Q cd python && VIRTUAL_ENV= uv lock --upgrade
 
 .PHONY: pytest-v2
-pytest-v2:  #-- Run v2 Python tests
+pytest-v2: build-debug-v2  #-- Run v2 Python tests
 	$(info $(M) Running v2 Python tests...)
-	$Q cd python && uv run --no-sync pytest tests/ -v
+	$Q cd python && VIRTUAL_ENV= uv run --no-sync pytest tests/ -v --ignore=tests/unit/test_live_node.py
+	$Q cd python && VIRTUAL_ENV= uv run --no-sync pytest tests/unit/test_live_node.py -v
 
 .PHONY: pre-flight-v2
 pre-flight-v2:  #-- Run v2 pre-flight checks (build, test)
