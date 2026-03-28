@@ -13,6 +13,10 @@ Released on TBD (UTC).
 - Added `TieredTickScheme` and `TickScheme::Tiered` for price-dependent tick sizes (Rust)
 - Added Betfair backtest example streaming raw `.gz` data through `BacktestEngine` (Rust)
 - Added Binance `decode_binance_spot_client_order_id` and `decode_binance_futures_client_order_id` utility functions for decoding Link & Trade encoded `clientOrderId` values from raw Binance API responses
+- Added Binance Futures `subscribe_funding_rates` and `unsubscribe_funding_rates` with `FundingRateUpdate` emission via the mark price stream (Rust)
+- Added Binance Futures exchange-generated order handling for liquidation, ADL, and settlement fills with client order ID prefix detection and `FillReport`/`OrderStatusReport` emission (Rust)
+- Added Binance `NewAdl`, `NewInsurance`, and `PendingNew` variants to `BinanceOrderStatus` (Rust)
+- Added Binance `Rpi` time-in-force, `PreSettle`/`Settling`/`Close` contract statuses, `None`/`Decrement`/`Transfer` STP modes, and income type variants (Rust)
 - Added Binance instrument status polling in Rust
 - Added Binance Futures `close_position` parameter for algo stop orders to close an entire position at trigger price (Python and Rust) (#3751), thanks for reporting @dodge-basic
 - Added Bybit native TP/SL params for order placement (#3754), thanks @jindrichsirucek
@@ -183,6 +187,8 @@ Released on TBD (UTC).
 - Added Databento feed handler integration tests with mock LSG server
 - Added Databento MBO buffering unit tests and proptests
 - Added Tardis HTTP and WebSocket mock server integration tests
+- Added Binance missing `BinanceFilterType` variants and `RawRequests` rate limit type for complete API enum coverage (Rust)
+- Added Binance unit tests for liquidation, ADL, settlement, and insurance fill parsing with `is_exchange_generated` detection (Rust)
 - Replaced Binance `WsDispatchState` `DashSet` dedup with `FifoCache` from `nautilus_common` for bounded FIFO eviction with proper `remove()` cleanup
 - Replaced Bybit topic string constants with `BybitWsPublicChannel` and `BybitWsPrivateChannel` enum references
 - Replaced `AtomicMap` and `AtomicSet` type aliases with newtypes wrapping `ArcSwap` for ergonomic read-heavy concurrent collections
