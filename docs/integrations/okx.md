@@ -231,7 +231,7 @@ If you need GTD functionality, you must use Nautilus's strategy-managed GTD feat
 
 | Feature           | Linear Perpetual Swap | Notes                                                |
 |-------------------|-----------------------|------------------------------------------------------|
-| Query positions   | ✓                     | Real-time position updates.                          |
+| Query positions   | ✓                     | Real‑time position updates.                          |
 | Position mode     | ✓                     | Net vs Long/Short mode (see below).                  |
 | Leverage control  | ✓                     | Dynamic leverage adjustment per instrument.          |
 | Margin mode       | ✓                     | Supports cash, isolated, and cross modes.            |
@@ -368,7 +368,7 @@ Only use manual override if you have specific requirements that cannot be met th
 |----------------------|-----------------------|-------------------------------------------|
 | Query open orders    | ✓                     | List all active orders.                   |
 | Query order history  | ✓                     | Historical order data.                    |
-| Order status updates | ✓                     | Real-time order state changes.            |
+| Order status updates | ✓                     | Real‑time order state changes.            |
 | Trade history        | ✓                     | Execution and fill reports.               |
 
 ### Contingent orders
@@ -376,9 +376,9 @@ Only use manual override if you have specific requirements that cannot be met th
 | Feature             | Linear Perpetual Swap | Notes                                      |
 |---------------------|-----------------------|--------------------------------------------|
 | Order lists         | ✓                     | Batch via WS; regular orders only.         |
-| OCO orders          | ✓                     | One-Cancels-Other orders.                  |
+| OCO orders          | ✓                     | One‑Cancels‑Other orders.                  |
 | Bracket orders      | ✓                     | Stop loss + take profit combinations.      |
-| Conditional orders  | ✓                     | Stop and limit-if-touched orders.          |
+| Conditional orders  | ✓                     | Stop and limit‑if‑touched orders.          |
 
 #### Conditional order architecture
 
@@ -636,7 +636,7 @@ OKX enforces per-endpoint and per-account quotas; exceeding them leads to HTTP 4
 | `/api/v5/market/history-candles` | 20              | Conservative quota for large historical pulls.          |
 | `/api/v5/market/history-trades`  | 30              | Trade history pulls.                                    |
 | `/api/v5/account/balance`        | 5               | OKX guidance: 10 req / 2 s.                             |
-| `/api/v5/trade/order`            | 30              | 60 requests / 2 seconds per-instrument limit.           |
+| `/api/v5/trade/order`            | 30              | 60 requests / 2 seconds per‑instrument limit.           |
 | `/api/v5/trade/orders-pending`   | 20              | Open order fetch.                                       |
 | `/api/v5/trade/orders-history`   | 20              | Historical orders.                                      |
 | `/api/v5/trade/fills`            | 30              | Execution reports.                                      |
@@ -673,7 +673,7 @@ The OKX data client provides the following configuration options:
 | `retry_delay_initial_ms`             | `1,000`                         | Initial delay (milliseconds) before retrying a failed request. |
 | `retry_delay_max_ms`                 | `10,000`                        | Upper bound for exponential backoff delay between retries. |
 | `update_instruments_interval_mins`   | `60`                            | Interval, in minutes, between background instrument refreshes. |
-| `vip_level`                          | `None`                          | Enables higher-depth order book channels when set to the matching OKX VIP tier. |
+| `vip_level`                          | `None`                          | Enables higher‑depth order book channels when set to the matching OKX VIP tier. |
 | `http_proxy_url`                     | `None`                          | Optional HTTP proxy URL. |
 | `ws_proxy_url`                       | `None`                          | Optional WebSocket proxy URL. |
 
@@ -695,8 +695,8 @@ The OKX execution client provides the following configuration options:
 | `use_spot_margin`          | `False`     | Enables margin/leverage for SPOT trading. When `True`, uses `isolated` or `cross` trade mode (determined by `margin_mode`). When `False`, uses `cash` trade mode (no leverage). Only applies to SPOT instruments. |
 | `is_demo`                  | `False`     | Connects to the OKX demo trading environment. |
 | `http_timeout_secs`        | `60`        | Request timeout (seconds) for REST trading calls. |
-| `use_fills_channel`        | `False`     | Subscribes to the dedicated fills channel (VIP5+ required) for lower-latency fill reports. |
-| `use_mm_mass_cancel`       | `False`     | Uses the market-maker bulk cancel endpoint when available; otherwise falls back to per-order cancels. |
+| `use_fills_channel`        | `False`     | Subscribes to the dedicated fills channel (VIP5+ required) for lower‑latency fill reports. |
+| `use_mm_mass_cancel`       | `False`     | Uses the market‑maker bulk cancel endpoint when available; otherwise falls back to per‑order cancels. |
 | `max_retries`              | `3`         | Maximum retry attempts for recoverable REST errors. |
 | `retry_delay_initial_ms`   | `1,000`     | Initial delay (milliseconds) applied before retrying a failed request. |
 | `retry_delay_max_ms`       | `10,000`    | Upper bound for the exponential backoff delay between retries. |
