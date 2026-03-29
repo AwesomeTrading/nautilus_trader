@@ -437,4 +437,37 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn test_new_checked_non_ascii_isin() {
+        let result = Equity::new_checked(
+            InstrumentId::from("AAPL.XNAS"),
+            Symbol::from("AAPL"),
+            Some(ustr::Ustr::from("US\u{00E9}378331005")),
+            Currency::USD(),
+            2,
+            Price::from("0.01"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0.into(),
+            0.into(),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("non-ASCII"));
+    }
+
+    #[rstest]
+    fn test_serialization_roundtrip(equity_aapl: Equity) {
+        let json = serde_json::to_string(&equity_aapl).unwrap();
+        let deserialized: Equity = serde_json::from_str(&json).unwrap();
+        assert_eq!(equity_aapl, deserialized);
+    }
 }

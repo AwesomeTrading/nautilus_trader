@@ -511,4 +511,12 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn test_serialization_roundtrip() {
+        let inst = futures_contract_es(None, None);
+        let json = serde_json::to_string(&inst).unwrap();
+        let deserialized: FuturesContract = serde_json::from_str(&json).unwrap();
+        assert_eq!(inst, deserialized);
+    }
 }

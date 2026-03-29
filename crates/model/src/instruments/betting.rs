@@ -531,4 +531,11 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn test_serialization_roundtrip(betting: BettingInstrument) {
+        let json = serde_json::to_string(&betting).unwrap();
+        let deserialized: BettingInstrument = serde_json::from_str(&json).unwrap();
+        assert_eq!(betting, deserialized);
+    }
 }

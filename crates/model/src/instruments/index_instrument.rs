@@ -332,4 +332,11 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn test_serialization_roundtrip(index_instrument_spx: IndexInstrument) {
+        let json = serde_json::to_string(&index_instrument_spx).unwrap();
+        let deserialized: IndexInstrument = serde_json::from_str(&json).unwrap();
+        assert_eq!(index_instrument_spx, deserialized);
+    }
 }

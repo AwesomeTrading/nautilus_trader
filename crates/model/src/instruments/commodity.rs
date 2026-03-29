@@ -428,4 +428,11 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn test_serialization_roundtrip(commodity_gold: Commodity) {
+        let json = serde_json::to_string(&commodity_gold).unwrap();
+        let deserialized: Commodity = serde_json::from_str(&json).unwrap();
+        assert_eq!(commodity_gold, deserialized);
+    }
 }

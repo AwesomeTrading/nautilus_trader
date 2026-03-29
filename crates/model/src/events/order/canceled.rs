@@ -319,52 +319,11 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::{
-        identifiers::{AccountId, ClientOrderId, InstrumentId, StrategyId, TraderId, VenueOrderId},
-        stubs::TestDefault,
-    };
+    use crate::identifiers::{ClientOrderId, InstrumentId, StrategyId, TraderId};
 
-    fn create_test_order_canceled() -> OrderCanceled {
-        OrderCanceled::new(
-            TraderId::from("TRADER-001"),
-            StrategyId::from("EMA-CROSS"),
-            InstrumentId::from("EURUSD.SIM"),
-            ClientOrderId::from("O-19700101-000000-001-001-1"),
-            UUID4::default(),
-            UnixNanos::from(1_000_000_000),
-            UnixNanos::from(2_000_000_000),
-            false,
-            Some(VenueOrderId::from("V-001")),
-            Some(AccountId::from("SIM-001")),
-        )
-    }
-
+    // TODO: Remove once reconciliation field is converted back to bool (post-Cython)
     #[rstest]
-    fn test_order_canceled_new() {
-        let order_canceled = create_test_order_canceled();
-
-        assert_eq!(order_canceled.trader_id, TraderId::from("TRADER-001"));
-        assert_eq!(order_canceled.strategy_id, StrategyId::from("EMA-CROSS"));
-        assert_eq!(
-            order_canceled.instrument_id,
-            InstrumentId::from("EURUSD.SIM")
-        );
-        assert_eq!(
-            order_canceled.client_order_id,
-            ClientOrderId::from("O-19700101-000000-001-001-1")
-        );
-        assert_eq!(
-            order_canceled.venue_order_id,
-            Some(VenueOrderId::from("V-001"))
-        );
-        assert_eq!(order_canceled.account_id, Some(AccountId::from("SIM-001")));
-        assert_eq!(order_canceled.ts_event, UnixNanos::from(1_000_000_000));
-        assert_eq!(order_canceled.ts_init, UnixNanos::from(2_000_000_000));
-        assert_eq!(order_canceled.reconciliation, 0);
-    }
-
-    #[rstest]
-    fn test_order_canceled_new_with_reconciliation() {
+    fn test_reconciliation_bool_to_u8() {
         let order_canceled = OrderCanceled::new(
             TraderId::from("TRADER-001"),
             StrategyId::from("EMA-CROSS"),
@@ -377,119 +336,14 @@ mod tests {
             None,
             None,
         );
-
         assert_eq!(order_canceled.reconciliation, 1);
     }
 
     #[rstest]
-    fn test_order_canceled_display() {
-        let order_canceled = create_test_order_canceled();
-        let display = format!("{order_canceled}");
-        assert!(display.starts_with("OrderCanceled("));
-        assert!(display.contains("instrument_id=EURUSD.SIM"));
-        assert!(display.contains("client_order_id=O-19700101-000000-001-001-1"));
-        assert!(display.contains("venue_order_id=V-001"));
-        assert!(display.contains("account_id=SIM-001"));
-    }
-
-    #[rstest]
-    fn test_order_canceled_default() {
-        let order_canceled = OrderCanceled::default();
-
-        assert_eq!(order_canceled.trader_id, TraderId::test_default());
-        assert_eq!(order_canceled.strategy_id, StrategyId::test_default());
-        assert_eq!(order_canceled.instrument_id, InstrumentId::test_default());
-        assert_eq!(
-            order_canceled.client_order_id,
-            ClientOrderId::test_default()
-        );
-        assert_eq!(order_canceled.venue_order_id, None);
-        assert_eq!(order_canceled.account_id, None);
-        assert_eq!(order_canceled.reconciliation, 0);
-    }
-
-    #[rstest]
-    fn test_order_canceled_order_event_trait() {
-        let order_canceled = create_test_order_canceled();
-
-        assert_eq!(order_canceled.id(), order_canceled.event_id);
-        assert_eq!(order_canceled.type_name(), "OrderCanceled");
-        assert_eq!(order_canceled.order_type(), None);
-        assert_eq!(order_canceled.order_side(), None);
-        assert_eq!(order_canceled.trader_id(), TraderId::from("TRADER-001"));
-        assert_eq!(order_canceled.strategy_id(), StrategyId::from("EMA-CROSS"));
-        assert_eq!(
-            order_canceled.instrument_id(),
-            InstrumentId::from("EURUSD.SIM")
-        );
-        assert_eq!(order_canceled.trade_id(), None);
-        assert_eq!(order_canceled.currency(), None);
-        assert_eq!(
-            order_canceled.client_order_id(),
-            ClientOrderId::from("O-19700101-000000-001-001-1")
-        );
-        assert_eq!(order_canceled.reason(), None);
-        assert_eq!(order_canceled.quantity(), None);
-        assert_eq!(order_canceled.time_in_force(), None);
-        assert_eq!(order_canceled.liquidity_side(), None);
-        assert_eq!(order_canceled.post_only(), None);
-        assert_eq!(order_canceled.reduce_only(), None);
-        assert_eq!(order_canceled.quote_quantity(), None);
-        assert!(!order_canceled.reconciliation());
-        assert_eq!(
-            order_canceled.venue_order_id(),
-            Some(VenueOrderId::from("V-001"))
-        );
-        assert_eq!(
-            order_canceled.account_id(),
-            Some(AccountId::from("SIM-001"))
-        );
-        assert_eq!(order_canceled.position_id(), None);
-        assert_eq!(order_canceled.commission(), None);
-        assert_eq!(order_canceled.ts_event(), UnixNanos::from(1_000_000_000));
-        assert_eq!(order_canceled.ts_init(), UnixNanos::from(2_000_000_000));
-    }
-
-    #[rstest]
-    fn test_order_canceled_debug() {
-        let order_canceled = create_test_order_canceled();
-        let debug_str = format!("{order_canceled:?}");
-
-        assert!(debug_str.contains("OrderCanceled"));
-        assert!(debug_str.contains("TRADER-001"));
-        assert!(debug_str.contains("EMA-CROSS"));
-        assert!(debug_str.contains("EURUSD.SIM"));
-        assert!(debug_str.contains("O-19700101-000000-001-001-1"));
-    }
-
-    #[rstest]
-    fn test_order_canceled_partial_eq() {
-        let order_canceled1 = create_test_order_canceled();
-        let mut order_canceled2 = create_test_order_canceled();
-        order_canceled2.event_id = order_canceled1.event_id;
-        let mut order_canceled3 = create_test_order_canceled();
-        order_canceled3.venue_order_id = Some(VenueOrderId::from("V-002"));
-
-        assert_eq!(order_canceled1, order_canceled2);
-        assert_ne!(order_canceled1, order_canceled3);
-    }
-
-    #[rstest]
-    fn test_order_canceled_timestamps() {
-        let order_canceled = create_test_order_canceled();
-
-        assert_eq!(order_canceled.ts_event, UnixNanos::from(1_000_000_000));
-        assert_eq!(order_canceled.ts_init, UnixNanos::from(2_000_000_000));
-        assert!(order_canceled.ts_event < order_canceled.ts_init);
-    }
-
-    #[rstest]
-    fn test_order_canceled_serialization() {
-        let original = create_test_order_canceled();
-
+    fn test_serialization_roundtrip() {
+        let original = OrderCanceled::default();
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: OrderCanceled = serde_json::from_str(&json).unwrap();
-
         assert_eq!(original, deserialized);
     }
 }

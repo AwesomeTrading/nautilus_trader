@@ -437,4 +437,11 @@ mod tests {
         );
         assert!(result.is_err());
     }
+
+    #[rstest]
+    fn test_serialization_roundtrip(cfd_gold: Cfd) {
+        let json = serde_json::to_string(&cfd_gold).unwrap();
+        let deserialized: Cfd = serde_json::from_str(&json).unwrap();
+        assert_eq!(cfd_gold, deserialized);
+    }
 }
