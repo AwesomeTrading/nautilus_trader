@@ -33,7 +33,7 @@ use nautilus_model::{
     identifiers::{AccountId, ClientOrderId, InstrumentId, TradeId, VenueOrderId},
     instruments::any::InstrumentAny,
     reports::{FillReport, OrderStatusReport},
-    types::{Price, Quantity},
+    types::{Currency, Price, Quantity},
 };
 use nautilus_network::{
     http::{HttpClient, HttpResponse, Method},
@@ -1074,6 +1074,16 @@ impl BinanceFuturesInstrument {
             Self::UsdM(s) => format_instrument_id(&s.symbol, BinanceProductType::UsdM),
             Self::CoinM(s) => format_instrument_id(&s.symbol, BinanceProductType::CoinM),
         }
+    }
+
+    /// Returns the quote currency for the instrument.
+    #[must_use]
+    pub fn quote_currency(&self) -> Currency {
+        let quote_asset = match self {
+            Self::UsdM(s) => &s.quote_asset,
+            Self::CoinM(s) => &s.quote_asset,
+        };
+        Currency::from(quote_asset.as_str())
     }
 }
 

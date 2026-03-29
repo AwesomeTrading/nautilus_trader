@@ -18,6 +18,8 @@ Released on TBD (UTC).
 - Added Binance `decode_binance_spot_client_order_id` and `decode_binance_futures_client_order_id` utility functions for decoding Link & Trade encoded `clientOrderId` values from raw Binance API responses
 - Added Binance Futures `subscribe_funding_rates` and `unsubscribe_funding_rates` with `FundingRateUpdate` emission via the mark price stream (Rust)
 - Added Binance Futures exchange-generated order handling for liquidation, ADL, and settlement fills with client order ID prefix detection and `FillReport`/`OrderStatusReport` emission (Rust)
+- Added Binance Futures `use_position_ids` config for hedging position IDs derived from instrument and position side on exchange-generated fills (Rust)
+- Added Binance Futures `default_taker_fee` config with commission fallback estimation for exchange-generated fills when venue omits commission fields (Rust, USD-M only)
 - Added Binance `NewAdl`, `NewInsurance`, and `PendingNew` variants to `BinanceOrderStatus` (Rust)
 - Added Binance `Rpi` time-in-force, `PreSettle`/`Settling`/`Close` contract statuses, `None`/`Decrement`/`Transfer` STP modes, and income type variants (Rust)
 - Added Binance instrument status polling in Rust
@@ -202,6 +204,7 @@ Released on TBD (UTC).
 - Added Tardis HTTP and WebSocket mock server integration tests
 - Added Binance missing `BinanceFilterType` variants and `RawRequests` rate limit type for complete API enum coverage (Rust)
 - Added Binance unit tests for liquidation, ADL, settlement, and insurance fill parsing with `is_exchange_generated` detection (Rust)
+- Added Binance parametrized tests for `resolve_commission` fallback and `make_venue_position_id` (Rust)
 - Replaced Binance `WsDispatchState` `DashSet` dedup with `FifoCache` from `nautilus_common` for bounded FIFO eviction with proper `remove()` cleanup
 - Replaced Bybit topic string constants with `BybitWsPublicChannel` and `BybitWsPrivateChannel` enum references
 - Replaced `AtomicMap` and `AtomicSet` type aliases with newtypes wrapping `ArcSwap` for ergonomic read-heavy concurrent collections

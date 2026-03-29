@@ -19,6 +19,7 @@ use std::any::Any;
 
 use nautilus_model::identifiers::{AccountId, TraderId};
 use nautilus_system::factories::ClientConfig;
+use rust_decimal::Decimal;
 
 use crate::common::enums::{BinanceEnvironment, BinanceProductType};
 
@@ -103,6 +104,19 @@ pub struct BinanceExecClientConfig {
     pub base_url_ws_trading: Option<String>,
     /// Whether to use the WebSocket trading API for order operations (Spot and USD-M Futures).
     pub use_ws_trading: bool,
+    /// Whether to use Binance Futures hedging position IDs.
+    ///
+    /// When true, fill reports include a `venue_position_id` derived from
+    /// the instrument and position side (e.g. `ETHUSDT-PERP.BINANCE-LONG`).
+    /// When false, `venue_position_id` is None, allowing virtual positions
+    /// with `OmsType::Hedging`.
+    pub use_position_ids: bool,
+    /// Default taker fee rate for commission estimation.
+    ///
+    /// Used as a fallback when the venue omits commission fields in
+    /// exchange-generated fills (liquidation, ADL, settlement).
+    /// Standard Binance Futures taker fee is 0.0004 (0.04%).
+    pub default_taker_fee: Decimal,
     /// API key (Ed25519 required, uses env var if not provided).
     pub api_key: Option<String>,
     /// API secret (Ed25519 base64-encoded, required, uses env var if not provided).
@@ -120,6 +134,8 @@ impl Default for BinanceExecClientConfig {
             base_url_ws: None,
             base_url_ws_trading: None,
             use_ws_trading: true,
+            use_position_ids: true,
+            default_taker_fee: Decimal::new(4, 4), // 0.0004
             api_key: None,
             api_secret: None,
         }

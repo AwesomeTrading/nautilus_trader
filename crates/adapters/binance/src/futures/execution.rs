@@ -54,7 +54,8 @@ use nautilus_model::{
         OrderFilled, OrderModifyRejected, OrderRejected, OrderUpdated,
     },
     identifiers::{
-        AccountId, ClientId, ClientOrderId, InstrumentId, Symbol, TradeId, Venue, VenueOrderId,
+        AccountId, ClientId, ClientOrderId, InstrumentId, PositionId, Symbol, TradeId, Venue,
+        VenueOrderId,
     },
     instruments::Instrument,
     orders::Order,
@@ -68,7 +69,7 @@ use tokio_util::sync::CancellationToken;
 use super::{
     http::{
         BinanceFuturesHttpError,
-        client::{BinanceFuturesHttpClient, is_algo_order_type},
+        client::{BinanceFuturesHttpClient, BinanceFuturesInstrument, is_algo_order_type},
         models::{BatchOrderResult, BinancePositionRisk},
         query::{
             BatchCancelItem, BinanceAllOrdersParamsBuilder, BinanceOpenOrdersParamsBuilder,
@@ -979,6 +980,8 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             let account_id = self.core.account_id;
             let clock = self.clock;
             let product_type = self.product_type;
+            let use_position_ids = self.config.use_position_ids;
+            let default_taker_fee = self.config.default_taker_fee;
             let dispatch_state = self.dispatch_state.clone();
             let triggered_algo_ids = self.triggered_algo_order_ids.clone();
             let algo_client_ids = self.algo_client_order_ids.clone();
@@ -999,6 +1002,8 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                                 &dispatch_state,
                                 &triggered_algo_ids,
                                 &algo_client_ids,
+                                use_position_ids,
+                                default_taker_fee,
                             );
                         }
                         () = cancel.cancelled() => {
@@ -2061,6 +2066,8 @@ fn dispatch_ws_message(
     dispatch_state: &WsDispatchState,
     triggered_algo_ids: &Arc<AtomicSet<ClientOrderId>>,
     algo_client_ids: &Arc<AtomicSet<ClientOrderId>>,
+    use_position_ids: bool,
+    default_taker_fee: Decimal,
 ) {
     match msg {
         BinanceFuturesWsStreamsMessage::OrderUpdate(update) => {
@@ -2072,6 +2079,8 @@ fn dispatch_ws_message(
                 product_type,
                 clock,
                 dispatch_state,
+                use_position_ids,
+                default_taker_fee,
             );
         }
         BinanceFuturesWsStreamsMessage::AlgoUpdate(update) => {
@@ -2147,6 +2156,8 @@ fn dispatch_order_update(
     product_type: BinanceProductType,
     clock: &'static AtomicTime,
     dispatch_state: &WsDispatchState,
+    use_position_ids: bool,
+    default_taker_fee: Decimal,
 ) {
     let order = &msg.order;
     let symbol_ustr = ustr::Ustr::from(order.symbol.as_str());
@@ -2169,7 +2180,8 @@ fn dispatch_order_update(
         return;
     }
 
-    let (instrument_id, price_precision, size_precision) = if let Some(inst) = cached_instrument {
+    let (instrument_id, price_precision, size_precision) = if let Some(ref inst) = cached_instrument
+    {
         (
             inst.id(),
             inst.price_precision() as u8,
@@ -2193,6 +2205,23 @@ fn dispatch_order_update(
     // reconciliation reports regardless of tracked/untracked state, because
     // they have no locally submitted identity
     if order.is_exchange_generated() {
+        let is_linear = cached_instrument
+            .as_ref()
+            .is_some_and(|inst| matches!(inst.value(), BinanceFuturesInstrument::UsdM(_)));
+
+        let quote_currency = cached_instrument
+            .as_ref()
+            .map_or_else(Currency::USDT, |inst| inst.value().quote_currency());
+
+        let taker_fee = if is_linear {
+            Some(default_taker_fee)
+        } else {
+            None
+        };
+
+        let venue_position_id =
+            make_venue_position_id(use_position_ids, instrument_id, order.position_side);
+
         dispatch_exchange_generated_fill(
             msg,
             emitter,
@@ -2201,6 +2230,9 @@ fn dispatch_order_update(
             size_precision,
             account_id,
             ts_init,
+            taker_fee,
+            quote_currency,
+            venue_position_id,
         );
         return;
     }
@@ -2354,15 +2386,21 @@ fn dispatch_order_update(
             }
         }
     } else {
-        // Untracked: fall back to reports for reconciliation
+        // Untracked: fall back to reports for reconciliation.
+        // venue_position_id is intentionally None here: the engine assigns
+        // position IDs during event processing, and setting one from the
+        // adapter could split a partially filled order across two positions.
         match order.execution_type {
             BinanceExecutionType::Trade => {
                 match parse_futures_order_update_to_fill(
                     msg,
+                    account_id,
                     instrument_id,
                     price_precision,
                     size_precision,
-                    account_id,
+                    None,
+                    None,
+                    None,
                     ts_init,
                 ) {
                     Ok(fill) => emitter.send_fill_report(fill),
@@ -2416,7 +2454,29 @@ fn dispatch_order_update(
 /// trade_id) is lost; see `engine-bundled-fill-reconciliation` plan for the
 /// path to preserving it.
 ///
+/// Derives a venue position ID from the instrument and Binance position side.
+///
+/// Returns `None` when `use_position_ids` is false.
+fn make_venue_position_id(
+    use_position_ids: bool,
+    instrument_id: InstrumentId,
+    position_side: BinancePositionSide,
+) -> Option<PositionId> {
+    if !use_position_ids {
+        return None;
+    }
+
+    let side = match position_side {
+        BinancePositionSide::Long => "LONG",
+        BinancePositionSide::Short => "SHORT",
+        BinancePositionSide::Both => "BOTH",
+        _ => "UNKNOWN",
+    };
+    Some(PositionId::new(format!("{instrument_id}-{side}")))
+}
+
 /// Skips events with zero fill quantity (pending liquidation notifications).
+#[allow(clippy::too_many_arguments)]
 fn dispatch_exchange_generated_fill(
     msg: &BinanceFuturesOrderUpdateMsg,
     emitter: &ExecutionEventEmitter,
@@ -2425,6 +2485,9 @@ fn dispatch_exchange_generated_fill(
     size_precision: u8,
     account_id: AccountId,
     ts_init: UnixNanos,
+    taker_fee: Option<Decimal>,
+    quote_currency: Currency,
+    venue_position_id: Option<PositionId>,
 ) {
     let order = &msg.order;
     let last_qty: f64 = order.last_filled_qty.parse().unwrap_or(0.0);
@@ -2456,10 +2519,13 @@ fn dispatch_exchange_generated_fill(
 
     match parse_futures_order_update_to_fill(
         msg,
+        account_id,
         instrument_id,
         price_precision,
         size_precision,
-        account_id,
+        taker_fee,
+        Some(quote_currency),
+        venue_position_id,
         ts_init,
     ) {
         Ok(fill) => emitter.send_fill_report(fill),
@@ -2789,5 +2855,36 @@ fn dispatch_ws_trading_message(
         BinanceFuturesWsTradingMessage::Error(err) => {
             log::error!("WS trading API error: {err}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::long(BinancePositionSide::Long, "ETHUSDT-PERP.BINANCE-LONG")]
+    #[case::short(BinancePositionSide::Short, "ETHUSDT-PERP.BINANCE-SHORT")]
+    #[case::both(BinancePositionSide::Both, "ETHUSDT-PERP.BINANCE-BOTH")]
+    #[case::unknown(BinancePositionSide::Unknown, "ETHUSDT-PERP.BINANCE-UNKNOWN")]
+    fn test_make_venue_position_id_enabled(
+        #[case] side: BinancePositionSide,
+        #[case] expected: &str,
+    ) {
+        let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+        let result = make_venue_position_id(true, instrument_id, side);
+        assert_eq!(result, Some(PositionId::from(expected)));
+    }
+
+    #[rstest]
+    #[case::long(BinancePositionSide::Long)]
+    #[case::short(BinancePositionSide::Short)]
+    #[case::both(BinancePositionSide::Both)]
+    fn test_make_venue_position_id_disabled(#[case] side: BinancePositionSide) {
+        let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+        let result = make_venue_position_id(false, instrument_id, side);
+        assert_eq!(result, None);
     }
 }

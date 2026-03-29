@@ -25,10 +25,11 @@ use nautilus_model::{
         TrailingOffsetType,
     },
     events::AccountState,
-    identifiers::{AccountId, ClientOrderId, InstrumentId, TradeId, VenueOrderId},
+    identifiers::{AccountId, ClientOrderId, InstrumentId, PositionId, TradeId, VenueOrderId},
     reports::{FillReport, OrderStatusReport},
     types::{AccountBalance, Currency, Money, Price, Quantity},
 };
+use rust_decimal::Decimal;
 
 use super::messages::{
     AlgoOrderUpdateData, BinanceFuturesAccountUpdateMsg, BinanceFuturesOrderUpdateMsg,
@@ -130,17 +131,56 @@ pub fn parse_futures_order_update_to_order_status(
     Ok(report)
 }
 
+/// Resolves the commission for a Binance fill event.
+///
+/// Uses the venue-provided commission fields (N/n) when present. Falls back to
+/// estimating `taker_fee * qty * price` when the venue omits them, matching the
+/// Python adapter behavior for exchange-generated fills (liquidation, ADL).
+/// Returns zero USDT when neither source is available.
+#[must_use]
+pub fn resolve_commission(
+    order: &OrderUpdateData,
+    last_qty: f64,
+    last_px: f64,
+    taker_fee: Option<Decimal>,
+    quote_currency: Option<Currency>,
+) -> Money {
+    if order.commission_asset.is_some() {
+        let amount: f64 = order
+            .commission
+            .as_deref()
+            .unwrap_or("0")
+            .parse()
+            .unwrap_or(0.0);
+        let currency = order
+            .commission_asset
+            .as_ref()
+            .map_or_else(Currency::USDT, |a| Currency::from(a.as_str()));
+        Money::new(amount, currency)
+    } else if let Some(fee) = taker_fee {
+        let currency = quote_currency.unwrap_or_else(Currency::USDT);
+        let notional = Decimal::try_from(last_qty * last_px).unwrap_or_default();
+        Money::from_decimal(fee * notional, currency).unwrap_or_else(|_| Money::new(0.0, currency))
+    } else {
+        Money::new(0.0, Currency::USDT())
+    }
+}
+
 /// Converts a Binance Futures order update (Trade type) to a Nautilus fill report.
 ///
 /// # Errors
 ///
 /// Returns an error if report construction fails.
+#[allow(clippy::too_many_arguments)]
 pub fn parse_futures_order_update_to_fill(
     msg: &BinanceFuturesOrderUpdateMsg,
+    account_id: AccountId,
     instrument_id: InstrumentId,
     price_precision: u8,
     size_precision: u8,
-    account_id: AccountId,
+    taker_fee: Option<Decimal>,
+    quote_currency: Option<Currency>,
+    venue_position_id: Option<PositionId>,
     ts_init: UnixNanos,
 ) -> anyhow::Result<FillReport> {
     let order = &msg.order;
@@ -163,16 +203,7 @@ pub fn parse_futures_order_update_to_fill(
 
     let last_qty: f64 = order.last_filled_qty.parse().unwrap_or(0.0);
     let last_px: f64 = order.last_filled_price.parse().unwrap_or(0.0);
-    let commission: f64 = order
-        .commission
-        .as_deref()
-        .unwrap_or("0")
-        .parse()
-        .unwrap_or(0.0);
-    let commission_currency = order
-        .commission_asset
-        .as_ref()
-        .map_or_else(Currency::USDT, |a| Currency::from(a.as_str()));
+    let commission = resolve_commission(order, last_qty, last_px, taker_fee, quote_currency);
 
     Ok(FillReport::new(
         account_id,
@@ -182,10 +213,10 @@ pub fn parse_futures_order_update_to_fill(
         order_side,
         Quantity::new(last_qty, size_precision),
         Price::new(last_px, price_precision),
-        Money::new(commission, commission_currency),
+        commission,
         liquidity_side,
         Some(client_order_id),
-        None, // venue_position_id
+        venue_position_id,
         ts_event,
         ts_init,
         None, // report_id
@@ -427,10 +458,13 @@ mod tests {
 
         let report = parse_futures_order_update_to_fill(
             &msg,
+            account_id(),
             instrument_id(),
             PRICE_PRECISION,
             SIZE_PRECISION,
-            account_id(),
+            None,
+            None,
+            None,
             ts_init,
         )
         .unwrap();
@@ -548,10 +582,13 @@ mod tests {
 
         let fill = parse_futures_order_update_to_fill(
             &msg,
+            account_id(),
             instrument_id(),
             PRICE_PRECISION,
             SIZE_PRECISION,
-            account_id(),
+            None,
+            None,
+            None,
             ts_init,
         )
         .unwrap();
@@ -614,10 +651,13 @@ mod tests {
 
         let fill = parse_futures_order_update_to_fill(
             &msg,
+            account_id(),
             instrument_id(),
             PRICE_PRECISION,
             SIZE_PRECISION,
-            account_id(),
+            None,
+            None,
+            None,
             ts_init,
         )
         .unwrap();
@@ -665,10 +705,13 @@ mod tests {
 
         let fill = parse_futures_order_update_to_fill(
             &msg,
+            account_id(),
             instrument_id(),
             PRICE_PRECISION,
             SIZE_PRECISION,
-            account_id(),
+            None,
+            None,
+            None,
             ts_init,
         )
         .unwrap();
@@ -738,10 +781,13 @@ mod tests {
 
         let fill = parse_futures_order_update_to_fill(
             &msg,
+            account_id(),
             instrument_id(),
             PRICE_PRECISION,
             SIZE_PRECISION,
-            account_id(),
+            None,
+            None,
+            None,
             UnixNanos::from(1_000_000_000u64),
         )
         .unwrap();
@@ -804,5 +850,77 @@ mod tests {
 
         let last_qty: f64 = msg.order.last_filled_qty.parse().unwrap_or(0.0);
         assert_eq!(last_qty, 0.0);
+    }
+
+    #[rstest]
+    #[case::venue_provided(Some("USDT"), Some("0.06937084"), None, None, 0.06937084, "USDT")]
+    #[case::fallback_from_taker_fee(
+        None, None,
+        Some("0.0004"), Some("USDT"),
+        0.055496, "USDT"  // 0.0004 * 0.014 * 9910.12 ≈ 0.05549...
+    )]
+    #[case::no_commission_no_fee(None, None, None, None, 0.0, "USDT")]
+    fn test_resolve_commission(
+        #[case] commission_asset: Option<&str>,
+        #[case] commission_amount: Option<&str>,
+        #[case] taker_fee_str: Option<&str>,
+        #[case] quote_currency_str: Option<&str>,
+        #[case] expected_amount: f64,
+        #[case] expected_currency: &str,
+    ) {
+        let mut msg: BinanceFuturesOrderUpdateMsg =
+            load_user_data_fixture("order_update_calculated.json");
+        msg.order.commission_asset = commission_asset.map(ustr::Ustr::from);
+        msg.order.commission = commission_amount.map(String::from);
+
+        let last_qty: f64 = msg.order.last_filled_qty.parse().unwrap();
+        let last_px: f64 = msg.order.last_filled_price.parse().unwrap();
+        let taker_fee = taker_fee_str.map(|s| Decimal::from_str_exact(s).unwrap());
+        let quote_currency = quote_currency_str.map(Currency::from);
+
+        let commission =
+            resolve_commission(&msg.order, last_qty, last_px, taker_fee, quote_currency);
+
+        assert_eq!(commission.currency, Currency::from(expected_currency));
+        let diff = (commission.as_f64() - expected_amount).abs();
+        assert!(
+            diff < 1e-4,
+            "expected {expected_amount}, was {}",
+            commission.as_f64()
+        );
+    }
+
+    #[rstest]
+    #[case::with_venue_position_id(
+        Some(Decimal::from_str_exact("0.0004").unwrap()),
+        Some(Currency::from("USDT")),
+        Some(PositionId::new("ETHUSDT-PERP.BINANCE-LONG")),
+    )]
+    #[case::without_extras(None, None, None)]
+    fn test_parse_fill_with_optional_params(
+        #[case] taker_fee: Option<Decimal>,
+        #[case] quote_currency: Option<Currency>,
+        #[case] venue_position_id: Option<PositionId>,
+    ) {
+        let msg: BinanceFuturesOrderUpdateMsg =
+            load_user_data_fixture("order_update_calculated.json");
+        let ts_init = UnixNanos::from(1_000_000_000u64);
+
+        let fill = parse_futures_order_update_to_fill(
+            &msg,
+            account_id(),
+            instrument_id(),
+            PRICE_PRECISION,
+            SIZE_PRECISION,
+            taker_fee,
+            quote_currency,
+            venue_position_id,
+            ts_init,
+        )
+        .unwrap();
+
+        assert_eq!(fill.venue_position_id, venue_position_id);
+        assert_eq!(fill.account_id, account_id());
+        assert_eq!(fill.instrument_id, instrument_id());
     }
 }

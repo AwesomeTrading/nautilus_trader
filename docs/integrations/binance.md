@@ -186,16 +186,35 @@ The adapter detects these special order types via their client ID patterns
 2. Generates a `FillReport` with correct fill details and TAKER liquidity side.
 3. Generates an `OrderStatusReport` for reconciliation.
 
-The fill report is sent before the status report. This prevents the
-reconciliation engine from synthesizing an inferred fill (from the Filled
-status) that would shadow the real fill with its trade ID and commission.
+The execution engine creates external orders from runtime status reports when
+the order is not already in cache. This covers first-seen exchange-generated
+orders (the typical case for a live liquidation or ADL event). The engine
+assigns the order to any strategy that has claimed the instrument via
+`external_order_claims`, or to the `EXTERNAL` strategy by default.
 
-:::warning
-Exchange-generated orders that arrive before any cache entry (the typical
-case for a live liquidation) require engine-level support for creating
-orders from runtime status reports. Until that is implemented, these events
-are logged but do not update portfolio state. Orders that are already cached
-(e.g. from startup reconciliation) are handled correctly.
+#### Commission estimation
+
+When Binance omits the commission fields (`N`/`n`) from the fill event, the
+Rust adapter estimates commission as `default_taker_fee * qty * price` using
+the quote currency. This applies to USD-M linear contracts only. COIN-M
+inverse contracts use zero commission as a fallback because the linear
+formula does not account for contract size. Configure `default_taker_fee` on
+`BinanceExecClientConfig` to match your fee tier (default: 0.0004 / 0.04%).
+
+#### Hedge-mode position IDs
+
+When `use_position_ids` is enabled (default), exchange-generated fill reports
+include a `venue_position_id` derived from the instrument and position side
+(e.g. `ETHUSDT-PERP.BINANCE-LONG`). Set `use_position_ids` to false on
+`BinanceExecClientConfig` for virtual positions with `OmsType.HEDGING`.
+
+:::note
+The fill report is sent before the status report so that the engine
+receives both. Because the order does not exist in cache when the fill
+arrives, the fill report is dropped and the engine creates an inferred fill
+from the status report instead. This produces correct order and position
+state but loses per-fill metadata (trade ID, commission). A future version
+will bundle the fill report with the status report to preserve this data.
 :::
 
 ### Order querying
