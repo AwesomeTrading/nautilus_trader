@@ -172,6 +172,7 @@ Released on TBD (UTC).
 - Fixed OKX position status reports incorrectly filtered by `start`/`end` time, dropping unchanged open positions
 - Fixed OKX `connect()` not passing `instrument_families` for OPTION instrument requests (HTTP 400 from OKX API)
 - Fixed OKX `base_url_ws` ignored for private and business WebSocket channels (#3727), thanks for reporting @Stamppot82
+- Fixed OKX exec client crash on empty account when OKX returns empty strings for numeric balance fields (#3772), thanks for reporting @ProfitChef
 - Fixed Polymarket WebSocket initial vs incremental subscribe (#3717), thanks @Javdu10
 - Fixed Polymarket cancel request silently dropped when `venue_order_id` not yet available, causing order to remain open until next reconciliation (Python and Rust)
 - Fixed Polymarket market BUY quote-to-base quantity calculation using worst crossing price instead of per-level accumulation (#3747), thanks @filipmacek

@@ -2519,6 +2519,36 @@ mod tests {
     }
 
     #[rstest]
+    fn test_parse_ws_account_message_empty_balance() {
+        // GH-3772: OKX returns empty strings and empty details for zero-balance accounts
+        let json_data = load_test_json("ws_account_empty.json");
+        let msg: OKXWsFrame = serde_json::from_str(&json_data).unwrap();
+
+        let OKXWsFrame::Data { data, .. } = msg else {
+            panic!("Expected OKXWsFrame::Data");
+        };
+
+        let accounts: Vec<OKXAccount> = serde_json::from_value(data).unwrap();
+        assert_eq!(accounts.len(), 1);
+
+        let account = &accounts[0];
+        assert!(account.details.is_empty());
+        assert_eq!(account.total_eq, "0");
+
+        let account_id = AccountId::new("OKX-001");
+        let account_state = parse_account_state(account, account_id, UnixNanos::default()).unwrap();
+
+        assert_eq!(account_state.account_id, account_id);
+        assert_eq!(account_state.margins.len(), 0);
+        assert_eq!(account_state.balances.len(), 1);
+
+        let balance = &account_state.balances[0];
+        assert_eq!(balance.total, Money::new(0.0, Currency::USD()));
+        assert_eq!(balance.free, Money::new(0.0, Currency::USD()));
+        assert_eq!(balance.locked, Money::new(0.0, Currency::USD()));
+    }
+
+    #[rstest]
     fn test_parse_order_msg() {
         let json_data = load_test_json("ws_orders.json");
         let ws_msg: serde_json::Value = serde_json::from_str(&json_data).unwrap();

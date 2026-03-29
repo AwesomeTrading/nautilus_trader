@@ -3169,6 +3169,45 @@ mod tests {
     }
 
     #[rstest]
+    fn test_parse_account_state_empty_balance_account() {
+        // Reproduces GH-3772: OKX returns empty strings for numeric fields
+        // when the account has zero balance and no positions
+        let account_json = r#"{
+            "adjEq": "",
+            "borrowFroz": "",
+            "details": [],
+            "imr": "",
+            "isoEq": "0",
+            "mgnRatio": "",
+            "mmr": "",
+            "notionalUsd": "",
+            "notionalUsdForBorrow": "",
+            "notionalUsdForFutures": "",
+            "notionalUsdForOption": "",
+            "notionalUsdForSwap": "",
+            "ordFroz": "",
+            "totalEq": "0",
+            "uTime": "1774795570586",
+            "upl": ""
+        }"#;
+
+        let okx_account: OKXAccount = serde_json::from_str(account_json).unwrap();
+        let account_id = AccountId::new("OKX-001");
+        let account_state =
+            parse_account_state(&okx_account, account_id, UnixNanos::default()).unwrap();
+
+        assert_eq!(account_state.account_id, account_id);
+        assert_eq!(account_state.account_type, AccountType::Margin);
+        assert_eq!(account_state.margins.len(), 0);
+
+        assert_eq!(account_state.balances.len(), 1);
+        let balance = &account_state.balances[0];
+        assert_eq!(balance.total, Money::new(0.0, Currency::USD()));
+        assert_eq!(balance.free, Money::new(0.0, Currency::USD()));
+        assert_eq!(balance.locked, Money::new(0.0, Currency::USD()));
+    }
+
+    #[rstest]
     fn test_parse_order_status_report() {
         let json_data = load_test_json("http_get_orders_history.json");
         let response: OKXResponse<OKXOrderHistory> = serde_json::from_str(&json_data).unwrap();
