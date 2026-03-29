@@ -63,7 +63,7 @@ use crate::{
             BybitAccountType, BybitEnvironment, BybitOrderSide, BybitOrderType, BybitProductType,
             BybitTimeInForce, BybitTriggerType,
         },
-        parse::{extract_raw_symbol, nanos_to_millis, spot_leverage},
+        parse::{extract_raw_symbol, nanos_to_millis, spot_leverage, spot_market_unit},
     },
     config::BybitExecClientConfig,
     http::client::BybitHttpClient,
@@ -1002,6 +1002,7 @@ impl ExecutionClient for BybitExecutionClient {
             let trigger_price = order.trigger_price();
             let post_only = order.is_post_only();
             let reduce_only = order.is_reduce_only();
+            let is_quote_quantity = order.is_quote_quantity();
 
             self.spawn_task("submit_order_http", async move {
                 let result = http_client
@@ -1018,7 +1019,7 @@ impl ExecutionClient for BybitExecutionClient {
                         trigger_price,
                         Some(post_only),
                         reduce_only,
-                        false, // is_quote_quantity
+                        is_quote_quantity,
                         false, // is_leverage
                     )
                     .await;
@@ -1054,7 +1055,11 @@ impl ExecutionClient for BybitExecutionClient {
             order_type: bybit_order_type,
             qty: order.quantity().to_string(),
             is_leverage: spot_leverage(product_type, tp_sl.is_leverage),
-            market_unit: None,
+            market_unit: spot_market_unit(
+                product_type,
+                bybit_order_type,
+                order.is_quote_quantity(),
+            ),
             price: order.price().map(|p| p.to_string()),
             time_in_force: Some(Self::map_time_in_force(
                 order.time_in_force(),
@@ -1595,5 +1600,48 @@ mod tests {
         let p = params_from(&[("sl_trigger_by", json!("IndexPrice"))]);
         let err = parse_bybit_tp_sl_params(Some(&p)).unwrap_err();
         assert!(err.to_string().contains("SL override fields require"));
+    }
+
+    #[rstest]
+    #[case::spot_market_base(BybitProductType::Spot, BybitOrderType::Market, false, Some("baseCoin".to_string()))]
+    #[case::spot_market_quote(BybitProductType::Spot, BybitOrderType::Market, true, Some("quoteCoin".to_string()))]
+    #[case::spot_limit(BybitProductType::Spot, BybitOrderType::Limit, true, None)]
+    #[case::linear_market(BybitProductType::Linear, BybitOrderType::Market, true, None)]
+    fn test_ws_params_market_unit(
+        #[case] product_type: BybitProductType,
+        #[case] order_type: BybitOrderType,
+        #[case] is_quote_quantity: bool,
+        #[case] expected: Option<String>,
+    ) {
+        let params = BybitWsPlaceOrderParams {
+            category: product_type,
+            symbol: ustr::Ustr::from("BTCUSDT"),
+            side: BybitOrderSide::Buy,
+            order_type,
+            qty: "1.0".to_string(),
+            is_leverage: None,
+            market_unit: spot_market_unit(product_type, order_type, is_quote_quantity),
+            price: None,
+            time_in_force: None,
+            order_link_id: None,
+            reduce_only: None,
+            close_on_trigger: None,
+            trigger_price: None,
+            trigger_by: None,
+            trigger_direction: None,
+            tpsl_mode: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            sl_trigger_price: None,
+            tp_trigger_price: None,
+            sl_order_type: None,
+            tp_order_type: None,
+            sl_limit_price: None,
+            tp_limit_price: None,
+        };
+
+        assert_eq!(params.market_unit, expected);
     }
 }

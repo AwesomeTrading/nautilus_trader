@@ -109,6 +109,7 @@ Released on TBD (UTC).
 - Fixed Bybit HTTP cancellation token not resettable after `disconnect()`, causing REST calls to short-circuit on reconnect
 - Fixed Bybit WebSocket subscription ACKs confirming all pending topics instead of the acknowledged topic (via `req_id` correlation)
 - Fixed Bybit WebSocket failed subscription ACKs (success=false) not triggering `mark_failure` recovery path
+- Fixed Bybit spot market orders ignoring `is_quote_quantity` on the order, causing all spot market buys to default to quote currency quantity via the Bybit API
 - Fixed Bybit bulk order status reports silently missing conditional (stop/MIT) orders
 - Fixed Bybit account state free balance underflowing when locked margin exceeds wallet total during liquidation
 - Fixed Databento price precision truncation for fractional tick sizes (#3696), thanks @pandashark
