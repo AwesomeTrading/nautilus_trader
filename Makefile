@@ -15,7 +15,7 @@ CARGO_MACHETE_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-machet
 CARGO_NEXTEST_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-nextest)
 CARGO_VET_VERSION := $(shell bash scripts/cargo-tool-version.sh cargo-vet)
 LYCHEE_VERSION := $(shell bash scripts/cargo-tool-version.sh lychee)
-UV_VERSION := $(shell cat uv-version | tr -d '\n')
+UV_VERSION := $(shell bash scripts/uv-version.sh)
 
 V = 0  # 0 / 1 - verbose mode
 Q = $(if $(filter 1,$V),,@) # Quiet mode, suppress command output
@@ -312,10 +312,10 @@ outdated: check-edit-installed  #-- Check for outdated dependencies
 
 .PHONY: update
 update: cargo-update  #-- Update all dependencies (cargo and uv)
-	uv self update && uv lock --upgrade
+	uv self update $(UV_VERSION) && uv lock --upgrade
 
 .PHONY: install-tools
-install-tools:  #-- Install required development tools (Rust tools from Cargo.toml, uv from uv-version)
+install-tools:  #-- Install required development tools (Rust tools from Cargo.toml, uv from pyproject.toml)
 	cargo install cargo-deny --version $(CARGO_DENY_VERSION) --locked \
 	&& cargo install cargo-edit --version $(CARGO_EDIT_VERSION) --locked \
 	&& cargo install cargo-machete --version $(CARGO_MACHETE_VERSION) --locked \

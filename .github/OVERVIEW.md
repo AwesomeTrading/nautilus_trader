@@ -45,7 +45,8 @@ CI/CD, testing, publishing, and automation within the NautilusTrader repository.
 ### Dependency security
 
 - **cargo-deny**: Rust dependency auditing for security advisories (RUSTSEC/GHSA), license compliance, banned crates, and supply chain integrity. Configuration in `deny.toml`.
-- **Dependency pinning**: Key tools (pre-commit, Python versions, Rust toolchain, cargo-nextest) are locked to fixed versions or SHAs.
+- **Dependency pinning**: Key tools (pre-commit, Python versions, Rust toolchain, cargo-nextest, uv) are locked to fixed versions or SHAs. The uv version is pinned via `required-version` in `pyproject.toml` and extracted by `scripts/uv-version.sh` for CI, Docker, and local builds.
+- **Dependency cooldown**: Python dependency resolution excludes packages published within the last 3 days (`exclude-newer = "3 days"` in `[tool.uv]`). This gives the community time to detect and quarantine compromised releases before they enter the lockfile.
 - **Code scanning**: CodeQL is enabled for continuous security analysis of Python and Rust code on all PRs and weekly via cron.
 
 ### Build integrity

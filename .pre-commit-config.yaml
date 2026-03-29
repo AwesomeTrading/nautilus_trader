@@ -97,7 +97,7 @@ repos:
       - id: zizmor
         name: zizmor (security)
         description: Scans GitHub Actions workflows for security misconfigurations
-        args: ["--no-online-audits", "--min-severity", "medium", "--config", "zizmor.yml", ".github/"]
+        args: ["--no-online-audits", "--min-severity", "medium", "--config", ".zizmor.yml", ".github/"]
         pass_filenames: false
 
   ##############################################################################
@@ -335,7 +335,7 @@ repos:
         ]
 
   - repo: https://github.com/astral-sh/uv-pre-commit
-    rev: 0.11.2 # Must match uv-version file
+    rev: 0.11.2 # Must match [tool.uv] required-version in pyproject.toml
     hooks:
       - id: uv-lock
         files: ^(uv\.lock|python/uv\.lock)$

@@ -225,10 +225,10 @@ runs:
 
     # > --------------------------------------------------
     # > UV
-    - name: Get uv version from uv-version
+    - name: Get uv version from pyproject.toml
       shell: bash
       run: |
-        echo "UV_VERSION=$(cat uv-version)" >> $GITHUB_ENV
+        echo "UV_VERSION=$(bash scripts/uv-version.sh)" >> $GITHUB_ENV
 
     - name: Install uv
       # https://github.com/astral-sh/setup-uv

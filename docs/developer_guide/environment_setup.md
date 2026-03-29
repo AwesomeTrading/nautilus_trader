@@ -93,6 +93,38 @@ echo "PYO3_PYTHON: $PYO3_PYTHON"
 echo "PYTHONHOME: $PYTHONHOME"
 ```
 
+## Dependency management
+
+Python dependencies are managed by [uv](https://docs.astral.sh/uv). The `[tool.uv]` section in
+`pyproject.toml` enforces two supply chain safety settings:
+
+- **`required-version = "==0.11.2"`**: all developers and CI use the same uv version. The version
+  is extracted by `scripts/uv-version.sh` for Makefile, CI, and Docker builds.
+- **`exclude-newer = "3 days"`**: `uv lock` ignores package versions published within the last
+  3 days. This gives the community time to detect and quarantine compromised releases before they
+  enter the lockfile.
+
+### Bypassing the cooldown
+
+When a security patch or critical bug fix must be pulled in immediately, override `exclude-newer`
+on the command line:
+
+```bash
+# Disable the cooldown for a single package
+uv lock --exclude-newer-package "somepackage=2026-03-30T00:00:00Z"
+
+# Disable the cooldown entirely for this resolution
+uv lock --exclude-newer "0 seconds"
+```
+
+The CLI flag overrides the `pyproject.toml` value for that invocation only. The config remains
+unchanged for subsequent runs.
+
+### Updating uv
+
+To update the pinned uv version, change `required-version` in both `pyproject.toml` and
+`python/pyproject.toml`, then update the `rev` in `.pre-commit-config.yaml` to match.
+
 ## Builds
 
 Following any changes to `.rs`, `.pyx` or `.pxd` files, you can re-compile by running:
