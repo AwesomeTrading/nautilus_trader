@@ -262,6 +262,7 @@ pre-flight:  #-- Run comprehensive pre-flight checks (format, check-code, cargo-
 		printf "$(YELLOW)Stage your changes first:$(RESET) git add .\n"; \
 		exit 1; \
 	fi
+	@$(MAKE) --no-print-directory install-deps
 	@$(MAKE) --no-print-directory format
 	@$(MAKE) --no-print-directory check-code EXTRA_FEATURES="capnp,hypersync"
 	@$(MAKE) --no-print-directory cargo-test-extras
@@ -744,6 +745,7 @@ pre-flight-v2:  #-- Run comprehensive v2 pre-flight checks (format, check-code, 
 		printf "$(YELLOW)Stage your changes first:$(RESET) git add .\n"; \
 		exit 1; \
 	fi
+	@$(MAKE) --no-print-directory install-deps
 	@$(MAKE) --no-print-directory format
 	@$(MAKE) --no-print-directory check-code EXTRA_FEATURES="capnp,hypersync"
 	@$(MAKE) --no-print-directory cargo-test-extras

@@ -51,7 +51,9 @@ def test_value_exceeding_limit_raises():
 
 
 def test_from_int():
-    Quantity(1, precision=1)
+    qty = Quantity(1, precision=1)
+    assert str(qty) == "1.0"
+    assert qty.precision == 1
 
 
 def test_from_float():
@@ -489,3 +491,186 @@ def test_pickle():
     qty = Quantity(1.2000, 2)
     pickled = pickle.dumps(qty)
     assert pickle.loads(pickled) == qty  # noqa: S301
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Quantity(0, 0), Decimal(0)),
+        (Quantity(1, 0), Decimal(1)),
+        (Quantity(1.1, 1), Decimal("1.1")),
+        (Quantity(1.23, 2), Decimal("1.23")),
+    ],
+)
+def test_as_decimal(value, expected):
+    assert value.as_decimal() == expected
+
+
+@pytest.mark.parametrize(
+    ("v1", "v2", "expected"),
+    [
+        (Quantity(1.1, 1), Decimal("1.1"), True),
+        (Quantity(1.1, 1), Decimal("1.2"), False),
+        (Quantity(0, 0), Decimal(0), True),
+    ],
+)
+def test_equality_with_decimal(v1, v2, expected):
+    assert (v1 == v2) == expected
+
+
+def test_equality_with_none():
+    assert Quantity(1.0, 1) != None  # noqa: E711
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["not_a_number", "1.2.3", "++1", "--1", "1e", "e10", "1e1e1", "", "nan", "inf", "-inf"],
+)
+def test_from_str_invalid_raises(value):
+    with pytest.raises(ValueError, match=r"(Error parsing|negative|exceeds)"):
+        Quantity.from_str(value)
+
+
+@pytest.mark.parametrize("value", ["-1", "-0.5", "-1e3", "-1.0", "-0.001"])
+def test_from_str_negative_raises(value):
+    with pytest.raises(ValueError, match="negative"):
+        Quantity.from_str(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_str", "expected_precision"),
+    [
+        ("1e6", "1000000", 0),
+        ("1E6", "1000000", 0),
+        ("2.5e4", "25000", 0),
+        ("3.5E-2", "0.035", 3),
+        ("7.89E1", "78.9", 1),
+        ("1_000", "1000", 0),
+        ("1_000.25", "1000.25", 2),
+        ("9_876_543.21", "9876543.21", 2),
+        ("0.000_123", "0.000123", 6),
+        ("1_000e2", "100000", 0),
+        ("0e0", "0", 0),
+        ("0E-3", "0.000", 3),
+        ("2.115", "2.115", 3),
+        ("2.125", "2.125", 3),
+        ("2.155", "2.155", 3),
+    ],
+)
+def test_from_str_comprehensive(value, expected_str, expected_precision):
+    qty = Quantity.from_str(value)
+    assert str(qty) == expected_str
+    assert qty.precision == expected_precision
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_str", "expected_precision"),
+    [
+        ("0", "0", 0),
+        ("0.0", "0.0", 1),
+        ("0.00", "0.00", 2),
+    ],
+)
+def test_from_str_zero_values(value, expected_str, expected_precision):
+    qty = Quantity.from_str(value)
+    assert str(qty) == expected_str
+    assert qty.precision == expected_precision
+
+
+def test_from_str_boundary_values():
+    large = Quantity.from_str("1000000000")
+    assert str(large) == "1000000000"
+
+    with pytest.raises(ValueError, match="exceeds"):
+        Quantity.from_str("999999999999999999")
+
+
+def test_from_str_precision_preservation():
+    assert Quantity.from_str("100").precision == 0
+    assert Quantity.from_str("1000000").precision == 0
+    assert Quantity.from_str("100.0").precision == 1
+    assert Quantity.from_str("100.00").precision == 2
+    assert Quantity.from_str("100.12345").precision == 5
+    assert Quantity.from_str("1_000.123").precision == 3
+    assert Quantity.from_str("1_000").precision == 0
+
+    qty = Quantity.from_str("1.23e-2")
+    assert str(qty) == "0.0123"
+    assert qty.precision == 4
+
+
+def test_from_decimal_zero():
+    q1 = Quantity.from_decimal(Decimal(0))
+    assert str(q1) == "0"
+    assert q1.precision == 0
+
+    q2 = Quantity.from_decimal(Decimal("0.00"))
+    assert str(q2) == "0.00"
+    assert q2.precision == 2
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_str", "expected_precision"),
+    [
+        (Decimal("1E-4"), "0.0001", 4),
+        (Decimal("1E2"), "100", 0),
+        (Decimal("1e-2"), "0.01", 2),
+        (Decimal("5e-5"), "0.00005", 5),
+    ],
+)
+def test_from_decimal_scientific_notation(value, expected_str, expected_precision):
+    qty = Quantity.from_decimal(value)
+    assert str(qty) == expected_str
+    assert qty.precision == expected_precision
+
+
+def test_from_decimal_precision_preservation():
+    assert Quantity.from_decimal(Decimal(100)).precision == 0
+    assert Quantity.from_decimal(Decimal(1000000)).precision == 0
+    assert Quantity.from_decimal(Decimal("100.0")).precision == 1
+    assert Quantity.from_decimal(Decimal("100.00")).precision == 2
+    assert Quantity.from_decimal(Decimal("100.12345")).precision == 5
+
+
+def test_from_decimal_equivalent_to_from_str():
+    for value in ["1.23", "100.00", "0.001", "99999.9", "0.5", "1234.5678"]:
+        from_str = Quantity.from_str(value)
+        from_dec = Quantity.from_decimal(Decimal(value))
+        assert from_str == from_dec
+        assert from_str.precision == from_dec.precision
+
+
+def test_is_zero():
+    assert Quantity.zero().is_zero()
+    assert Quantity(0, 2).is_zero()
+    assert not Quantity(1, 0).is_zero()
+
+
+def test_is_positive():
+    assert Quantity(1, 0).is_positive()
+    assert not Quantity(0, 0).is_positive()
+
+
+def test_float():
+    assert float(Quantity(1.5, 1)) == 1.5
+    assert float(Quantity(0, 0)) == 0.0
+
+
+def test_round_no_ndigits():
+    result = round(Quantity(1.6, 1))
+    assert result == Decimal(2)
+
+
+def test_division_by_zero_raises():
+    # Panics from rust_decimal; ideally would raise ZeroDivisionError
+    with pytest.raises(BaseException, match="Division by zero"):
+        Quantity(1, 0) / 0
+
+
+def test_from_mantissa_exponent():
+    q = Quantity.from_mantissa_exponent(12345, -2, 2)
+    assert str(q) == "123.45"
+    assert q.precision == 2
+
+    q2 = Quantity.from_mantissa_exponent(100, 0, 0)
+    assert str(q2) == "100"

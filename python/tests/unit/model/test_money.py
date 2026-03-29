@@ -312,3 +312,139 @@ def test_abs(value, expected):
 )
 def test_int(value, expected):
     assert int(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Money(1.00, USD), Money(1.00, USD)),
+        (Money(-1.00, USD), Money(-1.00, USD)),
+        (Money(0.00, USD), Money(0.00, USD)),
+    ],
+)
+def test_pos(value, expected):
+    result = +value
+    assert isinstance(result, Money)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Money(0, USD), Decimal("0.00")),
+        (Money(1.50, USD), Decimal("1.50")),
+        (Money(-1.50, USD), Decimal("-1.50")),
+    ],
+)
+def test_as_decimal(value, expected):
+    assert value.as_decimal() == expected
+
+
+def test_equality_with_none():
+    assert Money(1.00, USD) != None  # noqa: E711
+
+
+@pytest.mark.parametrize("value", ["", "USD", "1.00", "@", "abc USD"])
+def test_from_str_invalid_raises(value):
+    with pytest.raises(ValueError, match=r"(invalid|Invalid|Error)"):
+        Money.from_str(value)
+
+
+def test_from_str_rounding():
+    money = Money.from_str("1.999 USD")
+    assert str(money) == "2.00 USD"
+
+
+def test_from_str_boundary_values():
+    large = Money.from_str("1000000000.00 USD")
+    assert str(large) == "1000000000.00 USD"
+
+    neg = Money.from_str("-1000000.00 USD")
+    assert str(neg) == "-1000000.00 USD"
+
+
+def test_from_decimal_integer():
+    money = Money.from_decimal(Decimal(100), USD)
+    assert money == Money(100, USD)
+    assert str(money) == "100.00 USD"
+
+
+@pytest.mark.parametrize(
+    ("decimal_val", "currency", "expected_str"),
+    [
+        (Decimal("1e-2"), USD, "0.01 USD"),
+        (Decimal("1.23e1"), USD, "12.30 USD"),
+        (Decimal("5e-5"), USDT, "0.00005000 USDT"),
+    ],
+)
+def test_from_decimal_scientific_notation(decimal_val, currency, expected_str):
+    money = Money.from_decimal(decimal_val, currency)
+    assert str(money) == expected_str
+
+
+def test_from_decimal_respects_currency_precision():
+    money_usd = Money.from_decimal(Decimal("100.123"), USD)
+    assert str(money_usd) == "100.12 USD"
+
+    money_usdt = Money.from_decimal(Decimal("100.1234567"), USDT)
+    assert str(money_usdt) == "100.12345670 USDT"
+
+
+def test_from_decimal_high_precision_rounds_to_currency():
+    money = Money.from_decimal(Decimal("1.01234567890123456"), USD)
+    assert str(money) == "1.01 USD"
+
+    money_usdt = Money.from_decimal(Decimal("100.123456789012345"), USDT)
+    assert str(money_usdt) == "100.12345679 USDT"
+
+
+def test_from_decimal_different_currencies():
+    money_usd = Money.from_decimal(Decimal("100.50"), USD)
+    money_aud = Money.from_decimal(Decimal("100.50"), AUD)
+    assert money_usd.currency == USD
+    assert money_aud.currency == AUD
+
+    with pytest.raises(ValueError, match="Cannot compare"):
+        _ = money_usd == money_aud
+
+
+def test_from_decimal_equivalent_to_from_str():
+    from_str = Money.from_str("100.50 USD")
+    from_dec = Money.from_decimal(Decimal("100.50"), USD)
+    assert from_str == from_dec
+
+
+def test_ordering_with_none_raises():
+    money = Money(100.0, USD)
+    with pytest.raises(TypeError):
+        _ = money < None
+    with pytest.raises(TypeError):
+        _ = money > None
+
+
+def test_zero():
+    m = Money.zero(USD)
+    assert m.is_zero()
+    assert str(m) == "0.00 USD"
+
+
+def test_is_zero():
+    assert Money(0, USD).is_zero()
+    assert not Money(1, USD).is_zero()
+
+
+def test_float():
+    assert float(Money(1.50, USD)) == 1.5
+    assert float(Money(0, USD)) == 0.0
+    assert float(Money(-1.50, USD)) == -1.5
+
+
+def test_round():
+    assert round(Money(1.555, USD)) == Decimal(2)
+    assert round(Money(1.555, USD), 1) == Decimal("1.6")
+
+
+def test_division_by_zero_raises():
+    # Panics from rust_decimal; ideally would raise ZeroDivisionError
+    with pytest.raises(BaseException, match="Division by zero"):
+        Money(1.00, USD) / 0

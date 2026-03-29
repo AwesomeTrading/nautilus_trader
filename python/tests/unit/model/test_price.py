@@ -458,3 +458,237 @@ def test_pickle():
     price = Price(1.2000, 2)
     pickled = pickle.dumps(price)
     assert pickle.loads(pickled) == price  # noqa: S301
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Price(1, 0), Price(1, 0)),
+        (Price(-1, 0), Price(-1, 0)),
+        (Price(0, 0), Price(0, 0)),
+        (Price(1.5, 1), Price(1.5, 1)),
+    ],
+)
+def test_pos(value, expected):
+    result = +value
+    assert isinstance(result, Price)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (Price(0, 0), Decimal(0)),
+        (Price(1, 0), Decimal(1)),
+        (Price(-1, 0), Decimal(-1)),
+        (Price(1.1, 1), Decimal("1.1")),
+    ],
+)
+def test_as_decimal(value, expected):
+    assert value.as_decimal() == expected
+
+
+@pytest.mark.parametrize(
+    ("v1", "v2", "expected"),
+    [
+        (Price(1.1, 1), Decimal("1.1"), True),
+        (Price(1.1, 1), Decimal("1.2"), False),
+        (Price(0, 0), Decimal(0), True),
+    ],
+)
+def test_equality_with_decimal(v1, v2, expected):
+    assert (v1 == v2) == expected
+
+
+def test_equality_with_none():
+    assert Price(1.0, 1) != None  # noqa: E711
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["not_a_number", "1.2.3", "++1", "--1", "1e", "e10", "1e1e1", "", "nan", "inf", "-inf"],
+)
+def test_from_str_invalid_raises(value):
+    with pytest.raises((ValueError, OverflowError)):
+        Price.from_str(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_str", "expected_precision"),
+    [
+        ("1e7", "10000000", 0),
+        ("1E7", "10000000", 0),
+        ("1.5e6", "1500000", 0),
+        ("2.5E-3", "0.0025", 4),
+        ("9.876E2", "987.6", 1),
+        ("1_000", "1000", 0),
+        ("1_000.50", "1000.50", 2),
+        ("1_234_567.89", "1234567.89", 2),
+        ("0.000_001", "0.000001", 6),
+        ("1_000e3", "1000000", 0),
+        ("-1e7", "-10000000", 0),
+        ("-2.5E-3", "-0.0025", 4),
+        ("0e0", "0", 0),
+        ("0E-5", "0.00000", 5),
+    ],
+)
+def test_from_str_comprehensive(value, expected_str, expected_precision):
+    price = Price.from_str(value)
+    assert str(price) == expected_str
+    assert price.precision == expected_precision
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_str", "expected_precision"),
+    [
+        ("0", "0", 0),
+        ("0.0", "0.0", 1),
+        ("0.00", "0.00", 2),
+        ("-0.0", "0.0", 1),
+    ],
+)
+def test_from_str_zero_values(value, expected_str, expected_precision):
+    price = Price.from_str(value)
+    assert str(price) == expected_str
+    assert price.precision == expected_precision
+    assert price.as_double() == 0
+
+
+def test_from_str_boundary_values():
+    large = Price.from_str("1000000000")
+    assert str(large) == "1000000000"
+
+    neg = Price.from_str("-1000000")
+    assert str(neg) == "-1000000"
+
+    with pytest.raises(ValueError, match="outside valid range"):
+        Price.from_str("999999999999999999")
+
+
+def test_from_str_precision_preservation():
+    assert Price.from_str("100").precision == 0
+    assert Price.from_str("1000000").precision == 0
+    assert Price.from_str("100.0").precision == 1
+    assert Price.from_str("100.00").precision == 2
+    assert Price.from_str("100.12345").precision == 5
+    assert Price.from_str("1_000.123").precision == 3
+    assert Price.from_str("1_000").precision == 0
+
+    price = Price.from_str("1.23e-2")
+    assert str(price) == "0.0123"
+    assert price.precision == 4
+
+
+@pytest.mark.parametrize(
+    ("input_val", "expected"),
+    [
+        ("1.115", "1.115"),
+        ("1.125", "1.125"),
+        ("1.135", "1.135"),
+        ("1.145", "1.145"),
+        ("1.155", "1.155"),
+        ("0.9999999999999999", "0.9999999999999999"),
+        ("1.0000000000000001", "1.0000000000000001"),
+    ],
+)
+def test_from_str_rounding_behavior(input_val, expected):
+    price = Price.from_str(input_val)
+    assert str(price) == expected
+
+
+def test_from_decimal_zero():
+    p1 = Price.from_decimal(Decimal(0))
+    assert str(p1) == "0"
+    assert p1.precision == 0
+
+    p2 = Price.from_decimal(Decimal("0.00"))
+    assert str(p2) == "0.00"
+    assert p2.precision == 2
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_str", "expected_precision"),
+    [
+        (Decimal("1E-4"), "0.0001", 4),
+        (Decimal("1E2"), "100", 0),
+        (Decimal("1e-2"), "0.01", 2),
+        (Decimal("1.23e1"), "12.3", 1),
+        (Decimal("5e-5"), "0.00005", 5),
+    ],
+)
+def test_from_decimal_scientific_notation(value, expected_str, expected_precision):
+    price = Price.from_decimal(value)
+    assert str(price) == expected_str
+    assert price.precision == expected_precision
+
+
+def test_from_decimal_very_small_values():
+    price = Price.from_decimal(Decimal("0.0000000000000001"))
+    assert str(price) == "0.0000000000000001"
+    assert price.precision == 16
+
+
+def test_from_decimal_precision_preservation():
+    assert Price.from_decimal(Decimal(100)).precision == 0
+    assert Price.from_decimal(Decimal(1000000)).precision == 0
+    assert Price.from_decimal(Decimal("100.0")).precision == 1
+    assert Price.from_decimal(Decimal("100.00")).precision == 2
+    assert Price.from_decimal(Decimal("100.12345")).precision == 5
+
+
+def test_from_decimal_equivalent_to_from_str():
+    for value in ["1.23", "100.00", "0.001", "99999.9", "0.5", "1234.5678", "-99.99"]:
+        from_str = Price.from_str(value)
+        from_dec = Price.from_decimal(Decimal(value))
+        assert from_str == from_dec
+        assert from_str.precision == from_dec.precision
+
+
+def test_zero():
+    p = Price.zero(2)
+    assert str(p) == "0.00"
+    assert p.precision == 2
+    assert p.is_zero()
+
+
+def test_is_zero():
+    assert Price(0, 2).is_zero()
+    assert not Price(1.0, 1).is_zero()
+
+
+def test_is_positive():
+    assert Price(1.0, 1).is_positive()
+    assert not Price(-1.0, 1).is_positive()
+    assert not Price(0, 0).is_positive()
+
+
+def test_float():
+    assert float(Price(1.5, 1)) == 1.5
+    assert float(Price(0, 0)) == 0.0
+    assert float(Price(-1.5, 1)) == -1.5
+
+
+def test_to_formatted_str():
+    assert Price.from_str("1000000.50").to_formatted_str() == "1_000_000.50"
+    assert Price.from_str("999.99").to_formatted_str() == "999.99"
+    assert Price.from_str("0").to_formatted_str() == "0"
+
+
+def test_round_no_ndigits():
+    result = round(Price(1.6, 1))
+    assert result == Decimal(2)
+
+
+def test_division_by_zero_raises():
+    # Panics from rust_decimal; ideally would raise ZeroDivisionError
+    with pytest.raises(BaseException, match="Division by zero"):
+        Price(1, 0) / 0
+
+
+def test_from_mantissa_exponent():
+    p = Price.from_mantissa_exponent(12345, -2, 2)
+    assert str(p) == "123.45"
+    assert p.precision == 2
+
+    p2 = Price.from_mantissa_exponent(100, 0, 0)
+    assert str(p2) == "100"

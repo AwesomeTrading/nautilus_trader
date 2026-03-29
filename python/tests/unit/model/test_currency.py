@@ -88,14 +88,22 @@ def test_equality():
 
 
 def test_hash():
-    currency = Currency(
+    c1 = Currency(
         code="AUD",
         precision=2,
         iso4217=36,
         name="Australian dollar",
         currency_type=CurrencyType.FIAT,
     )
-    assert isinstance(hash(currency), int)
+    c2 = Currency(
+        code="AUD",
+        precision=2,
+        iso4217=36,
+        name="Australian dollar",
+        currency_type=CurrencyType.FIAT,
+    )
+    assert isinstance(hash(c1), int)
+    assert hash(c1) == hash(c2)
 
 
 def test_str_and_repr():
@@ -226,3 +234,31 @@ def test_is_crypto(code, expected):
 )
 def test_is_commodity_backed(code, expected):
     assert Currency.is_commodity_backed(code) == expected
+
+
+def test_equality_with_none():
+    assert Currency.from_str("AUD") != None  # noqa: E711
+
+
+def test_register_overwrite_true_replaces_existing():
+    custom = Currency(
+        code="AUD",
+        precision=4,
+        iso4217=0,
+        name="Custom AUD",
+        currency_type=CurrencyType.CRYPTO,
+    )
+    Currency.register(custom, overwrite=True)
+    result = Currency.from_str("AUD")
+
+    assert result.precision == 4
+    assert result.currency_type == CurrencyType.CRYPTO
+
+    original = Currency(
+        code="AUD",
+        precision=2,
+        iso4217=36,
+        name="Australian dollar",
+        currency_type=CurrencyType.FIAT,
+    )
+    Currency.register(original, overwrite=True)
