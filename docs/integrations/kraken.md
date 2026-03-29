@@ -1,8 +1,8 @@
 # Kraken
 
 Founded in 2011, Kraken is one of the most established cryptocurrency exchanges
-globally and the largest exchange in Europe by euro trading volume. The platform
-offers spot and derivatives trading across a wide range of digital assets. This
+and the largest exchange in Europe by euro trading volume. The platform offers
+spot and derivatives trading across a wide range of digital assets. This
 integration connects to Kraken Pro and supports live market data ingest and order
 execution for both Kraken Spot and Kraken Derivatives (Futures) markets.
 
@@ -38,7 +38,7 @@ You can find live example scripts [here](https://github.com/nautechsystems/nauti
 
 ## Kraken documentation
 
-Kraken provides extensive documentation for users:
+Kraken provides detailed documentation for users:
 
 - [Kraken API Documentation](https://docs.kraken.com/api/)
 - [Kraken Spot REST API](https://docs.kraken.com/api/docs/guides/spot-rest-intro)
@@ -60,7 +60,7 @@ Kraken supports two primary product categories:
 :::note
 **Dual-product deployments**: When both `SPOT` and `FUTURES` product types are
 configured, the adapter queries both APIs and merges the account states. This
-ensures the execution engine has visibility into collateral across both markets.
+gives the execution engine visibility into collateral across both markets.
 :::
 
 ## Bar streaming
@@ -105,7 +105,7 @@ We chose this approach over timer-based emission because:
 
 - Timer-based emission could miss the final update before the bar closes.
 - Kraken's updates are not guaranteed to arrive at exact interval boundaries.
-- Buffering ensures data integrity at the cost of latency.
+- Buffering preserves data integrity at the cost of latency.
 
 :::warning
 If bar latency matters for your strategy, consider using trade tick data
@@ -173,18 +173,45 @@ InstrumentId.from_str("PI_ETHUSD.KRAKEN")  # Perpetual inverse ETH
 InstrumentId.from_str("PF_XBTUSD.KRAKEN")  # Perpetual fixed-margin BTC
 ```
 
+## Data capability
+
+### Subscriptions (real-time)
+
+| Data Type              | Spot | Futures | Notes                                  |
+|------------------------|------|---------|----------------------------------------|
+| `QuoteTick`            | ✓    | ✓       | Derived from ticker channel.           |
+| `TradeTick`            | ✓    | ✓       |                                        |
+| `OrderBookDeltas`      | ✓    | ✓       | L2 order book updates.                 |
+| `OrderBookDepth10`     | ✓    | -       | Spot only.                             |
+| `Bar`                  | ✓    | -       | Spot WS OHLC channel. See bar section. |
+| `MarkPriceUpdate`      | -    | ✓       | From futures ticker feed.              |
+| `IndexPriceUpdate`     | -    | ✓       | From futures ticker feed.              |
+| `FundingRateUpdate`    | -    | ✓       | Perpetuals only.                       |
+| `InstrumentStatus`     | ✓    | ✓       | Polling‑based detection.               |
+
+### Requests (historical)
+
+| Data Type              | Spot | Futures | Notes                                  |
+|------------------------|------|---------|----------------------------------------|
+| `TradeTick`            | ✓    | ✓       |                                        |
+| `Bar`                  | ✓    | ✓       |                                        |
+| `OrderBook` (snapshot) | ✓    | ✓       | Via HTTP depth endpoint.               |
+| `FundingRateUpdate`    | -    | ✓       | Client‑side start/end/limit filtering. |
+
 ## Orders capability
 
 ### Order types
 
-| Order Type             | Spot | Futures | Notes                                      |
-|------------------------|------|---------|--------------------------------------------|
-| `MARKET`               | ✓    | ✓       | Immediate execution at market price.       |
-| `LIMIT`                | ✓    | ✓       | Execution at specified price or better.    |
-| `STOP_MARKET`          | ✓    | ✓       | Conditional market order (stop‑loss).      |
-| `MARKET_IF_TOUCHED`    | ✓    | ✓       | Conditional market order (take‑profit).    |
-| `STOP_LIMIT`           | ✓    | ✓       | Conditional limit order (stop‑loss‑limit). |
-| `LIMIT_IF_TOUCHED`     | ✓    | ✓       | Maps to `take_profit` with `limit_price`.  |
+| Order Type             | Spot | Futures | Notes                                         |
+|------------------------|------|---------|-----------------------------------------------|
+| `MARKET`               | ✓    | ✓       | Immediate execution at market price.          |
+| `LIMIT`                | ✓    | ✓       | Execution at specified price or better.       |
+| `STOP_MARKET`          | ✓    | ✓       | Conditional market order (stop‑loss).         |
+| `MARKET_IF_TOUCHED`    | ✓    | ✓       | Conditional market order (take‑profit).       |
+| `STOP_LIMIT`           | ✓    | ✓       | Conditional limit order (stop‑loss‑limit).    |
+| `LIMIT_IF_TOUCHED`     | ✓    | ✓       | Maps to `take_profit` with `limit_price`.     |
+| `TRAILING_STOP_MARKET` | ✓    | -       | Trailing stop with `trailing_offset`.         |
+| `TRAILING_STOP_LIMIT`  | ✓    | -       | Trailing stop‑limit with `limit_offset`.      |
 
 ### Time in force
 
@@ -202,10 +229,28 @@ InstrumentId.from_str("PF_XBTUSD.KRAKEN")  # Perpetual fixed-margin BTC
 
 ### Execution instructions
 
-| Instruction   | Spot | Futures | Notes                                       |
-|---------------|------|---------|---------------------------------------------|
-| `post_only`   | ✓    | ✓       | Available for limit orders.                 |
-| `reduce_only` | -    | ✓       | Futures only. Reduces position, no reversal.|
+| Instruction      | Spot | Futures | Notes                                         |
+|------------------|------|---------|-----------------------------------------------|
+| `post_only`      | ✓    | ✓       | Available for limit orders.                   |
+| `reduce_only`    | -    | ✓       | Futures only. Reduces position, no reversal.  |
+| `quote_quantity` | ✓    | -       | Spot only. Volume in quote currency (`viqc`). |
+| `display_qty`    | ✓    | -       | Spot only. Iceberg orders (`displayvol`).     |
+
+### Trigger types
+
+Conditional orders (stop, take-profit, trailing stop) support a trigger price
+reference on Spot:
+
+| Trigger Type  | Spot | Futures | Notes                                      |
+|---------------|------|---------|--------------------------------------------|
+| `LAST_PRICE`  | ✓    | ✓       | Default. Last traded price.                |
+| `INDEX_PRICE` | ✓    | ✓       | Broader market index price.                |
+| `MARK_PRICE`  | -    | ✓       | Futures only.                              |
+
+:::note
+The adapter rejects unsupported trigger types (e.g., `BID_ASK`) at submission
+time rather than silently coercing them.
+:::
 
 ### Batch operations
 

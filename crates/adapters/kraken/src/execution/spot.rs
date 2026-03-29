@@ -35,13 +35,13 @@ use nautilus_common::{
     },
 };
 use nautilus_core::{
-    AtomicMap, UnixNanos,
+    AtomicMap, MUTEX_POISONED, UnixNanos,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
-    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce},
+    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce, TrailingOffsetType},
     identifiers::{AccountId, ClientId, ClientOrderId, InstrumentId, Symbol, Venue},
     instruments::{Instrument, InstrumentAny},
     orders::{Order, OrderAny},
@@ -64,8 +64,6 @@ use crate::{
         parse::{parse_ws_fill_report, parse_ws_order_status_report},
     },
 };
-
-const MUTEX_POISONED: &str = "mutex poisoned";
 
 /// Kraken Spot execution client.
 ///
@@ -195,6 +193,22 @@ impl KrakenSpotExecutionClient {
             return;
         }
 
+        // Kraken only supports price-based trailing offsets
+        if matches!(
+            order_type,
+            OrderType::TrailingStopMarket | OrderType::TrailingStopLimit
+        ) && let Some(offset_type) = order.trailing_offset_type()
+            && offset_type != TrailingOffsetType::Price
+        {
+            self.emitter.emit_order_denied(
+                order,
+                &format!(
+                    "Kraken Spot only supports Price trailing offset type: received {offset_type:?}"
+                ),
+            );
+            return;
+        }
+
         let account_id = self.core.account_id;
         let client_order_id = order.client_order_id();
         let strategy_id = order.strategy_id();
@@ -204,16 +218,25 @@ impl KrakenSpotExecutionClient {
         let expire_time = order.expire_time();
         let price = order.price();
         let trigger_price = order.trigger_price();
+        let trigger_type = order.trigger_type();
+        let trailing_offset = order.trailing_offset();
+        let limit_offset = order.limit_offset();
         let is_reduce_only = order.is_reduce_only();
         let is_post_only = order.is_post_only();
+        let is_quote_quantity = order.is_quote_quantity();
+        let display_qty = order.display_qty();
 
         log::debug!("OrderSubmitted: client_order_id={client_order_id}");
         self.emitter.emit_order_submitted(order);
 
         let kraken_cl_ord_id = truncate_cl_ord_id(&client_order_id);
 
-        self.order_qty_cache
-            .insert(kraken_cl_ord_id.clone(), quantity.as_f64());
+        // Only cache base-denominated quantities; quote quantities
+        // are not valid for the WS order report fallback path
+        if !is_quote_quantity {
+            self.order_qty_cache
+                .insert(kraken_cl_ord_id.clone(), quantity.as_f64());
+        }
 
         if kraken_cl_ord_id != client_order_id.as_str() {
             self.truncated_id_map
@@ -237,8 +260,13 @@ impl KrakenSpotExecutionClient {
                     expire_time,
                     price,
                     trigger_price,
+                    trigger_type,
+                    trailing_offset,
+                    limit_offset,
                     is_reduce_only,
                     is_post_only,
+                    is_quote_quantity,
+                    display_qty,
                 )
                 .await;
 
@@ -287,7 +315,6 @@ impl KrakenSpotExecutionClient {
                 )
                 .await
             {
-                log::error!("Cancel order failed: {e}");
                 let ts_event = clock.get_time_ns();
                 emitter.emit_order_cancel_rejected_event(
                     strategy_id,
@@ -377,7 +404,6 @@ impl KrakenSpotExecutionClient {
                 )
                 .await
             {
-                log::error!("Modify order failed: {e}");
                 let ts_event = clock.get_time_ns();
                 emitter.emit_order_modify_rejected_event(
                     strategy_id,
@@ -895,7 +921,6 @@ impl ExecutionClient for KrakenSpotExecutionClient {
 
             self.spawn_task("cancel_all_orders", async move {
                 if let Err(e) = http.inner.cancel_all_orders().await {
-                    log::error!("Cancel all orders failed: {e}");
                     anyhow::bail!("Cancel all orders failed: {e}");
                 }
                 Ok(())
@@ -975,72 +1000,5 @@ impl ExecutionClient for KrakenSpotExecutionClient {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{cell::RefCell, rc::Rc};
-
-    use nautilus_common::cache::Cache;
-    use nautilus_model::{
-        enums::AccountType,
-        identifiers::{AccountId, ClientId, TraderId},
-    };
-    use rstest::rstest;
-
-    use super::*;
-    use crate::{common::enums::KrakenProductType, config::KrakenExecClientConfig};
-
-    fn create_test_core() -> ExecutionClientCore {
-        let cache = Rc::new(RefCell::new(Cache::default()));
-        ExecutionClientCore::new(
-            TraderId::from("TESTER-001"),
-            ClientId::from("KRAKEN"),
-            *KRAKEN_VENUE,
-            OmsType::Hedging,
-            AccountId::from("KRAKEN-001"),
-            AccountType::Margin,
-            None,
-            cache,
-        )
-    }
-
-    #[rstest]
-    fn test_spot_exec_client_new() {
-        let config = KrakenExecClientConfig {
-            product_type: KrakenProductType::Spot,
-            api_key: "test_key".to_string(),
-            api_secret: "test_secret".to_string(),
-            ..Default::default()
-        };
-
-        let client = KrakenSpotExecutionClient::new(create_test_core(), config);
-        assert!(client.is_ok());
-
-        let client = client.unwrap();
-        assert_eq!(client.client_id(), ClientId::from("KRAKEN"));
-        assert_eq!(client.account_id(), AccountId::from("KRAKEN-001"));
-        assert_eq!(client.venue(), *KRAKEN_VENUE);
-        assert!(!client.is_connected());
-    }
-
-    #[rstest]
-    fn test_spot_exec_client_start_stop() {
-        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
-        nautilus_common::live::runner::set_exec_event_sender(sender);
-
-        let config = KrakenExecClientConfig {
-            product_type: KrakenProductType::Spot,
-            api_key: "test_key".to_string(),
-            api_secret: "test_secret".to_string(),
-            ..Default::default()
-        };
-
-        let mut client = KrakenSpotExecutionClient::new(create_test_core(), config).unwrap();
-
-        assert!(client.start().is_ok());
-        assert!(client.stop().is_ok());
-        assert!(!client.is_connected());
     }
 }

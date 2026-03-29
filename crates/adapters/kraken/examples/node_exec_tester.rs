@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_use_post_only(true)
     .with_open_position_on_start(order_qty.as_decimal())
     // .with_tob_offset_ticks(0)
-    .with_test_reject_post_only(true)
+    .with_test_reject_post_only(false)
     .with_log_data(false);
 
     tester_config.base.external_order_claims = Some(vec![instrument_id]);

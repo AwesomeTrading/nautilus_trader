@@ -32,11 +32,15 @@ use nautilus_core::{
     nanos::UnixNanos, time::get_atomic_clock_realtime,
 };
 use nautilus_model::{
-    data::{Bar, BarType, TradeTick},
-    enums::{AccountType, CurrencyType, OrderSide, OrderType, PositionSideSpecified, TimeInForce},
+    data::{Bar, BarType, BookOrder, TradeTick},
+    enums::{
+        AccountType, BookType, CurrencyType, OrderSide, OrderType, PositionSideSpecified,
+        TimeInForce, TriggerType,
+    },
     events::AccountState,
     identifiers::{AccountId, ClientOrderId, InstrumentId, VenueOrderId},
     instruments::{Instrument, InstrumentAny},
+    orderbook::OrderBook,
     reports::{FillReport, OrderStatusReport, PositionStatusReport},
     types::{AccountBalance, Currency, Money, Price, Quantity},
 };
@@ -45,6 +49,7 @@ use nautilus_network::{
     ratelimiter::quota::Quota,
     retry::{RetryConfig, RetryManager},
 };
+use rust_decimal::Decimal;
 use serde::de::DeserializeOwned;
 use tokio_util::sync::CancellationToken;
 use ustr::Ustr;
@@ -52,7 +57,7 @@ use ustr::Ustr;
 use super::{models::*, query::*};
 use crate::{
     common::{
-        consts::NAUTILUS_KRAKEN_BROKER_ID,
+        consts::{KRAKEN_OFLAG_POST_ONLY, KRAKEN_OFLAG_QUOTE_QUANTITY, NAUTILUS_KRAKEN_BROKER_ID},
         credential::KrakenCredential,
         enums::{KrakenEnvironment, KrakenOrderSide, KrakenOrderType, KrakenProductType},
         parse::{
@@ -1401,6 +1406,56 @@ impl KrakenSpotHttpClient {
         Ok(bars)
     }
 
+    /// Requests an order book snapshot for an instrument.
+    pub async fn request_book_snapshot(
+        &self,
+        instrument_id: InstrumentId,
+        depth: Option<u32>,
+    ) -> anyhow::Result<OrderBook, KrakenHttpError> {
+        let instrument = self
+            .get_cached_instrument(&instrument_id.symbol.inner())
+            .ok_or_else(|| {
+                KrakenHttpError::ParseError(format!(
+                    "Instrument not found in cache: {instrument_id}"
+                ))
+            })?;
+
+        let raw_symbol = instrument.raw_symbol().to_string();
+        let price_precision = instrument.price_precision();
+        let size_precision = instrument.size_precision();
+        let ts_event = self.generate_ts_init();
+
+        let response = self.inner.get_book_depth(&raw_symbol, depth).await?;
+
+        let book_data = response.values().next().ok_or_else(|| {
+            KrakenHttpError::ParseError(format!("No book data returned for {instrument_id}"))
+        })?;
+
+        let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+        for (i, level) in book_data.bids.iter().enumerate() {
+            let price_str = level.first().and_then(|v| v.as_str()).unwrap_or("0");
+            let size_str = level.get(1).and_then(|v| v.as_str()).unwrap_or("0");
+            let price = Price::new(price_str.parse::<f64>().unwrap_or(0.0), price_precision);
+            let size = Quantity::new(size_str.parse::<f64>().unwrap_or(0.0), size_precision);
+            let order = BookOrder::new(OrderSide::Buy, price, size, i as u64);
+            book.add(order, 0, i as u64, ts_event);
+        }
+
+        let bids_len = book_data.bids.len();
+
+        for (i, level) in book_data.asks.iter().enumerate() {
+            let price_str = level.first().and_then(|v| v.as_str()).unwrap_or("0");
+            let size_str = level.get(1).and_then(|v| v.as_str()).unwrap_or("0");
+            let price = Price::new(price_str.parse::<f64>().unwrap_or(0.0), price_precision);
+            let size = Quantity::new(size_str.parse::<f64>().unwrap_or(0.0), size_precision);
+            let order = BookOrder::new(OrderSide::Sell, price, size, (bids_len + i) as u64);
+            book.add(order, 0, (bids_len + i) as u64, ts_event);
+        }
+
+        Ok(book)
+    }
+
     /// Requests account state (balances) from Kraken.
     ///
     /// Returns an `AccountState` containing all currency balances.
@@ -1758,8 +1813,13 @@ impl KrakenSpotHttpClient {
         expire_time: Option<UnixNanos>,
         price: Option<Price>,
         trigger_price: Option<Price>,
+        trigger_type: Option<TriggerType>,
+        trailing_offset: Option<Decimal>,
+        limit_offset: Option<Decimal>,
         reduce_only: bool,
         post_only: bool,
+        quote_quantity: bool,
+        display_qty: Option<Quantity>,
     ) -> anyhow::Result<VenueOrderId> {
         let instrument = self
             .get_cached_instrument(&instrument_id.symbol.inner())
@@ -1780,13 +1840,18 @@ impl KrakenSpotHttpClient {
             OrderType::StopLimit => KrakenOrderType::StopLossLimit,
             OrderType::MarketIfTouched => KrakenOrderType::TakeProfit,
             OrderType::LimitIfTouched => KrakenOrderType::TakeProfitLimit,
+            OrderType::TrailingStopMarket => KrakenOrderType::TrailingStop,
+            OrderType::TrailingStopLimit => KrakenOrderType::TrailingStopLimit,
             _ => anyhow::bail!("Unsupported order type: {order_type:?}"),
         };
 
         let mut oflags = Vec::new();
         let is_limit_order = matches!(
             order_type,
-            OrderType::Limit | OrderType::StopLimit | OrderType::LimitIfTouched
+            OrderType::Limit
+                | OrderType::StopLimit
+                | OrderType::LimitIfTouched
+                | OrderType::TrailingStopLimit
         );
 
         // FOK is only valid for plain limit orders, not conditional orders
@@ -1798,11 +1863,15 @@ impl KrakenSpotHttpClient {
             compute_time_in_force(is_limit_order, time_in_force, expire_time)?;
 
         if post_only {
-            oflags.push("post");
+            oflags.push(KRAKEN_OFLAG_POST_ONLY);
         }
 
         if reduce_only {
             log::warn!("reduce_only is not supported by Kraken Spot API, ignoring");
+        }
+
+        if quote_quantity {
+            oflags.push(KRAKEN_OFLAG_QUOTE_QUANTITY);
         }
 
         let mut builder = KrakenSpotAddOrderParamsBuilder::default();
@@ -1825,9 +1894,32 @@ impl KrakenSpotHttpClient {
                 | OrderType::StopLimit
                 | OrderType::MarketIfTouched
                 | OrderType::LimitIfTouched
+                | OrderType::TrailingStopMarket
+                | OrderType::TrailingStopLimit
         );
 
-        if is_conditional {
+        let is_trailing = matches!(
+            order_type,
+            OrderType::TrailingStopMarket | OrderType::TrailingStopLimit
+        );
+
+        if is_trailing {
+            // Kraken trailing stops trail immediately; activation prices not supported
+            if trigger_price.is_some() {
+                anyhow::bail!(
+                    "Kraken Spot trailing stops do not support activation trigger prices"
+                );
+            }
+
+            // Kraken trailing stops: price = trailing offset, price2 = limit offset
+            if let Some(offset) = trailing_offset {
+                builder.price(offset.to_string());
+            }
+
+            if let Some(offset) = limit_offset {
+                builder.price2(offset.to_string());
+            }
+        } else if is_conditional {
             if let Some(trigger) = trigger_price {
                 builder.price(trigger.to_string());
             }
@@ -1837,6 +1929,21 @@ impl KrakenSpotHttpClient {
             }
         } else if let Some(limit) = price {
             builder.price(limit.to_string());
+        }
+
+        // Kraken Spot supports "last" (default) and "index" trigger references
+        if is_conditional {
+            match trigger_type {
+                Some(TriggerType::IndexPrice) => {
+                    builder.trigger("index".to_string());
+                }
+                Some(TriggerType::LastPrice | TriggerType::Default) | None => {}
+                Some(other) => {
+                    anyhow::bail!(
+                        "Unsupported trigger type for Kraken Spot: {other:?} (only LastPrice and IndexPrice supported)"
+                    );
+                }
+            }
         }
 
         if !oflags.is_empty() {
@@ -1849,6 +1956,10 @@ impl KrakenSpotHttpClient {
 
         if let Some(expire) = expiretm {
             builder.expiretm(expire);
+        }
+
+        if let Some(dq) = display_qty {
+            builder.displayvol(dq.to_string());
         }
 
         let params = builder

@@ -31,11 +31,12 @@ use nautilus_core::{
     time::get_atomic_clock_realtime,
 };
 use nautilus_model::{
-    data::{Bar, BarType, TradeTick},
-    enums::{AccountType, CurrencyType, OrderSide, OrderType, TimeInForce},
+    data::{Bar, BarType, BookOrder, FundingRateUpdate, TradeTick},
+    enums::{AccountType, BookType, CurrencyType, OrderSide, OrderType, TimeInForce},
     events::AccountState,
     identifiers::{AccountId, ClientOrderId, InstrumentId, Symbol, VenueOrderId},
     instruments::{Instrument, InstrumentAny},
+    orderbook::OrderBook,
     reports::{FillReport, OrderStatusReport, PositionStatusReport},
     types::{AccountBalance, Currency, MarginBalance, Money, Price, Quantity},
 };
@@ -44,6 +45,7 @@ use nautilus_network::{
     ratelimiter::quota::Quota,
     retry::{RetryConfig, RetryManager},
 };
+use rust_decimal::{Decimal, prelude::FromPrimitive};
 use serde::de::DeserializeOwned;
 use tokio_util::sync::CancellationToken;
 use ustr::Ustr;
@@ -582,6 +584,28 @@ impl KrakenFuturesRawHttpClient {
         let url = format!("{}{endpoint}", self.base_url);
 
         self.send_request(Method::GET, endpoint, url, false).await
+    }
+
+    /// Requests order book depth for a futures symbol.
+    pub async fn get_orderbook(
+        &self,
+        symbol: &str,
+    ) -> anyhow::Result<FuturesOrderBookResponse, KrakenHttpError> {
+        let endpoint = format!("/derivatives/api/v3/orderbook?symbol={symbol}");
+        let url = format!("{}{endpoint}", self.base_url);
+
+        self.send_request(Method::GET, &endpoint, url, false).await
+    }
+
+    /// Requests historical funding rates for a futures symbol.
+    pub async fn get_historical_funding_rates(
+        &self,
+        symbol: &str,
+    ) -> anyhow::Result<FuturesHistoricalFundingRatesResponse, KrakenHttpError> {
+        let endpoint = format!("/derivatives/api/v4/historicalfundingrates?symbol={symbol}");
+        let url = format!("{}{endpoint}", self.base_url);
+
+        self.send_request(Method::GET, &endpoint, url, false).await
     }
 
     /// Requests OHLC candlestick data for a futures symbol.
@@ -1351,6 +1375,127 @@ impl KrakenFuturesHttpClient {
         }
 
         Ok(bars)
+    }
+
+    /// Requests an order book snapshot for a futures instrument.
+    pub async fn request_book_snapshot(
+        &self,
+        instrument_id: InstrumentId,
+        depth: Option<u32>,
+    ) -> anyhow::Result<OrderBook, KrakenHttpError> {
+        let instrument = self
+            .get_cached_instrument(&instrument_id.symbol.inner())
+            .ok_or_else(|| {
+                KrakenHttpError::ParseError(format!(
+                    "Instrument not found in cache: {instrument_id}"
+                ))
+            })?;
+
+        let raw_symbol = instrument.raw_symbol().to_string();
+        let price_precision = instrument.price_precision();
+        let size_precision = instrument.size_precision();
+        let ts_event = self.generate_ts_init();
+
+        let response = self.inner.get_orderbook(&raw_symbol).await?;
+        let book_data = &response.order_book;
+
+        let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+        let bid_limit = depth.map_or(book_data.bids.len(), |d| {
+            (d as usize).min(book_data.bids.len())
+        });
+        let ask_limit = depth.map_or(book_data.asks.len(), |d| {
+            (d as usize).min(book_data.asks.len())
+        });
+
+        for (i, level) in book_data.bids.iter().take(bid_limit).enumerate() {
+            let price = Price::new(level.price, price_precision);
+            let size = Quantity::new(level.qty, size_precision);
+            let order = BookOrder::new(OrderSide::Buy, price, size, i as u64);
+            book.add(order, 0, i as u64, ts_event);
+        }
+
+        for (i, level) in book_data.asks.iter().take(ask_limit).enumerate() {
+            let price = Price::new(level.price, price_precision);
+            let size = Quantity::new(level.qty, size_precision);
+            let order = BookOrder::new(OrderSide::Sell, price, size, (bid_limit + i) as u64);
+            book.add(order, 0, (bid_limit + i) as u64, ts_event);
+        }
+
+        Ok(book)
+    }
+
+    /// Requests historical funding rates for a futures instrument.
+    ///
+    /// Kraken returns all available rates; client-side filtering applies
+    /// the `start`, `end`, and `limit` constraints from the caller.
+    pub async fn request_funding_rates(
+        &self,
+        instrument_id: InstrumentId,
+        start: Option<DateTime<Utc>>,
+        end: Option<DateTime<Utc>>,
+        limit: Option<usize>,
+    ) -> anyhow::Result<Vec<FundingRateUpdate>, KrakenHttpError> {
+        let instrument = self
+            .get_cached_instrument(&instrument_id.symbol.inner())
+            .ok_or_else(|| {
+                KrakenHttpError::ParseError(format!(
+                    "Instrument not found in cache: {instrument_id}"
+                ))
+            })?;
+
+        let raw_symbol = instrument.raw_symbol().to_string();
+        let ts_init = self.generate_ts_init();
+        let start_ns = start.map(|dt| dt.timestamp_nanos_opt().unwrap_or(0) as u64);
+        let end_ns = end.map(|dt| dt.timestamp_nanos_opt().unwrap_or(0) as u64);
+
+        let response = self.inner.get_historical_funding_rates(&raw_symbol).await?;
+
+        let mut rates = Vec::new();
+
+        for entry in &response.rates {
+            let ts_event = entry
+                .timestamp
+                .parse::<DateTime<Utc>>()
+                .map(|dt| UnixNanos::from(dt.timestamp_nanos_opt().unwrap_or(0) as u64))
+                .unwrap_or(ts_init);
+
+            if let Some(s) = start_ns
+                && ts_event.as_u64() < s
+            {
+                continue;
+            }
+
+            if let Some(e) = end_ns
+                && ts_event.as_u64() > e
+            {
+                continue;
+            }
+
+            let Some(rate) = Decimal::from_f64(entry.relative_funding_rate) else {
+                continue;
+            };
+
+            rates.push(FundingRateUpdate::new(
+                instrument_id,
+                rate,
+                None,
+                None,
+                ts_event,
+                ts_init,
+            ));
+
+            if let Some(lim) = limit
+                && rates.len() >= lim
+            {
+                break;
+            }
+        }
+
+        // Kraken returns newest-first; reverse to ascending chronological order
+        rates.reverse();
+
+        Ok(rates)
     }
 
     /// Requests account state from the Kraken Futures exchange.
