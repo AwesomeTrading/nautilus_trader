@@ -32,8 +32,8 @@ use nautilus_common::{
     },
     runner::{
         SyncDataCommandSender, SyncTradingCommandSender, data_cmd_queue_is_empty,
-        drain_data_cmd_queue, drain_trading_cmd_queue, init_data_cmd_sender, init_exec_cmd_sender,
-        trading_cmd_queue_is_empty,
+        drain_data_cmd_queue, drain_trading_cmd_queue, replace_data_cmd_sender,
+        replace_exec_cmd_sender, trading_cmd_queue_is_empty,
     },
 };
 use nautilus_core::{UUID4, UnixNanos, datetime::unix_nanos_to_iso8601, formatting::Separable};
@@ -1095,8 +1095,8 @@ impl BacktestEngine {
     }
 
     fn init_command_senders() {
-        init_data_cmd_sender(Arc::new(SyncDataCommandSender));
-        init_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
+        replace_data_cmd_sender(Arc::new(SyncDataCommandSender));
+        replace_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
     }
 
     fn advance_clock_on_accumulator(

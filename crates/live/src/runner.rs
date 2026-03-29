@@ -16,14 +16,14 @@
 use std::{fmt::Debug, sync::Arc};
 
 use nautilus_common::{
-    live::runner::{set_data_event_sender, set_exec_event_sender},
+    live::runner::{replace_data_event_sender, replace_exec_event_sender},
     messages::{
         DataEvent, ExecutionEvent, ExecutionReport, data::DataCommand, execution::TradingCommand,
     },
     msgbus::{self, MessagingSwitchboard},
     runner::{
-        DataCommandSender, TimeEventSender, TradingCommandSender, set_data_cmd_sender,
-        set_exec_cmd_sender, set_time_event_sender,
+        DataCommandSender, TimeEventSender, TradingCommandSender, replace_data_cmd_sender,
+        replace_exec_cmd_sender, replace_time_event_sender,
     },
     timer::TimeEventHandler,
 };
@@ -163,11 +163,13 @@ impl AsyncRunner {
         let (exec_evt_tx, exec_evt_rx) = unbounded_channel::<ExecutionEvent>();
         let (signal_tx, signal_rx) = unbounded_channel::<()>();
 
-        set_time_event_sender(Arc::new(AsyncTimeEventSender::new(time_evt_tx)));
-        set_data_cmd_sender(Arc::new(AsyncDataCommandSender::new(data_cmd_tx)));
-        set_data_event_sender(data_evt_tx);
-        set_exec_cmd_sender(Arc::new(AsyncTradingCommandSender::new(exec_cmd_tx)));
-        set_exec_event_sender(exec_evt_tx);
+        // A test process may reuse the same thread across backtest and live runners.
+        // Replace any stale thread-local senders so this runner owns the active endpoints.
+        replace_time_event_sender(Arc::new(AsyncTimeEventSender::new(time_evt_tx)));
+        replace_data_cmd_sender(Arc::new(AsyncDataCommandSender::new(data_cmd_tx)));
+        replace_data_event_sender(data_evt_tx);
+        replace_exec_cmd_sender(Arc::new(AsyncTradingCommandSender::new(exec_cmd_tx)));
+        replace_exec_event_sender(exec_evt_tx);
 
         Self {
             channels: AsyncRunnerChannels {

@@ -1314,6 +1314,14 @@ impl PendingEvents {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "python")]
+    use std::sync::Arc;
+
+    #[cfg(feature = "python")]
+    use nautilus_common::runner::{
+        SyncDataCommandSender, SyncTradingCommandSender, replace_data_cmd_sender,
+        replace_exec_cmd_sender,
+    };
     use nautilus_model::identifiers::TraderId;
     use rstest::*;
 
@@ -1506,6 +1514,31 @@ mod tests {
         assert!(!node.is_running());
         assert_eq!(node.environment(), Environment::Sandbox);
         assert_eq!(node.trader_id(), TraderId::from("TRADER-001"));
+    }
+
+    #[cfg(feature = "python")]
+    #[rstest]
+    fn test_node_build_replaces_stale_runner_senders() {
+        replace_data_cmd_sender(Arc::new(SyncDataCommandSender));
+        replace_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
+
+        let first = LiveNode::builder(TraderId::from("TRADER-001"), Environment::Sandbox)
+            .unwrap()
+            .with_name("FirstNode")
+            .build()
+            .unwrap();
+
+        assert_eq!(first.state(), NodeState::Idle);
+        drop(first);
+
+        let second = LiveNode::builder(TraderId::from("TRADER-001"), Environment::Sandbox)
+            .unwrap()
+            .with_name("SecondNode")
+            .build()
+            .unwrap();
+
+        assert_eq!(second.state(), NodeState::Idle);
+        assert!(!second.is_running());
     }
 
     #[cfg(feature = "python")]
