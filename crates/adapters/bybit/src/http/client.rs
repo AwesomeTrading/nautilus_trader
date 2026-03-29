@@ -1118,7 +1118,6 @@ impl BybitRawHttpClient {
             .build()
             .expect("Failed to build BybitNoConvertRepayParams");
 
-        // TODO: Logging for visibility during development
         if let Ok(params_json) = serde_json::to_string(&params) {
             log::debug!("Repay request params: {params_json}");
         }
@@ -1134,7 +1133,6 @@ impl BybitRawHttpClient {
             )
             .await;
 
-        // TODO: Logging for visibility during development
         if let Err(ref e) = result
             && let Ok(params_json) = serde_json::to_string(&params)
         {
@@ -2551,7 +2549,8 @@ impl BybitHttpClient {
             .send_request(Method::GET, "/v5/order/realtime", Some(&params), None, true)
             .await?;
 
-        if response.result.list.is_empty() {
+        // Options do not support the StopOrder filter
+        if response.result.list.is_empty() && product_type != BybitProductType::Option {
             log::debug!("Order not found in open orders, trying with StopOrder filter");
 
             let mut stop_params = BybitOpenOrdersParamsBuilder::default();
@@ -2605,7 +2604,13 @@ impl BybitHttpClient {
                 )
                 .await?;
 
-            if history_response.result.list.is_empty() {
+            if history_response.result.list.is_empty() && product_type == BybitProductType::Option {
+                log::debug!("Option order not found in order history");
+                return Ok(None);
+            }
+
+            // Options do not support the StopOrder filter
+            if history_response.result.list.is_empty() && product_type != BybitProductType::Option {
                 log::debug!("Order not found in order history, trying with StopOrder filter");
 
                 let mut stop_history_params = BybitOrderHistoryParamsBuilder::default();

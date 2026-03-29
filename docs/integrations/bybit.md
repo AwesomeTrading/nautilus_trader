@@ -209,7 +209,7 @@ All the order types listed below can be used as *either* entries or exits, excep
 
 | Feature             | Spot | Linear | Inverse | Option | Notes                                   |
 |---------------------|------|--------|---------|--------|-----------------------------------------|
-| Order lists         | -    | -      | -       | -      | *Not supported*.                        |
+| Order lists         | ✓    | ✓      | ✓       | ✓      | Submitted as a batch via WebSocket.     |
 | OCO orders          | ✓    | ✓      | ✓       | -      | UI only; API users implement manually.  |
 | Bracket orders      | ✓    | ✓      | ✓       | -      | UI only; API users implement manually.  |
 | Conditional orders  | ✓    | ✓      | ✓       | -      | Stop and limit‑if‑touched orders.       |
@@ -218,9 +218,43 @@ All the order types listed below can be used as *either* entries or exits, excep
 
 Individual orders can be customized using the `params` dictionary when submitting orders:
 
-| Parameter     | Type   | Description                                                                    |
-|---------------|--------|--------------------------------------------------------------------------------|
-| `is_leverage` | `bool` | For Spot products only. If `True`, enables margin trading (borrowing) for the order. Default: `False`. See [Bybit's isLeverage documentation](https://bybit-exchange.github.io/docs/v5/order/create-order#request-parameters). |
+| Parameter          | Type                   | Description                                                             |
+|--------------------|------------------------|-------------------------------------------------------------------------|
+| `is_leverage`      | `bool`                 | Spot only. Enables margin trading (borrowing). Default: `False`.        |
+| `take_profit`      | `str` or `float`       | TP trigger price. Attaches a native TP to the order.                    |
+| `stop_loss`        | `str` or `float`       | SL trigger price. Attaches a native SL to the order.                    |
+| `tp_trigger_by`    | `str`                  | TP trigger type: `"LastPrice"`, `"IndexPrice"`, or `"MarkPrice"`.       |
+| `sl_trigger_by`    | `str`                  | SL trigger type: `"LastPrice"`, `"IndexPrice"`, or `"MarkPrice"`.       |
+| `tp_order_type`    | `str`                  | TP execution type: `"Market"` or `"Limit"`. Default: `"Market"`.        |
+| `sl_order_type`    | `str`                  | SL execution type: `"Market"` or `"Limit"`. Default: `"Market"`.        |
+| `tp_limit_price`   | `str` or `float`       | Limit price for TP when `tp_order_type` is `"Limit"`.                   |
+| `sl_limit_price`   | `str` or `float`       | Limit price for SL when `sl_order_type` is `"Limit"`.                   |
+| `tp_trigger_price` | `str` or `float`       | Custom TP trigger price (overrides `take_profit`).                      |
+| `sl_trigger_price` | `str` or `float`       | Custom SL trigger price (overrides `stop_loss`).                        |
+| `close_on_trigger` | `bool`                 | Close the position when TP/SL triggers. Default: `False`.               |
+
+:::note
+Native TP/SL params are not supported in demo mode. The `is_leverage` param applies to
+Spot products only. See [Bybit's isLeverage documentation](https://bybit-exchange.github.io/docs/v5/order/create-order#request-parameters).
+:::
+
+#### Example: Order with native TP/SL
+
+```python
+order = strategy.order_factory.limit(
+    instrument_id=InstrumentId.from_str("BTCUSDT-LINEAR.BYBIT"),
+    order_side=OrderSide.BUY,
+    quantity=Quantity.from_str("0.01"),
+    price=Price.from_str("60000.0"),
+    params={
+        "take_profit": "65000.0",
+        "stop_loss": "58000.0",
+        "tp_trigger_by": "LastPrice",
+        "sl_trigger_by": "LastPrice",
+    },
+)
+strategy.submit_order(order)
+```
 
 #### Example: Spot margin trading
 
@@ -236,8 +270,8 @@ strategy.submit_order(order)
 ```
 
 :::note
-Without `is_leverage=True` in the params, Spot orders will only use your available balance
-and won't borrow funds, even if you have auto-borrow enabled on your Bybit account.
+Without `is_leverage=True` in the params, Spot orders use your available balance
+and do not borrow funds, even if you have auto-borrow enabled on your Bybit account.
 :::
 
 For a complete example of using order parameters including `is_leverage`, see the

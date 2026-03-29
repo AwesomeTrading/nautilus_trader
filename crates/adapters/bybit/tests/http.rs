@@ -3104,3 +3104,108 @@ async fn test_submit_order_limit_if_touched_trigger_direction() {
         "Sell LIT should trigger on rise"
     );
 }
+
+async fn handle_empty_orders(headers: axum::http::HeaderMap) -> Response {
+    if !headers.contains_key("X-BAPI-API-KEY") {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "retCode": 10003,
+                "retMsg": "Invalid API key",
+                "result": {},
+                "retExtInfo": {},
+                "time": 1704470400123i64
+            })),
+        )
+            .into_response();
+    }
+
+    Json(json!({
+        "retCode": 0,
+        "retMsg": "OK",
+        "result": {
+            "list": [],
+            "nextPageCursor": ""
+        },
+        "retExtInfo": {},
+        "time": 1704470400123i64
+    }))
+    .into_response()
+}
+
+fn create_empty_orders_test_router(state: TestServerState) -> Router {
+    Router::new()
+        .route("/v5/market/time", get(handle_get_server_time))
+        .route("/v5/market/instruments-info", get(handle_get_instruments))
+        .route("/v5/account/fee-rate", get(handle_get_fee_rate))
+        .route("/v5/order/realtime", get(handle_empty_orders))
+        .route("/v5/order/history", get(handle_empty_orders))
+        .with_state(state)
+}
+
+async fn start_empty_orders_test_server()
+-> Result<(SocketAddr, TestServerState), Box<dyn std::error::Error + Send + Sync>> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let state = TestServerState::default();
+    let router = create_empty_orders_test_router(state.clone());
+
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    wait_for_server(addr, "/v5/market/time").await;
+    Ok((addr, state))
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_query_order_option_not_found_returns_none() {
+    let (addr, _state) = start_empty_orders_test_server().await.unwrap();
+    let base_url = format!("http://{addr}");
+
+    let client = BybitHttpClient::with_credentials(
+        "test_api_key".to_string(),
+        "test_api_secret".to_string(),
+        Some(base_url),
+        Some(60),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let instruments = client
+        .request_instruments(BybitProductType::Option, None)
+        .await
+        .unwrap();
+
+    for instrument in instruments {
+        client.cache_instrument(instrument);
+    }
+
+    let account_id = AccountId::from("BYBIT-UNIFIED");
+    let instrument_id = InstrumentId::new(
+        Symbol::from("BTC-27MAR26-70000-C-OPTION"),
+        Venue::from("BYBIT"),
+    );
+    let client_order_id = ClientOrderId::from("option-query-test-1");
+
+    let result = client
+        .query_order(
+            account_id,
+            BybitProductType::Option,
+            instrument_id,
+            Some(client_order_id),
+            None,
+        )
+        .await;
+
+    assert!(result.is_ok(), "query_order should not error for options");
+    assert!(
+        result.unwrap().is_none(),
+        "query_order should return None when option order not found"
+    );
+}

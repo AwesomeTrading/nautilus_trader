@@ -28,6 +28,8 @@ Released on TBD (UTC).
 - Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
 - Added Bybit options trade subscriptions using `baseCoin` topic with per-instrument filtering
 - Added Bybit option instrument fee rate population from `/v5/account/fee-rate`
+- Added Bybit `submit_order_list` via WebSocket batch API with TP/SL support and HTTP demo fallback (Rust)
+- Added Bybit `query_order` via HTTP with open order and history fallback (Rust)
 - Added Databento Arrow serialization for imbalance and statistics (#3689), thanks for reporting @GianC0
 - Added Deribit `LimitIfTouched` and `MarketIfTouched` order type support (`take_limit`/`take_market`)
 - Added Hyperliquid agent wallet support (#3668), thanks @oh92
@@ -110,6 +112,7 @@ Released on TBD (UTC).
 - Fixed Bybit WebSocket subscription ACKs confirming all pending topics instead of the acknowledged topic (via `req_id` correlation)
 - Fixed Bybit WebSocket failed subscription ACKs (success=false) not triggering `mark_failure` recovery path
 - Fixed Bybit spot market orders ignoring `is_quote_quantity` on the order, causing all spot market buys to default to quote currency quantity via the Bybit API
+- Fixed Bybit demo mode `submit_order` ignoring `is_leverage` param, hardcoding `false` instead of reading from order params
 - Fixed Bybit bulk order status reports silently missing conditional (stop/MIT) orders
 - Fixed Bybit account state free balance underflowing when locked margin exceeds wallet total during liquidation
 - Fixed Databento price precision truncation for fractional tick sizes (#3696), thanks @pandashark
