@@ -269,23 +269,35 @@ mod tests {
 
     #[rstest]
     fn test_replace_data_cmd_sender_overwrites_previous() {
-        replace_data_cmd_sender(Arc::new(SyncDataCommandSender));
-        replace_data_cmd_sender(Arc::new(SyncDataCommandSender));
-        let _sender = get_data_cmd_sender();
+        std::thread::spawn(|| {
+            replace_data_cmd_sender(Arc::new(SyncDataCommandSender));
+            replace_data_cmd_sender(Arc::new(SyncDataCommandSender));
+            let _sender = get_data_cmd_sender();
+        })
+        .join()
+        .unwrap();
     }
 
     #[rstest]
     fn test_replace_exec_cmd_sender_overwrites_previous() {
-        replace_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
-        replace_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
-        let _sender = get_trading_cmd_sender();
+        std::thread::spawn(|| {
+            replace_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
+            replace_exec_cmd_sender(Arc::new(SyncTradingCommandSender));
+            let _sender = get_trading_cmd_sender();
+        })
+        .join()
+        .unwrap();
     }
 
     #[rstest]
     fn test_replace_time_event_sender_overwrites_previous() {
-        replace_time_event_sender(Arc::new(NoopTimeEventSender));
-        replace_time_event_sender(Arc::new(NoopTimeEventSender));
-        let _sender = get_time_event_sender();
+        std::thread::spawn(|| {
+            replace_time_event_sender(Arc::new(NoopTimeEventSender));
+            replace_time_event_sender(Arc::new(NoopTimeEventSender));
+            let _sender = get_time_event_sender();
+        })
+        .join()
+        .unwrap();
     }
 
     #[rstest]

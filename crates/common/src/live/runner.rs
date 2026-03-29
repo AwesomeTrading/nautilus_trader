@@ -121,20 +121,28 @@ mod tests {
 
     #[rstest]
     fn test_replace_data_event_sender_overwrites_previous() {
-        let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
-        let (tx2, _rx2) = tokio::sync::mpsc::unbounded_channel();
-        replace_data_event_sender(tx1);
-        replace_data_event_sender(tx2);
-        let _sender = get_data_event_sender();
+        std::thread::spawn(|| {
+            let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
+            let (tx2, _rx2) = tokio::sync::mpsc::unbounded_channel();
+            replace_data_event_sender(tx1);
+            replace_data_event_sender(tx2);
+            let _sender = get_data_event_sender();
+        })
+        .join()
+        .unwrap();
     }
 
     #[rstest]
     fn test_replace_exec_event_sender_overwrites_previous() {
-        let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
-        let (tx2, _rx2) = tokio::sync::mpsc::unbounded_channel();
-        replace_exec_event_sender(tx1);
-        replace_exec_event_sender(tx2);
-        let _sender = get_exec_event_sender();
+        std::thread::spawn(|| {
+            let (tx1, _rx1) = tokio::sync::mpsc::unbounded_channel();
+            let (tx2, _rx2) = tokio::sync::mpsc::unbounded_channel();
+            replace_exec_event_sender(tx1);
+            replace_exec_event_sender(tx2);
+            let _sender = get_exec_event_sender();
+        })
+        .join()
+        .unwrap();
     }
 
     #[rstest]

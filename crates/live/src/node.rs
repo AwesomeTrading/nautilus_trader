@@ -260,6 +260,8 @@ impl LiveNode {
         }
 
         let runner = AsyncRunner::new();
+        runner.bind_senders();
+
         let kernel = NautilusKernel::new(name, config.clone())?;
 
         let exec_manager_config =
@@ -298,6 +300,10 @@ impl LiveNode {
     pub async fn start(&mut self) -> anyhow::Result<()> {
         if self.state().is_running() {
             anyhow::bail!("Already running");
+        }
+
+        if let Some(runner) = self.runner.as_ref() {
+            runner.bind_senders();
         }
 
         self.handle.set_state(NodeState::Starting);
@@ -595,6 +601,7 @@ impl LiveNode {
         let Some(runner) = self.runner.take() else {
             anyhow::bail!("Runner already consumed - run() called twice");
         };
+        runner.bind_senders();
 
         let AsyncRunnerChannels {
             mut time_evt_rx,

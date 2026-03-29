@@ -241,6 +241,8 @@ impl LiveNodeBuilder {
         );
 
         let runner = AsyncRunner::new();
+        runner.bind_senders();
+
         let kernel = NautilusKernel::new(self.name.clone(), self.config.clone())?;
 
         for (name, factory) in self.data_client_factories {
