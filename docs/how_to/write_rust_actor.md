@@ -105,6 +105,22 @@ let actor = SpreadMonitor::new(instrument_id);
 node.add_actor(actor)?;
 ```
 
+## Guard safety
+
+When the system dispatches messages to your actor, it obtains a short-lived
+`ActorRef` guard from the registry. You do not manage these guards directly.
+If you write code that accesses other actors in a callback, follow these
+rules:
+
+- Look up actors by ID each time; do not cache an `ActorRef`.
+- Drop the guard before the scope ends; never store it in a field.
+- Never hold a guard across an `.await` point.
+
+The subscription methods on `DataActorCore` handle this correctly by
+capturing the actor ID and performing the lookup inside the callback closure.
+See [Runtime invariants](../developer_guide/rust.md#runtime-invariants) for
+the full threading and registry model.
+
 ## Full example
 
 See
