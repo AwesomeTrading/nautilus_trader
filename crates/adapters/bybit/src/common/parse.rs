@@ -1065,6 +1065,75 @@ fn extract_strike_from_symbol(symbol: &str) -> anyhow::Result<Price> {
     parse_price(strike, "option strike")
 }
 
+/// Resolves a Nautilus [`OrderType`] from Bybit order classification fields.
+///
+/// Bybit represents conditional orders using a combination of `orderType` (Market/Limit),
+/// `stopOrderType` (Stop, TakeProfit, StopLoss, etc.), `triggerDirection` (RisesTo/FallsTo),
+/// and `side` (Buy/Sell). This function maps all combinations to the appropriate Nautilus
+/// conditional order types.
+///
+/// When `triggerDirection` is `None`, the stop order type is informational only (a parent
+/// order with TP/SL metadata attached), so the order is classified as plain Market/Limit.
+#[must_use]
+pub fn parse_bybit_order_type(
+    order_type: BybitOrderType,
+    stop_order_type: BybitStopOrderType,
+    trigger_direction: BybitTriggerDirection,
+    side: BybitOrderSide,
+) -> OrderType {
+    if matches!(
+        stop_order_type,
+        BybitStopOrderType::None | BybitStopOrderType::Unknown
+    ) {
+        return match order_type {
+            BybitOrderType::Market => OrderType::Market,
+            BybitOrderType::Limit | BybitOrderType::Unknown => OrderType::Limit,
+        };
+    }
+
+    // No trigger direction means TP/SL metadata on a parent order,
+    // not a standalone conditional
+    if trigger_direction == BybitTriggerDirection::None {
+        return match order_type {
+            BybitOrderType::Market => OrderType::Market,
+            BybitOrderType::Limit | BybitOrderType::Unknown => OrderType::Limit,
+        };
+    }
+
+    // TrailingStop maps to StopMarket/StopLimit because Bybit does not
+    // provide the trailing offset fields needed for the dedicated types.
+    match (order_type, trigger_direction, side) {
+        (BybitOrderType::Market, BybitTriggerDirection::RisesTo, BybitOrderSide::Buy) => {
+            OrderType::StopMarket
+        }
+        (BybitOrderType::Market, BybitTriggerDirection::FallsTo, BybitOrderSide::Buy) => {
+            OrderType::MarketIfTouched
+        }
+        (BybitOrderType::Market, BybitTriggerDirection::FallsTo, BybitOrderSide::Sell) => {
+            OrderType::StopMarket
+        }
+        (BybitOrderType::Market, BybitTriggerDirection::RisesTo, BybitOrderSide::Sell) => {
+            OrderType::MarketIfTouched
+        }
+        (BybitOrderType::Limit, BybitTriggerDirection::RisesTo, BybitOrderSide::Buy) => {
+            OrderType::StopLimit
+        }
+        (BybitOrderType::Limit, BybitTriggerDirection::FallsTo, BybitOrderSide::Buy) => {
+            OrderType::LimitIfTouched
+        }
+        (BybitOrderType::Limit, BybitTriggerDirection::FallsTo, BybitOrderSide::Sell) => {
+            OrderType::StopLimit
+        }
+        (BybitOrderType::Limit, BybitTriggerDirection::RisesTo, BybitOrderSide::Sell) => {
+            OrderType::LimitIfTouched
+        }
+        _ => match order_type {
+            BybitOrderType::Market => OrderType::Market,
+            BybitOrderType::Limit | BybitOrderType::Unknown => OrderType::Limit,
+        },
+    }
+}
+
 /// Parses a Bybit order into a Nautilus OrderStatusReport.
 pub fn parse_order_status_report(
     order: &crate::http::models::BybitOrder,
@@ -1077,86 +1146,12 @@ pub fn parse_order_status_report(
 
     let order_side: OrderSide = order.side.into();
 
-    // Bybit represents conditional orders using orderType + stopOrderType + triggerDirection + side
-    let order_type: OrderType = match (
+    let order_type = parse_bybit_order_type(
         order.order_type,
         order.stop_order_type,
         order.trigger_direction,
         order.side,
-    ) {
-        (BybitOrderType::Market, BybitStopOrderType::None | BybitStopOrderType::Unknown, _, _) => {
-            OrderType::Market
-        }
-        (BybitOrderType::Limit, BybitStopOrderType::None | BybitStopOrderType::Unknown, _, _) => {
-            OrderType::Limit
-        }
-
-        (
-            BybitOrderType::Market,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::RisesTo,
-            BybitOrderSide::Buy,
-        ) => OrderType::StopMarket,
-        (
-            BybitOrderType::Market,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::FallsTo,
-            BybitOrderSide::Buy,
-        ) => OrderType::MarketIfTouched,
-
-        (
-            BybitOrderType::Market,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::FallsTo,
-            BybitOrderSide::Sell,
-        ) => OrderType::StopMarket,
-        (
-            BybitOrderType::Market,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::RisesTo,
-            BybitOrderSide::Sell,
-        ) => OrderType::MarketIfTouched,
-
-        (
-            BybitOrderType::Limit,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::RisesTo,
-            BybitOrderSide::Buy,
-        ) => OrderType::StopLimit,
-        (
-            BybitOrderType::Limit,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::FallsTo,
-            BybitOrderSide::Buy,
-        ) => OrderType::LimitIfTouched,
-
-        (
-            BybitOrderType::Limit,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::FallsTo,
-            BybitOrderSide::Sell,
-        ) => OrderType::StopLimit,
-        (
-            BybitOrderType::Limit,
-            BybitStopOrderType::Stop,
-            BybitTriggerDirection::RisesTo,
-            BybitOrderSide::Sell,
-        ) => OrderType::LimitIfTouched,
-
-        // triggerDirection=None means regular order with TP/SL attached, not a standalone conditional order
-        (BybitOrderType::Market, BybitStopOrderType::Stop, BybitTriggerDirection::None, _) => {
-            OrderType::Market
-        }
-        (BybitOrderType::Limit, BybitStopOrderType::Stop, BybitTriggerDirection::None, _) => {
-            OrderType::Limit
-        }
-
-        // TP/SL stopOrderTypes are attached to positions, not standalone conditional orders
-        (BybitOrderType::Market, _, _, _) => OrderType::Market,
-        (BybitOrderType::Limit, _, _, _) => OrderType::Limit,
-
-        (BybitOrderType::Unknown, _, _, _) => OrderType::Limit,
-    };
+    );
 
     let time_in_force: TimeInForce = match order.time_in_force {
         BybitTimeInForce::Gtc => TimeInForce::Gtc,
@@ -1250,6 +1245,14 @@ pub fn parse_order_status_report(
         // Set trigger_type for conditional orders
         let trigger_type: TriggerType = order.trigger_by.into();
         report = report.with_trigger_type(trigger_type);
+    }
+
+    if order.reduce_only {
+        report = report.with_reduce_only(true);
+    }
+
+    if order.time_in_force == BybitTimeInForce::PostOnly {
+        report = report.with_post_only(true);
     }
 
     Ok(report)
@@ -1515,11 +1518,14 @@ mod tests {
 
     use super::*;
     use crate::{
-        common::testing::load_test_json,
+        common::{
+            enums::{BybitOrderSide, BybitOrderType, BybitStopOrderType, BybitTriggerDirection},
+            testing::load_test_json,
+        },
         http::models::{
             BybitInstrumentInverseResponse, BybitInstrumentLinearResponse,
             BybitInstrumentOptionResponse, BybitInstrumentSpotResponse, BybitKlinesResponse,
-            BybitTradesResponse,
+            BybitOpenOrdersResponse, BybitTradesResponse,
         },
     };
 
@@ -2040,5 +2046,194 @@ mod tests {
         let p = params_from(&[("sl_trigger_by", json!("IndexPrice"))]);
         let err = parse_bybit_tp_sl_params(Some(&p)).unwrap_err();
         assert!(err.to_string().contains("SL override fields require"));
+    }
+
+    #[rstest]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::TakeProfit,
+        BybitTriggerDirection::RisesTo,
+        BybitOrderSide::Sell,
+        OrderType::MarketIfTouched
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::StopLoss,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Sell,
+        OrderType::StopMarket
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::TakeProfit,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Buy,
+        OrderType::MarketIfTouched
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::StopLoss,
+        BybitTriggerDirection::RisesTo,
+        BybitOrderSide::Buy,
+        OrderType::StopMarket
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::TakeProfit,
+        BybitTriggerDirection::RisesTo,
+        BybitOrderSide::Sell,
+        OrderType::LimitIfTouched
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::StopLoss,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Sell,
+        OrderType::StopLimit
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::PartialTakeProfit,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Buy,
+        OrderType::LimitIfTouched
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::PartialStopLoss,
+        BybitTriggerDirection::RisesTo,
+        BybitOrderSide::Buy,
+        OrderType::StopLimit
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::TpslOrder,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Sell,
+        OrderType::StopMarket
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::Stop,
+        BybitTriggerDirection::RisesTo,
+        BybitOrderSide::Buy,
+        OrderType::StopMarket
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::Stop,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Sell,
+        OrderType::StopMarket
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::TrailingStop,
+        BybitTriggerDirection::FallsTo,
+        BybitOrderSide::Sell,
+        OrderType::StopMarket
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::TrailingStop,
+        BybitTriggerDirection::RisesTo,
+        BybitOrderSide::Buy,
+        OrderType::StopLimit
+    )]
+    fn test_parse_bybit_order_type_conditional(
+        #[case] order_type: BybitOrderType,
+        #[case] stop_order_type: BybitStopOrderType,
+        #[case] trigger_direction: BybitTriggerDirection,
+        #[case] side: BybitOrderSide,
+        #[case] expected: OrderType,
+    ) {
+        let result = parse_bybit_order_type(order_type, stop_order_type, trigger_direction, side);
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::None,
+        BybitTriggerDirection::None,
+        BybitOrderSide::Buy,
+        OrderType::Market
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::Unknown,
+        BybitTriggerDirection::None,
+        BybitOrderSide::Sell,
+        OrderType::Limit
+    )]
+    #[case(
+        BybitOrderType::Market,
+        BybitStopOrderType::TakeProfit,
+        BybitTriggerDirection::None,
+        BybitOrderSide::Sell,
+        OrderType::Market
+    )]
+    #[case(
+        BybitOrderType::Limit,
+        BybitStopOrderType::StopLoss,
+        BybitTriggerDirection::None,
+        BybitOrderSide::Buy,
+        OrderType::Limit
+    )]
+    fn test_parse_bybit_order_type_plain(
+        #[case] order_type: BybitOrderType,
+        #[case] stop_order_type: BybitStopOrderType,
+        #[case] trigger_direction: BybitTriggerDirection,
+        #[case] side: BybitOrderSide,
+        #[case] expected: OrderType,
+    ) {
+        let result = parse_bybit_order_type(order_type, stop_order_type, trigger_direction, side);
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_take_profit() {
+        let instrument = linear_instrument();
+        let json = load_test_json("http_get_orders_realtime_tp_sl.json");
+        let response: BybitOpenOrdersResponse = serde_json::from_str(&json).unwrap();
+        let order = &response.result.list[0];
+        let account_id = AccountId::new("BYBIT-001");
+
+        let report = parse_order_status_report(order, &instrument, account_id, TS).unwrap();
+
+        assert_eq!(report.order_type, OrderType::MarketIfTouched);
+        assert_eq!(report.order_side, OrderSide::Sell);
+        assert_eq!(report.order_status, OrderStatus::Accepted);
+        assert!(report.trigger_price.is_some());
+        assert_eq!(
+            report.trigger_price.unwrap(),
+            Price::from_str("55000.0").unwrap()
+        );
+        assert_eq!(report.trigger_type, Some(TriggerType::LastPrice));
+        assert!(report.reduce_only);
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_stop_loss_limit() {
+        let instrument = linear_instrument();
+        let json = load_test_json("http_get_orders_realtime_tp_sl.json");
+        let response: BybitOpenOrdersResponse = serde_json::from_str(&json).unwrap();
+        let order = &response.result.list[1];
+        let account_id = AccountId::new("BYBIT-001");
+
+        let report = parse_order_status_report(order, &instrument, account_id, TS).unwrap();
+
+        assert_eq!(report.order_type, OrderType::StopLimit);
+        assert_eq!(report.order_side, OrderSide::Sell);
+        assert_eq!(report.order_status, OrderStatus::Accepted);
+        assert!(report.trigger_price.is_some());
+        assert_eq!(
+            report.trigger_price.unwrap(),
+            Price::from_str("48000.0").unwrap()
+        );
+        assert!(report.price.is_some());
+        assert_eq!(report.price.unwrap(), Price::from_str("47500.0").unwrap());
+        assert_eq!(report.trigger_type, Some(TriggerType::LastPrice));
+        assert!(report.reduce_only);
     }
 }

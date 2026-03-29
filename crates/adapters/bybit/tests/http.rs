@@ -38,7 +38,7 @@ use nautilus_bybit::{
 use nautilus_common::testing::wait_until_async;
 use nautilus_model::{
     data::BarType,
-    enums::{OrderSide, OrderType, PositionSideSpecified, TimeInForce},
+    enums::{OrderSide, OrderType, PositionSideSpecified, TimeInForce, TriggerType},
     identifiers::{AccountId, ClientOrderId, InstrumentId, Symbol, Venue},
     instruments::{CurrencyPair, InstrumentAny},
     types::{Currency, Price, Quantity},
@@ -3208,4 +3208,133 @@ async fn test_query_order_option_not_found_returns_none() {
         result.unwrap().is_none(),
         "query_order should return None when option order not found"
     );
+}
+
+// Handler that returns TP/SL orders for StopOrder filter, empty for regular
+#[allow(dead_code)]
+async fn handle_get_orders_realtime_tp_sl(
+    query: Query<HashMap<String, String>>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    if !headers.contains_key("X-BAPI-API-KEY") {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "retCode": 10003,
+                "retMsg": "Invalid API key",
+                "result": {},
+                "retExtInfo": {},
+                "time": 1704470400123i64
+            })),
+        )
+            .into_response();
+    }
+
+    let order_filter = query.get("orderFilter").map(String::as_str);
+    if order_filter == Some("StopOrder") {
+        let orders = load_test_data("http_get_orders_realtime_tp_sl.json");
+        Json(orders).into_response()
+    } else {
+        Json(json!({
+            "retCode": 0,
+            "retMsg": "OK",
+            "result": { "list": [], "nextPageCursor": "" },
+            "retExtInfo": {},
+            "time": 1704470400123i64
+        }))
+        .into_response()
+    }
+}
+
+#[allow(dead_code)]
+fn create_tp_sl_test_router() -> Router {
+    Router::new()
+        .route("/v5/market/time", get(handle_get_server_time))
+        .route("/v5/market/instruments-info", get(handle_get_instruments))
+        .route("/v5/account/fee-rate", get(handle_get_fee_rate))
+        .route("/v5/order/realtime", get(handle_get_orders_realtime_tp_sl))
+}
+
+#[allow(dead_code)]
+async fn start_tp_sl_test_server() -> Result<SocketAddr, Box<dyn std::error::Error + Send + Sync>> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let router = create_tp_sl_test_router();
+
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    wait_for_server(addr, "/v5/market/time").await;
+    Ok(addr)
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_order_status_reports_tp_sl_orders() {
+    let addr = start_tp_sl_test_server().await.unwrap();
+    let base_url = format!("http://{addr}");
+
+    let client = BybitHttpClient::with_credentials(
+        "test_api_key".to_string(),
+        "test_api_secret".to_string(),
+        Some(base_url),
+        Some(60),
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+
+    let instruments = client
+        .request_instruments(BybitProductType::Linear, None)
+        .await
+        .unwrap();
+    for instrument in instruments {
+        client.cache_instrument(instrument);
+    }
+
+    let account_id = AccountId::from("BYBIT-UNIFIED");
+    let instrument_id = InstrumentId::new(Symbol::from("BTCUSDT-LINEAR"), Venue::from("BYBIT"));
+
+    let reports = client
+        .request_order_status_reports(
+            account_id,
+            BybitProductType::Linear,
+            Some(instrument_id),
+            true,
+            None,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+    // Should get 2 orders: TakeProfit + StopLoss from the StopOrder filter
+    assert_eq!(reports.len(), 2, "Should have 2 TP/SL orders");
+
+    // First order: TakeProfit sell (RisesTo) -> MarketIfTouched
+    let tp_report = reports
+        .iter()
+        .find(|r| r.venue_order_id.as_str() == "tp-order-001")
+        .unwrap();
+    assert_eq!(tp_report.order_type, OrderType::MarketIfTouched);
+    assert_eq!(tp_report.order_side, OrderSide::Sell);
+    assert_eq!(tp_report.trigger_price, Some(Price::from("55000.00")));
+    assert_eq!(tp_report.trigger_type, Some(TriggerType::LastPrice));
+    assert!(tp_report.reduce_only);
+
+    // Second order: StopLoss limit sell (FallsTo) -> StopLimit
+    let sl_report = reports
+        .iter()
+        .find(|r| r.venue_order_id.as_str() == "sl-order-001")
+        .unwrap();
+    assert_eq!(sl_report.order_type, OrderType::StopLimit);
+    assert_eq!(sl_report.order_side, OrderSide::Sell);
+    assert_eq!(sl_report.trigger_price, Some(Price::from("48000.00")));
+    assert_eq!(sl_report.price, Some(Price::from("47500.00")));
+    assert_eq!(sl_report.trigger_type, Some(TriggerType::LastPrice));
+    assert!(sl_report.reduce_only);
 }
