@@ -321,7 +321,7 @@ mod tests {
     use crate::events::order::{expired::OrderExpired, stubs::*};
 
     #[rstest]
-    fn test_order_cancel_rejected(order_expired: OrderExpired) {
+    fn test_order_expired_display(order_expired: OrderExpired) {
         let display = format!("{order_expired}");
         assert_eq!(
             display,

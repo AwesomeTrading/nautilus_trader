@@ -406,11 +406,59 @@ impl Instrument for TokenizedAsset {
 mod tests {
     use rstest::rstest;
 
-    use crate::instruments::{TokenizedAsset, stubs::*};
+    use crate::{
+        enums::{AssetClass, InstrumentClass},
+        identifiers::{InstrumentId, Symbol},
+        instruments::{Instrument, TokenizedAsset, stubs::*},
+        types::{Currency, Price, Quantity},
+    };
 
     #[rstest]
-    fn test_equality(tokenized_asset_aaplx: TokenizedAsset) {
-        let cloned = tokenized_asset_aaplx.clone();
-        assert_eq!(tokenized_asset_aaplx, cloned);
+    fn test_trait_accessors(tokenized_asset_aaplx: TokenizedAsset) {
+        assert_eq!(
+            tokenized_asset_aaplx.id(),
+            InstrumentId::from("AAPLx/USD.KRAKEN")
+        );
+        assert_eq!(tokenized_asset_aaplx.asset_class(), AssetClass::Equity);
+        assert_eq!(
+            tokenized_asset_aaplx.instrument_class(),
+            InstrumentClass::Spot
+        );
+        assert_eq!(tokenized_asset_aaplx.quote_currency(), Currency::USD());
+        assert!(!tokenized_asset_aaplx.is_inverse());
+        assert_eq!(tokenized_asset_aaplx.price_precision(), 2);
+        assert_eq!(tokenized_asset_aaplx.size_precision(), 4);
+    }
+
+    #[rstest]
+    fn test_new_checked_price_precision_mismatch() {
+        let result = TokenizedAsset::new_checked(
+            InstrumentId::from("TEST.KRAKEN"),
+            Symbol::from("TEST"),
+            AssetClass::Equity,
+            Currency::BTC(),
+            Currency::USD(),
+            None,
+            4, // mismatch
+            4,
+            Price::from("0.01"),
+            Quantity::from("0.0001"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0.into(),
+            0.into(),
+        );
+        assert!(result.is_err());
     }
 }

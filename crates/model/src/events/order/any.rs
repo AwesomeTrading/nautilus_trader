@@ -311,3 +311,107 @@ impl Display for OrderEventAny {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::{OrderEventAny, OrderEventType};
+    use crate::events::{
+        OrderAccepted, OrderDenied, OrderExpired, OrderFilled, OrderInitialized, OrderRejected,
+        OrderSubmitted, order::stubs::*,
+    };
+
+    #[rstest]
+    fn test_event_type_filled(order_filled: OrderFilled) {
+        let event = OrderEventAny::Filled(order_filled);
+        assert_eq!(event.event_type(), OrderEventType::Filled);
+    }
+
+    #[rstest]
+    fn test_event_type_accepted(order_accepted: OrderAccepted) {
+        let event = OrderEventAny::Accepted(order_accepted);
+        assert_eq!(event.event_type(), OrderEventType::Accepted);
+    }
+
+    #[rstest]
+    fn test_event_type_denied(order_denied_max_submitted_rate: OrderDenied) {
+        let event = OrderEventAny::Denied(order_denied_max_submitted_rate);
+        assert_eq!(event.event_type(), OrderEventType::Denied);
+    }
+
+    #[rstest]
+    fn test_event_type_initialized(order_initialized_buy_limit: OrderInitialized) {
+        let event = OrderEventAny::Initialized(order_initialized_buy_limit);
+        assert_eq!(event.event_type(), OrderEventType::Initialized);
+    }
+
+    #[rstest]
+    fn test_trader_id(order_filled: OrderFilled) {
+        let expected = order_filled.trader_id;
+        let event = OrderEventAny::Filled(order_filled);
+        assert_eq!(event.trader_id(), expected);
+    }
+
+    #[rstest]
+    fn test_client_order_id(order_accepted: OrderAccepted) {
+        let expected = order_accepted.client_order_id;
+        let event = OrderEventAny::Accepted(order_accepted);
+        assert_eq!(event.client_order_id(), expected);
+    }
+
+    #[rstest]
+    fn test_instrument_id(order_submitted: OrderSubmitted) {
+        let expected = order_submitted.instrument_id;
+        let event = OrderEventAny::Submitted(order_submitted);
+        assert_eq!(event.instrument_id(), expected);
+    }
+
+    #[rstest]
+    fn test_strategy_id(order_rejected_insufficient_margin: OrderRejected) {
+        let expected = order_rejected_insufficient_margin.strategy_id;
+        let event = OrderEventAny::Rejected(order_rejected_insufficient_margin);
+        assert_eq!(event.strategy_id(), expected);
+    }
+
+    #[rstest]
+    fn test_ts_event(order_expired: OrderExpired) {
+        let expected = order_expired.ts_event;
+        let event = OrderEventAny::Expired(order_expired);
+        assert_eq!(event.ts_event(), expected);
+    }
+
+    #[rstest]
+    fn test_message_denied(order_denied_max_submitted_rate: OrderDenied) {
+        let event = OrderEventAny::Denied(order_denied_max_submitted_rate);
+        assert!(event.message().is_some());
+    }
+
+    #[rstest]
+    fn test_message_none_for_accepted(order_accepted: OrderAccepted) {
+        let event = OrderEventAny::Accepted(order_accepted);
+        assert_eq!(event.message(), None);
+    }
+
+    #[rstest]
+    fn test_from_order_event_any_to_filled(order_filled: OrderFilled) {
+        let expected_trade_id = order_filled.trade_id;
+        let event = OrderEventAny::Filled(order_filled);
+        let filled: OrderFilled = event.into();
+        assert_eq!(filled.trade_id, expected_trade_id);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_from_order_event_any_to_filled_panics_on_wrong_variant(order_accepted: OrderAccepted) {
+        let event = OrderEventAny::Accepted(order_accepted);
+        let _filled: OrderFilled = event.into();
+    }
+
+    #[rstest]
+    fn test_display_delegates_to_inner(order_filled: OrderFilled) {
+        let inner_display = format!("{order_filled}");
+        let event = OrderEventAny::Filled(order_filled);
+        assert_eq!(format!("{event}"), inner_display);
+    }
+}

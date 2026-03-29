@@ -606,19 +606,25 @@ mod tests {
     }
 
     #[rstest]
-    fn test_order_filled_without_position_id() {
+    fn test_order_filled_without_position_id_display() {
         let mut order_filled = create_test_order_filled();
         order_filled.position_id = None;
 
-        assert!(order_filled.position_id.is_none());
+        let display = format!("{order_filled}");
+        assert!(display.contains("position_id=None"));
+        assert!(!display.contains("position_id=P-001"));
     }
 
     #[rstest]
-    fn test_order_filled_without_commission() {
+    fn test_order_filled_without_commission_serialization() {
         let mut order_filled = create_test_order_filled();
         order_filled.commission = None;
 
-        assert!(order_filled.commission.is_none());
+        let json = serde_json::to_string(&order_filled).unwrap();
+        let deserialized: OrderFilled = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.commission, None);
+        assert_eq!(deserialized.trade_id, order_filled.trade_id);
     }
 
     #[rstest]
