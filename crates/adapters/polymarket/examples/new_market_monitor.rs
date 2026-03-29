@@ -30,16 +30,14 @@
 //! cargo run --example polymarket-new-market-monitor --package nautilus-polymarket
 //! ```
 
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use log::LevelFilter;
 use nautilus_common::{
     actor::{DataActor, DataActorConfig, DataActorCore},
     enums::Environment,
     logging::logger::LoggerConfig,
+    nautilus_actor,
 };
 use nautilus_live::node::LiveNode;
 use nautilus_model::{
@@ -76,18 +74,7 @@ impl NewMarketMonitor {
     }
 }
 
-impl Deref for NewMarketMonitor {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for NewMarketMonitor {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_actor!(NewMarketMonitor);
 
 impl DataActor for NewMarketMonitor {
     fn on_start(&mut self) -> anyhow::Result<()> {

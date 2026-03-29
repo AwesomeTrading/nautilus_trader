@@ -17,7 +17,6 @@ use std::{
     any::Any,
     cell::{RefCell, UnsafeCell},
     num::NonZeroUsize,
-    ops::{Deref, DerefMut},
     rc::Rc,
     str::FromStr,
     sync::Arc,
@@ -83,6 +82,7 @@ use crate::{
             get_quotes_topic, get_trades_topic,
         },
     },
+    nautilus_actor,
     runner::{SyncDataCommandSender, set_data_cmd_sender},
     testing::init_logger_for_testing,
     timer::TimeEvent,
@@ -163,19 +163,7 @@ struct TestDataActor {
     pub received_pool_liquidity_updates: Vec<PoolLiquidityUpdate>,
 }
 
-impl Deref for TestDataActor {
-    type Target = DataActorCore;
-
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for TestDataActor {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_actor!(TestDataActor);
 
 impl DataActor for TestDataActor {
     fn on_start(&mut self) -> anyhow::Result<()> {
@@ -2086,18 +2074,7 @@ impl SaveLoadActor {
     }
 }
 
-impl Deref for SaveLoadActor {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for SaveLoadActor {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_actor!(SaveLoadActor);
 
 impl DataActor for SaveLoadActor {
     fn on_save(&self) -> anyhow::Result<IndexMap<String, Vec<u8>>> {

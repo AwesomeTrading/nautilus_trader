@@ -143,12 +143,11 @@ The full source is at
 
 ### How it works
 
-A `DataActor` in Rust needs four pieces:
+A `DataActor` in Rust needs three pieces:
 
 1. A struct holding a `DataActorCore` field plus your own state.
-2. `Deref` and `DerefMut` implementations targeting `DataActorCore`.
-3. A `Debug` implementation.
-4. The `DataActor` trait implementation with your callbacks.
+2. `nautilus_actor!(YourType)` to wire up the core, plus a `Debug` implementation.
+3. The `DataActor` trait implementation with your callbacks.
 
 The framework provides blanket `Actor` and `Component` implementations for
 any type that implements `DataActor + Debug`, so you do not need to implement

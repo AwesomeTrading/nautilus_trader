@@ -20,10 +20,7 @@
 
 #![cfg(all(feature = "streaming", feature = "high-precision"))]
 
-use std::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-};
+use std::fmt::Debug;
 
 use nautilus_backtest::{
     config::{
@@ -32,10 +29,7 @@ use nautilus_backtest::{
     },
     node::BacktestNode,
 };
-use nautilus_common::{
-    actor::{DataActor, DataActorCore},
-    throttler::RateLimit,
-};
+use nautilus_common::{actor::DataActor, throttler::RateLimit};
 use nautilus_model::{
     data::QuoteTick,
     enums::{AccountType, BookType, OmsType, OrderSide},
@@ -50,6 +44,7 @@ use nautilus_testkit::common::{itch_aapl_equity, load_itch_aapl_deltas};
 use nautilus_trading::{
     Strategy, StrategyConfig, StrategyCore,
     examples::strategies::{GridMarketMaker, GridMarketMakerConfig},
+    nautilus_strategy,
 };
 use rstest::rstest;
 use tempfile::TempDir;
@@ -146,18 +141,7 @@ impl MarketOrderStrategy {
     }
 }
 
-impl Deref for MarketOrderStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for MarketOrderStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(MarketOrderStrategy);
 
 impl Debug for MarketOrderStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -189,16 +173,6 @@ impl DataActor for MarketOrderStrategy {
             self.submit_order(order, None, None)?;
         }
         Ok(())
-    }
-}
-
-impl Strategy for MarketOrderStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
     }
 }
 

@@ -13,9 +13,7 @@ An actor owns a `DataActorCore` and any state it needs. The core provides
 subscription methods, cache access, and clock access through `Deref`.
 
 ```rust
-use std::ops::{Deref, DerefMut};
-
-use nautilus_common::actor::{DataActor, DataActorConfig, DataActorCore};
+use nautilus_common::{nautilus_actor, actor::{DataActor, DataActorConfig, DataActorCore}};
 use nautilus_model::{data::QuoteTick, identifiers::{ActorId, InstrumentId}};
 
 pub struct SpreadMonitor {
@@ -45,25 +43,18 @@ impl SpreadMonitor {
 }
 ```
 
-## Implement Deref, DerefMut, and Debug
+## Wire up the core and implement Debug
 
-These three impls are required boilerplate for every actor:
+The `nautilus_actor!` macro generates the `Deref<Target = DataActorCore>`
+and `DerefMut` impls that give your struct direct access to subscription
+methods, cache, and clock. By default it delegates to a field named `core`;
+pass a second argument for a different field name.
 
-- `Deref<Target = DataActorCore>` gives your struct direct access to
-  subscription methods, cache, and clock.
-- `DerefMut` allows mutable access to the core.
-- `Debug` is a trait bound on `DataActor` (required by the blanket
-  `Component` impl).
+`Debug` is a trait bound on `DataActor` (required by the blanket `Component`
+impl), so implement it manually or derive it.
 
 ```rust
-impl Deref for SpreadMonitor {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target { &self.core }
-}
-
-impl DerefMut for SpreadMonitor {
-    fn deref_mut(&mut self) -> &mut Self::Target { &mut self.core }
-}
+nautilus_actor!(SpreadMonitor);
 
 impl std::fmt::Debug for SpreadMonitor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

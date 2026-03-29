@@ -18,15 +18,12 @@
 //! These tests use global logging state (one logger per process).
 //! Run with cargo-nextest for process isolation, or use --test-threads=1.
 
-use std::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-    time::Duration,
-};
+use std::{fmt::Debug, time::Duration};
 
 use nautilus_common::{
     actor::{DataActor, DataActorCore, data_actor::DataActorConfig},
     enums::Environment,
+    nautilus_actor,
     testing::wait_until_async,
 };
 use nautilus_live::{
@@ -38,8 +35,8 @@ use nautilus_model::{
     orders::OrderAny,
 };
 use nautilus_trading::{
-    ExecutionAlgorithm, ExecutionAlgorithmConfig, ExecutionAlgorithmCore,
-    strategy::{Strategy, StrategyConfig, StrategyCore},
+    ExecutionAlgorithm, ExecutionAlgorithmConfig, ExecutionAlgorithmCore, nautilus_strategy,
+    strategy::{StrategyConfig, StrategyCore},
 };
 use rstest::rstest;
 
@@ -58,18 +55,7 @@ impl TestActor {
 
 impl DataActor for TestActor {}
 
-impl Deref for TestActor {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for TestActor {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_actor!(TestActor);
 
 #[derive(Debug)]
 struct TestStrategy {
@@ -86,28 +72,7 @@ impl TestStrategy {
 
 impl DataActor for TestStrategy {}
 
-impl Deref for TestStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for TestStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
-
-impl Strategy for TestStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
-    }
-}
+nautilus_strategy!(TestStrategy);
 
 #[derive(Debug)]
 struct TestExecAlgorithm {
@@ -124,18 +89,7 @@ impl TestExecAlgorithm {
 
 impl DataActor for TestExecAlgorithm {}
 
-impl Deref for TestExecAlgorithm {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for TestExecAlgorithm {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_actor!(TestExecAlgorithm);
 
 impl ExecutionAlgorithm for TestExecAlgorithm {
     fn core_mut(&mut self) -> &mut ExecutionAlgorithmCore {

@@ -17,16 +17,12 @@
 //!
 //! Run with: `cargo run --example databento-data-tester --package nautilus-databento`
 
-use std::{
-    ops::{Deref, DerefMut},
-    path::PathBuf,
-    time::Duration,
-};
+use std::{path::PathBuf, time::Duration};
 
 use nautilus_common::{
     actor::{DataActor, DataActorCore, data_actor::DataActorConfig},
     enums::{Environment, LogColor},
-    log_info,
+    log_info, nautilus_actor,
     timer::TimeEvent,
 };
 use nautilus_core::env::get_env_var;
@@ -128,19 +124,7 @@ pub struct DatabentoSubscriberActor {
     pub received_trades: Vec<TradeTick>,
 }
 
-impl Deref for DatabentoSubscriberActor {
-    type Target = DataActorCore;
-
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for DatabentoSubscriberActor {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_actor!(DatabentoSubscriberActor);
 
 impl DataActor for DatabentoSubscriberActor {
     fn on_start(&mut self) -> anyhow::Result<()> {

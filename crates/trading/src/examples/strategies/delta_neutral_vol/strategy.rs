@@ -15,15 +15,9 @@
 
 //! Delta-neutral short volatility hedger implementation.
 
-use std::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-};
+use std::fmt::Debug;
 
-use nautilus_common::{
-    actor::{DataActor, DataActorCore},
-    timer::TimeEvent,
-};
+use nautilus_common::{actor::DataActor, timer::TimeEvent};
 use nautilus_core::params::Params;
 use nautilus_model::{
     data::{QuoteTick, option_chain::OptionGreeks},
@@ -38,7 +32,10 @@ use serde_json::json;
 use ustr::Ustr;
 
 use super::config::DeltaNeutralVolConfig;
-use crate::strategy::{Strategy, StrategyCore};
+use crate::{
+    nautilus_strategy,
+    strategy::{Strategy, StrategyCore},
+};
 
 const REHEDGE_TIMER: &str = "delta_rehedge";
 
@@ -276,19 +273,7 @@ impl DeltaNeutralVol {
     }
 }
 
-impl Deref for DeltaNeutralVol {
-    type Target = DataActorCore;
-
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for DeltaNeutralVol {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(DeltaNeutralVol);
 
 impl Debug for DeltaNeutralVol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -625,15 +610,5 @@ impl DataActor for DeltaNeutralVol {
         }
 
         Ok(())
-    }
-}
-
-impl Strategy for DeltaNeutralVol {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
     }
 }

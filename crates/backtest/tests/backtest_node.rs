@@ -15,10 +15,7 @@
 
 #![cfg(feature = "streaming")]
 
-use std::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-};
+use std::fmt::Debug;
 
 use nautilus_backtest::{
     config::{
@@ -27,7 +24,7 @@ use nautilus_backtest::{
     },
     node::BacktestNode,
 };
-use nautilus_common::actor::{DataActor, DataActorCore};
+use nautilus_common::actor::DataActor;
 use nautilus_core::UnixNanos;
 use nautilus_model::{
     data::{BarSpecification, QuoteTick, TradeTick},
@@ -37,7 +34,7 @@ use nautilus_model::{
     types::{Price, Quantity},
 };
 use nautilus_persistence::backend::catalog::ParquetDataCatalog;
-use nautilus_trading::{Strategy, StrategyConfig, StrategyCore};
+use nautilus_trading::{Strategy, StrategyConfig, StrategyCore, nautilus_strategy};
 use rstest::*;
 use tempfile::TempDir;
 use ustr::Ustr;
@@ -211,18 +208,7 @@ impl CountingStrategy {
     }
 }
 
-impl Deref for CountingStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for CountingStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(CountingStrategy);
 
 impl Debug for CountingStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -239,16 +225,6 @@ impl DataActor for CountingStrategy {
     fn on_quote(&mut self, _quote: &QuoteTick) -> anyhow::Result<()> {
         self.quote_count += 1;
         Ok(())
-    }
-}
-
-impl Strategy for CountingStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
     }
 }
 
@@ -275,18 +251,7 @@ impl MarketOrderStrategy {
     }
 }
 
-impl Deref for MarketOrderStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for MarketOrderStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(MarketOrderStrategy);
 
 impl Debug for MarketOrderStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -318,16 +283,6 @@ impl DataActor for MarketOrderStrategy {
             self.submit_order(order, None, None)?;
         }
         Ok(())
-    }
-}
-
-impl Strategy for MarketOrderStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
     }
 }
 

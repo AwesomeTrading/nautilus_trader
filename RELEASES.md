@@ -6,6 +6,8 @@ Released on TBD (UTC).
 - Added option chains and greeks in Rust (#3637), thanks @filipmacek
 - Added option chains and greeks in Python (#3677), thanks @filipmacek
 - Added custom data registration, persistence, and routing in Rust (#3542), thanks @faysou
+- Added `nautilus_actor!` macro in `nautilus_common` for `Deref`/`DerefMut` boilerplate on actor types (Rust)
+- Added `nautilus_strategy!` macro in `nautilus_trading` for `Deref`/`DerefMut` and `Strategy` trait boilerplate on strategy types, with optional block for hook overrides (Rust)
 - Added `cache.orders_active_local(...)` function in Rust (#3716), thanks @Javdu10
 - Added `interval` field to `FundingRateUpdate` (#3694), thanks @dxwil
 - Added `BookImbalanceActor` example actor for order book quoted volume imbalance in Rust

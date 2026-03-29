@@ -51,6 +51,13 @@
 #![deny(clippy::missing_panics_doc)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+mod macros;
+
+#[doc(hidden)]
+pub mod _macro_reexports {
+    pub use nautilus_common::actor::DataActorCore;
+}
+
 pub mod algorithm;
 pub mod sessions;
 pub mod strategy;

@@ -870,11 +870,7 @@ impl Component for Trader {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::RefCell,
-        ops::{Deref, DerefMut},
-        rc::Rc,
-    };
+    use std::{cell::RefCell, rc::Rc};
 
     use nautilus_common::{
         actor::{DataActorCore, data_actor::DataActorConfig},
@@ -883,6 +879,7 @@ mod tests {
         enums::{ComponentState, Environment},
         msgbus,
         msgbus::{MessageBus, TypedHandler, switchboard::get_event_orders_topic},
+        nautilus_actor,
     };
     use nautilus_core::UUID4;
     use nautilus_data::engine::{DataEngine, config::DataEngineConfig};
@@ -897,8 +894,8 @@ mod tests {
     use nautilus_risk::engine::{RiskEngine, config::RiskEngineConfig};
     use nautilus_trading::{
         ExecutionAlgorithm as ExecutionAlgorithmTrait, ExecutionAlgorithmConfig,
-        ExecutionAlgorithmCore,
-        strategy::{Strategy as StrategyTrait, config::StrategyConfig, core::StrategyCore},
+        ExecutionAlgorithmCore, nautilus_strategy,
+        strategy::{config::StrategyConfig, core::StrategyCore},
     };
     use rstest::rstest;
 
@@ -920,18 +917,7 @@ mod tests {
 
     impl DataActor for TestDataActor {}
 
-    impl Deref for TestDataActor {
-        type Target = DataActorCore;
-        fn deref(&self) -> &Self::Target {
-            &self.core
-        }
-    }
-
-    impl DerefMut for TestDataActor {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core
-        }
-    }
+    nautilus_actor!(TestDataActor);
 
     // Simple ExecutionAlgorithm wrapper for testing
     #[derive(Debug)]
@@ -949,18 +935,7 @@ mod tests {
 
     impl DataActor for TestExecAlgorithm {}
 
-    impl Deref for TestExecAlgorithm {
-        type Target = DataActorCore;
-        fn deref(&self) -> &Self::Target {
-            &self.core
-        }
-    }
-
-    impl DerefMut for TestExecAlgorithm {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core
-        }
-    }
+    nautilus_actor!(TestExecAlgorithm);
 
     impl ExecutionAlgorithmTrait for TestExecAlgorithm {
         fn core_mut(&mut self) -> &mut ExecutionAlgorithmCore {
@@ -988,28 +963,7 @@ mod tests {
 
     impl DataActor for TestStrategy {}
 
-    impl Deref for TestStrategy {
-        type Target = DataActorCore;
-        fn deref(&self) -> &Self::Target {
-            &self.core
-        }
-    }
-
-    impl DerefMut for TestStrategy {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core
-        }
-    }
-
-    impl StrategyTrait for TestStrategy {
-        fn core(&self) -> &StrategyCore {
-            &self.core
-        }
-
-        fn core_mut(&mut self) -> &mut StrategyCore {
-            &mut self.core
-        }
-    }
+    nautilus_strategy!(TestStrategy);
 
     #[allow(clippy::type_complexity)]
     fn create_trader_components() -> (
