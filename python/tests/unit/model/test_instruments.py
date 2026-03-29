@@ -24,11 +24,11 @@ from nautilus_trader.model import Price
 from nautilus_trader.model import Quantity
 from nautilus_trader.model import Symbol
 from nautilus_trader.model import Venue
-from tests.providers import TestInstrumentProviderV2
+from tests.providers import TestInstrumentProvider
 
 
 def test_audusd_sim_construction():
-    audusd = TestInstrumentProviderV2.audusd_sim()
+    audusd = TestInstrumentProvider.audusd_sim()
 
     assert audusd.id == InstrumentId(Symbol("AUD/USD"), Venue("SIM"))
     assert audusd.base_currency == Currency.from_str("AUD")
@@ -38,7 +38,7 @@ def test_audusd_sim_construction():
 
 
 def test_usdjpy_sim_construction():
-    usdjpy = TestInstrumentProviderV2.usdjpy_sim()
+    usdjpy = TestInstrumentProvider.usdjpy_sim()
 
     assert usdjpy.id == InstrumentId(Symbol("USD/JPY"), Venue("SIM"))
     assert usdjpy.base_currency == Currency.from_str("USD")
@@ -48,7 +48,7 @@ def test_usdjpy_sim_construction():
 
 
 def test_ethusdt_binance_construction():
-    ethusdt = TestInstrumentProviderV2.ethusdt_binance()
+    ethusdt = TestInstrumentProvider.ethusdt_binance()
 
     assert ethusdt.id == InstrumentId(Symbol("ETHUSDT"), Venue("BINANCE"))
     assert ethusdt.base_currency == Currency.from_str("ETH")
@@ -58,7 +58,7 @@ def test_ethusdt_binance_construction():
 
 
 def test_btcusdt_binance_construction():
-    btcusdt = TestInstrumentProviderV2.btcusdt_binance()
+    btcusdt = TestInstrumentProvider.btcusdt_binance()
 
     assert btcusdt.id == InstrumentId(Symbol("BTCUSDT"), Venue("BINANCE"))
     assert btcusdt.base_currency == Currency.from_str("BTC")
@@ -68,17 +68,17 @@ def test_btcusdt_binance_construction():
 
 
 def test_currency_pair_hash():
-    audusd = TestInstrumentProviderV2.audusd_sim()
+    audusd = TestInstrumentProvider.audusd_sim()
     assert isinstance(hash(audusd), int)
 
 
 def test_currency_pair_type_name():
-    audusd = TestInstrumentProviderV2.audusd_sim()
+    audusd = TestInstrumentProvider.audusd_sim()
     assert audusd.type_name == "CurrencyPair"
 
 
 def test_currency_pair_properties():
-    audusd = TestInstrumentProviderV2.audusd_sim()
+    audusd = TestInstrumentProvider.audusd_sim()
 
     assert audusd.price_increment == Price(1e-05, precision=5)
     assert audusd.size_increment == Quantity.from_int(1)
@@ -92,7 +92,7 @@ def test_currency_pair_properties():
 
 
 def test_currency_pair_to_dict_and_from_dict_roundtrip():
-    audusd = TestInstrumentProviderV2.audusd_sim()
+    audusd = TestInstrumentProvider.audusd_sim()
     d = audusd.to_dict()
     restored = CurrencyPair.from_dict(d)
 
@@ -123,7 +123,7 @@ def test_currency_pair_direct_construction():
 
 
 def test_btcusdt_perp_construction():
-    perp = TestInstrumentProviderV2.btcusdt_perp_binance()
+    perp = TestInstrumentProvider.btcusdt_perp_binance()
 
     assert perp.id == InstrumentId(Symbol("BTCUSDT-PERP"), Venue("BINANCE"))
     assert perp.base_currency == Currency.from_str("BTC")
@@ -135,17 +135,17 @@ def test_btcusdt_perp_construction():
 
 
 def test_crypto_perpetual_type_name():
-    perp = TestInstrumentProviderV2.btcusdt_perp_binance()
+    perp = TestInstrumentProvider.btcusdt_perp_binance()
     assert perp.type_name == "CryptoPerpetual"
 
 
 def test_crypto_perpetual_hash():
-    perp = TestInstrumentProviderV2.btcusdt_perp_binance()
+    perp = TestInstrumentProvider.btcusdt_perp_binance()
     assert isinstance(hash(perp), int)
 
 
 def test_crypto_perpetual_to_dict_and_from_dict_roundtrip():
-    perp = TestInstrumentProviderV2.btcusdt_perp_binance()
+    perp = TestInstrumentProvider.btcusdt_perp_binance()
     d = perp.to_dict()
     restored = CryptoPerpetual.from_dict(d)
 

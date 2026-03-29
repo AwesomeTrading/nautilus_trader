@@ -13,11 +13,10 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 """
-Acceptance tests for the v2 BacktestEngine.
+Acceptance tests for the BacktestEngine.
 
-Port of tests/acceptance_tests/test_backtest.py adapted for the v2 Rust-backed engine
-with PyO3 Python bindings. These tests validate the full stack: config -> engine ->
-venue -> matching -> strategy -> results.
+These tests validate the full stack: config -> engine -> venue -> matching ->
+strategy -> results.
 
 """
 
@@ -41,8 +40,8 @@ from nautilus_trader.model import TradeId
 from nautilus_trader.model import TradeTick
 from nautilus_trader.model import Venue
 from nautilus_trader.trading import ImportableStrategyConfig
-from tests.providers import TestDataProviderV2
-from tests.providers import TestInstrumentProviderV2
+from tests.providers import TestDataProvider
+from tests.providers import TestInstrumentProvider
 
 
 EMA_CROSS_STRATEGY = "strategies.ema_cross:EMACross"
@@ -76,10 +75,10 @@ def usdjpy_engine():
         starting_balances=[Money(1_000_000.0, Currency.from_str("USD"))],
     )
 
-    usdjpy = TestInstrumentProviderV2.usdjpy_sim()
+    usdjpy = TestInstrumentProvider.usdjpy_sim()
     engine.add_instrument(usdjpy)
 
-    ticks = TestDataProviderV2.usdjpy_quotes_from_parquet()
+    ticks = TestDataProvider.usdjpy_quotes()
     engine.add_data(ticks)
 
     yield engine, usdjpy
@@ -99,7 +98,7 @@ def audusd_engine():
         starting_balances=[Money(1_000_000.0, Currency.from_str("USD"))],
     )
 
-    audusd = TestInstrumentProviderV2.audusd_sim()
+    audusd = TestInstrumentProvider.audusd_sim()
     engine.add_instrument(audusd)
 
     yield engine, audusd
@@ -121,14 +120,13 @@ def ethusdt_engine():
         ],
     )
 
-    ethusdt = TestInstrumentProviderV2.ethusdt_binance()
+    ethusdt = TestInstrumentProvider.ethusdt_binance()
     engine.add_instrument(ethusdt)
 
     yield engine, ethusdt
     engine.dispose()
 
 
-@pytest.mark.skip(reason="WIP: DataBackendSession API and StrategyConfig subclassing")
 def test_run_ema_cross_strategy(usdjpy_engine):
     engine, usdjpy = usdjpy_engine
 
@@ -145,7 +143,7 @@ def test_run_ema_cross_strategy(usdjpy_engine):
     assert result.total_events > 0
 
 
-@pytest.mark.skip(reason="WIP: DataBackendSession API and StrategyConfig subclassing")
+@pytest.mark.skip(reason="WIP: duplicate trade IDs across reset, needs unique ID generation")
 def test_run_ema_cross_deterministic_rerun(usdjpy_engine):
     engine, usdjpy = usdjpy_engine
 
@@ -165,7 +163,6 @@ def test_run_ema_cross_deterministic_rerun(usdjpy_engine):
     assert result1.iterations == result2.iterations
 
 
-@pytest.mark.skip(reason="WIP: DataBackendSession API and StrategyConfig subclassing")
 def test_run_ema_cross_with_5min_bars(usdjpy_engine):
     engine, usdjpy = usdjpy_engine
 
@@ -180,7 +177,6 @@ def test_run_ema_cross_with_5min_bars(usdjpy_engine):
     assert result.total_orders > 0
 
 
-@pytest.mark.skip(reason="WIP: StrategyConfig is not subclassable in v2 yet")
 def test_run_with_synthetic_quotes(audusd_engine):
     engine, audusd = audusd_engine
 
@@ -216,7 +212,6 @@ def test_run_with_synthetic_quotes(audusd_engine):
     assert result.total_events > 0
 
 
-@pytest.mark.skip(reason="WIP: StrategyConfig is not subclassable in v2 yet")
 def test_run_with_synthetic_trades(ethusdt_engine):
     engine, ethusdt = ethusdt_engine
 
@@ -300,7 +295,7 @@ def test_engine_add_instrument():
         base_currency=Currency.from_str("USD"),
     )
 
-    usdjpy = TestInstrumentProviderV2.usdjpy_sim()
+    usdjpy = TestInstrumentProvider.usdjpy_sim()
     engine.add_instrument(usdjpy)
     engine.dispose()
 
@@ -317,7 +312,7 @@ def test_engine_add_data():
         base_currency=Currency.from_str("USD"),
     )
 
-    usdjpy = TestInstrumentProviderV2.usdjpy_sim()
+    usdjpy = TestInstrumentProvider.usdjpy_sim()
     engine.add_instrument(usdjpy)
 
     ticks = [
@@ -374,7 +369,6 @@ def test_engine_reset_allows_rerun():
     engine.dispose()
 
 
-@pytest.mark.skip(reason="WIP: DataBackendSession API and StrategyConfig subclassing")
 def test_result_stats_not_empty_after_run():
     config = BacktestEngineConfig(bypass_logging=True, run_analysis=True)
     engine = BacktestEngine(config)
@@ -387,10 +381,10 @@ def test_result_stats_not_empty_after_run():
         starting_balances=[Money(1_000_000.0, Currency.from_str("USD"))],
     )
 
-    usdjpy = TestInstrumentProviderV2.usdjpy_sim()
+    usdjpy = TestInstrumentProvider.usdjpy_sim()
     engine.add_instrument(usdjpy)
 
-    ticks = TestDataProviderV2.usdjpy_quotes_from_parquet()
+    ticks = TestDataProvider.usdjpy_quotes()
     engine.add_data(ticks)
 
     engine.add_strategy_from_config(

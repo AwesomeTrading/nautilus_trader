@@ -41,10 +41,10 @@ Use parametrized tests and fixtures (e.g., `@pytest.mark.parametrize`) to avoid 
 
 ## Running tests
 
-### Python tests (v1)
+### Legacy Python tests
 
-The v1 test suite lives under `tests/` at the repository root and tests the Cython-based
-package. From the repository root:
+The legacy test suite lives under `tests/` at the repository root and tests the
+Cython-based package. From the repository root:
 
 ```bash
 make pytest
@@ -52,11 +52,11 @@ make pytest
 uv run --active --no-sync pytest --new-first --failed-first
 ```
 
-### Python tests (v2)
+### Python tests
 
-The v2 test suite lives under `python/tests/` and tests the Rust-backed PyO3 package.
-It requires a built extension module (`make build-debug-v2`) and uses its own virtualenv
-under `python/.venv/`.
+The Python test suite lives under `python/tests/` and tests the Rust-backed PyO3
+package. It requires a built extension module (`make build-debug-v2`) and uses its
+own virtualenv under `python/.venv/`.
 
 ```bash
 make pytest-v2
@@ -122,7 +122,7 @@ make cargo-test-crate-nautilus-serialization FEATURES="capnp"
   assertions break when log wording changes. Instead, verify the observable behavior
   (return values, state changes, side effects) that the log message reflects.
 
-### Python v2 tests (`python/tests/`)
+### Python tests (`python/tests/`)
 
 Use **pytest-style free functions and fixtures**. Do not use test classes.
 
@@ -133,16 +133,16 @@ Use **pytest-style free functions and fixtures**. Do not use test classes.
   test bodies.
 - Import model types from `nautilus_trader.model`, not from
   `nautilus_trader.core.nautilus_pyo3`.
-- Test providers live in `python/tests/providers.py`. Use `TestInstrumentProviderV2`
-  and `TestDataProviderV2` for common instruments and data.
-- Mark tests that depend on unfinished v2 features with
+- Test providers live in `python/tests/providers.py`. Use `TestInstrumentProvider`
+  and `TestDataProvider` for common instruments and data.
+- Mark tests that depend on unfinished features with
   `@pytest.mark.skip(reason="WIP: <description>")` rather than deleting them.
 
-### Python v1 tests (`tests/`)
+### Legacy Python tests (`tests/`)
 
-The v1 suite uses a mix of test classes and free functions. New tests added to the
-v1 suite may follow either pattern, but free functions with fixtures are preferred for
-new files.
+The legacy test suite uses a mix of test classes and free functions. New tests added
+to this suite may follow either pattern, but free functions with fixtures are preferred
+for new files.
 
 ### Rust
 

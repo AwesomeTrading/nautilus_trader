@@ -736,8 +736,17 @@ pytest-v2: build-debug-v2  #-- Run v2 Python tests
 	$Q cd python && VIRTUAL_ENV= uv run --no-sync pytest tests/unit/test_live_node.py -v
 
 .PHONY: pre-flight-v2
-pre-flight-v2:  #-- Run v2 pre-flight checks (build, test)
+pre-flight-v2: export CARGO_TARGET_DIR=target-v2
+pre-flight-v2:  #-- Run comprehensive v2 pre-flight checks (format, check-code, cargo-test, build, pytest)
 	$(info $(M) Running v2 pre-flight checks...)
+	@if ! git diff --quiet; then \
+		printf "$(RED)ERROR: You have unstaged changes$(RESET)\n"; \
+		printf "$(YELLOW)Stage your changes first:$(RESET) git add .\n"; \
+		exit 1; \
+	fi
+	@$(MAKE) --no-print-directory format
+	@$(MAKE) --no-print-directory check-code EXTRA_FEATURES="capnp,hypersync"
+	@$(MAKE) --no-print-directory cargo-test-extras
 	@$(MAKE) --no-print-directory build-debug-v2
 	@$(MAKE) --no-print-directory pytest-v2
 	@printf "$(GREEN)All v2 pre-flight checks passed$(RESET)\n"

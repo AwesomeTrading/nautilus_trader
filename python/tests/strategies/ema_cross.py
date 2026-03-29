@@ -13,10 +13,9 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 """
-Simple EMA cross strategy for v2 acceptance testing.
+Simple EMA cross strategy for acceptance testing.
 
 Subscribes to bars, tracks fast/slow EMA, and submits market orders on crossovers.
-Designed to work with the v2 Rust-backed Strategy base class.
 
 """
 
@@ -61,7 +60,7 @@ class EMACrossConfig(StrategyConfig):
 
 class EMACross(Strategy):
     """
-    Simple EMA cross strategy for v2 acceptance testing.
+    Simple EMA cross strategy for acceptance testing.
 
     Tracks a fast and slow exponential moving average. Enters long when the
     fast EMA crosses above the slow EMA and enters short on the reverse cross.

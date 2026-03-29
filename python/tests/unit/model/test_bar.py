@@ -53,7 +53,7 @@ def test_bar_spec_equality():
     assert spec1 != spec3
 
 
-@pytest.mark.skip(reason="WIP: v2 BarSpecification repr differs from v1 format")
+@pytest.mark.skip(reason="WIP: BarSpecification repr uses Rust debug format")
 def test_bar_spec_hash_str_and_repr():
     spec = BarSpecification(1, BarAggregation.MINUTE, PriceType.BID)
 
@@ -62,7 +62,7 @@ def test_bar_spec_hash_str_and_repr():
     assert repr(spec) == "BarSpecification(1-MINUTE-BID)"
 
 
-@pytest.mark.skip(reason="WIP: v2 BarSpecification has no from_str yet")
+@pytest.mark.skip(reason="WIP: BarSpecification has no from_str yet")
 def test_bar_spec_from_str():
     spec = BarSpecification.from_str("5-MINUTE-MID")
 
@@ -86,7 +86,7 @@ def test_bar_spec_str_with_various_aggregations(step, aggregation, expected_str)
     assert str(spec) == expected_str
 
 
-@pytest.mark.skip(reason="WIP: v2 BarSpecification does not support pickle yet")
+@pytest.mark.skip(reason="WIP: BarSpecification does not support pickle yet")
 def test_bar_spec_pickle_roundtrip():
     spec = BarSpecification(1000, BarAggregation.TICK, PriceType.LAST)
     pickled = pickle.dumps(spec)
@@ -95,7 +95,7 @@ def test_bar_spec_pickle_roundtrip():
     assert unpickled == spec
 
 
-@pytest.mark.skip(reason="WIP: v2 BarType is an enum, instrument_id access differs")
+@pytest.mark.skip(reason="WIP: BarType is an enum, instrument_id access differs")
 def test_bar_type_construction(audusd_sim_id, one_min_bid):
     bar_type = BarType(audusd_sim_id, one_min_bid)
 
@@ -124,7 +124,7 @@ def test_bar_type_hash(audusd_sim_id, one_min_bid):
     assert isinstance(hash(bt), int)
 
 
-@pytest.mark.skip(reason="WIP: v2 BarType does not support pickle yet")
+@pytest.mark.skip(reason="WIP: BarType does not support pickle yet")
 def test_bar_type_pickle_roundtrip(audusd_sim_id, one_min_bid):
     bt = BarType(audusd_sim_id, one_min_bid)
     pickled = pickle.dumps(bt)
@@ -220,7 +220,7 @@ def test_bar_to_dict_and_from_dict_roundtrip(audusd_1_min_bid):
     assert restored.ts_init == bar.ts_init
 
 
-@pytest.mark.skip(reason="WIP: v2 Bar does not support pickle yet")
+@pytest.mark.skip(reason="WIP: Bar does not support pickle yet")
 def test_bar_pickle_roundtrip(audusd_1_min_bid):
     bar = Bar(
         audusd_1_min_bid,

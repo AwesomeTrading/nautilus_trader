@@ -34,9 +34,9 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent
 TEST_DATA_DIR = PACKAGE_ROOT / "tests" / "test_data"
 
 
-class TestInstrumentProviderV2:
+class TestInstrumentProvider:
     """
-    Factory methods for common test instruments using v2 model types.
+    Factory methods for common test instruments.
     """
 
     @staticmethod
@@ -76,15 +76,15 @@ class TestInstrumentProviderV2:
 
     @staticmethod
     def audusd_sim() -> CurrencyPair:
-        return TestInstrumentProviderV2.default_fx_ccy("AUD/USD")
+        return TestInstrumentProvider.default_fx_ccy("AUD/USD")
 
     @staticmethod
     def usdjpy_sim() -> CurrencyPair:
-        return TestInstrumentProviderV2.default_fx_ccy("USD/JPY")
+        return TestInstrumentProvider.default_fx_ccy("USD/JPY")
 
     @staticmethod
     def gbpusd_sim() -> CurrencyPair:
-        return TestInstrumentProviderV2.default_fx_ccy("GBP/USD")
+        return TestInstrumentProvider.default_fx_ccy("GBP/USD")
 
     @staticmethod
     def ethusdt_binance() -> CurrencyPair:
@@ -161,43 +161,67 @@ class TestInstrumentProviderV2:
         )
 
 
-class TestDataProviderV2:
+class TestDataProvider:
     """
-    Load test data from CSV/Parquet files in tests/test_data/.
+    Generate synthetic test data for acceptance tests.
+
+    Produces deterministic tick data using sine-wave price patterns that create EMA
+    crossovers for strategy testing.
+
     """
 
     @staticmethod
-    def usdjpy_quotes_from_parquet() -> list[QuoteTick]:
+    def usdjpy_quotes(count: int = 10_000) -> list[QuoteTick]:
         """
-        Load USD/JPY quote ticks from the Parquet test data file.
+        Generate USD/JPY quote ticks with a sine-wave bid pattern.
         """
-        from nautilus_trader.persistence import DataBackendSession
-        from nautilus_trader.persistence import NautilusDataType
+        import math
 
-        path = str(TEST_DATA_DIR / "quote_tick_usdjpy_2019_sim_rust.parquet")
-        session = DataBackendSession().new_session()
-        session.add_file(NautilusDataType.QuoteTick, "quote_ticks", path)
-        result = session.to_query_result()
+        instrument_id = InstrumentId(Symbol("USD/JPY"), Venue("SIM"))
+        base_ns = 1_546_383_600_000_000_000  # 2019-01-02 00:00:00 UTC
+
         ticks = []
-        for batch in result:
-            if batch is not None:
-                ticks.extend(batch)
+        for i in range(count):
+            ts = base_ns + i * 1_000_000_000
+            bid = 109.500 + 0.500 * math.sin(i / 500.0)
+            ask = bid + 0.010
+            ticks.append(
+                QuoteTick(
+                    instrument_id=instrument_id,
+                    bid_price=Price(bid, precision=3),
+                    ask_price=Price(ask, precision=3),
+                    bid_size=Quantity.from_int(1_000_000),
+                    ask_size=Quantity.from_int(1_000_000),
+                    ts_event=ts,
+                    ts_init=ts,
+                ),
+            )
         return ticks
 
     @staticmethod
-    def eurusd_quotes_from_parquet() -> list[QuoteTick]:
+    def audusd_quotes(count: int = 3_000) -> list[QuoteTick]:
         """
-        Load EUR/USD quote ticks from the Parquet test data file.
+        Generate AUD/USD quote ticks with a sine-wave bid pattern.
         """
-        from nautilus_trader.persistence import DataBackendSession
-        from nautilus_trader.persistence import NautilusDataType
+        import math
 
-        path = str(TEST_DATA_DIR / "quote_tick_eurusd_2019_sim_rust.parquet")
-        session = DataBackendSession().new_session()
-        session.add_file(NautilusDataType.QuoteTick, "quote_ticks", path)
-        result = session.to_query_result()
+        instrument_id = InstrumentId(Symbol("AUD/USD"), Venue("SIM"))
+        base_ns = 1_546_383_600_000_000_000
+
         ticks = []
-        for batch in result:
-            if batch is not None:
-                ticks.extend(batch)
+        for i in range(count):
+            ts = base_ns + i * 1_000_000_000
+            bid = 0.71000 + 0.00500 * math.sin(i / 300.0)
+            ask = bid + 0.00010
+            ticks.append(
+                QuoteTick(
+                    instrument_id=instrument_id,
+                    bid_price=Price(bid, precision=5),
+                    ask_price=Price(ask, precision=5),
+                    bid_size=Quantity.from_int(1_000_000),
+                    ask_size=Quantity.from_int(1_000_000),
+                    ts_event=ts,
+                    ts_init=ts,
+                ),
+            )
         return ticks
