@@ -113,6 +113,7 @@ Released on TBD (UTC).
 - Fixed Binance Rust WS trading request-response race condition where fast rejections arrived before pending request registration
 - Fixed Binance Rust WS trading `OrderRejected` DashMap deadlock when `cleanup_terminal` ran while holding a read guard
 - Fixed Binance Spot Rust `connect()` not waiting for WS session authentication before signaling connected
+- Fixed Binance Futures account state parsing failing on empty string balances from inactive accounts
 - Fixed Bybit demo exec client failing with error 10001 when `/v5/account/fee-rate` is unavailable (#3742), thanks for reporting @jindrichsirucek
 - Fixed Bybit HTTP client not retrying on 429 rate limit responses
 - Fixed Bybit HTTP cancellation token not resettable after `disconnect()`, causing REST calls to short-circuit on reconnect
@@ -139,6 +140,7 @@ Released on TBD (UTC).
 - Fixed Deribit `VenueOrderId` comparison via unnecessary string conversion in fill report filtering
 - Fixed Deribit `OrderSide` conversion using fragile string round-trip instead of `order_side_to_pyo3` in `_submit_order` and `_submit_order_list`
 - Fixed Deribit WebSocket `connect()` not clearing subscription state for manual disconnect/reconnect cycles
+- Fixed dYdX WebSocket account state parsing failing on empty string balances from zero-equity accounts
 - Fixed dYdX WebSocket handler repeatedly emitting `NewInstrumentDiscovered` for uncached instruments on every `v4_markets` update
 - Fixed Hyperliquid `_submit_order_list` passing raw Cython orders to Rust, causing `TypeError` on bracket/batch orders (#3763), thanks for reporting @jindrichsirucek
 - Fixed Hyperliquid `_modify_order` `OrderSide` conversion using fragile string round-trip instead of `order_side_to_pyo3`
