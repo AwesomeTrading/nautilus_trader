@@ -13,10 +13,11 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-import pickle
+from datetime import timedelta
 
 import pytest
 
+from nautilus_trader.model import AggregationSource
 from nautilus_trader.model import Bar
 from nautilus_trader.model import BarAggregation
 from nautilus_trader.model import BarSpecification
@@ -30,18 +31,13 @@ from nautilus_trader.model import Venue
 
 
 @pytest.fixture
-def audusd_sim_id():
-    return InstrumentId(Symbol("AUD/USD"), Venue("SIM"))
-
-
-@pytest.fixture
 def one_min_bid():
     return BarSpecification(1, BarAggregation.MINUTE, PriceType.BID)
 
 
 @pytest.fixture
-def audusd_1_min_bid(audusd_sim_id, one_min_bid):
-    return BarType(audusd_sim_id, one_min_bid)
+def audusd_1_min_bid(audusd_id, one_min_bid):
+    return BarType(audusd_id, one_min_bid)
 
 
 def test_bar_spec_equality():
@@ -53,22 +49,19 @@ def test_bar_spec_equality():
     assert spec1 != spec3
 
 
-@pytest.mark.skip(reason="WIP: BarSpecification repr uses Rust debug format")
-def test_bar_spec_hash_str_and_repr():
+def test_bar_spec_hash_and_str():
     spec = BarSpecification(1, BarAggregation.MINUTE, PriceType.BID)
 
     assert isinstance(hash(spec), int)
     assert str(spec) == "1-MINUTE-BID"
-    assert repr(spec) == "BarSpecification(1-MINUTE-BID)"
 
 
-@pytest.mark.skip(reason="WIP: BarSpecification has no from_str yet")
-def test_bar_spec_from_str():
-    spec = BarSpecification.from_str("5-MINUTE-MID")
+def test_bar_spec_properties():
+    spec = BarSpecification(1, BarAggregation.HOUR, PriceType.BID)
 
-    assert spec.step == 5
-    assert spec.aggregation == BarAggregation.MINUTE
-    assert spec.price_type == PriceType.MID
+    assert spec.step == 1
+    assert spec.aggregation == BarAggregation.HOUR
+    assert spec.price_type == PriceType.BID
 
 
 @pytest.mark.parametrize(
@@ -86,51 +79,123 @@ def test_bar_spec_str_with_various_aggregations(step, aggregation, expected_str)
     assert str(spec) == expected_str
 
 
-@pytest.mark.skip(reason="WIP: BarSpecification does not support pickle yet")
-def test_bar_spec_pickle_roundtrip():
-    spec = BarSpecification(1000, BarAggregation.TICK, PriceType.LAST)
-    pickled = pickle.dumps(spec)
-    unpickled = pickle.loads(pickled)  # noqa: S301
+@pytest.mark.parametrize(
+    ("step", "aggregation", "expected"),
+    [
+        (500, BarAggregation.MILLISECOND, timedelta(milliseconds=500)),
+        (10, BarAggregation.SECOND, timedelta(seconds=10)),
+        (5, BarAggregation.MINUTE, timedelta(minutes=5)),
+        (1, BarAggregation.HOUR, timedelta(hours=1)),
+        (1, BarAggregation.DAY, timedelta(days=1)),
+    ],
+)
+def test_bar_spec_timedelta(step, aggregation, expected):
+    spec = BarSpecification(step, aggregation, PriceType.LAST)
 
-    assert unpickled == spec
+    assert spec.timedelta == expected
 
 
-@pytest.mark.skip(reason="WIP: BarType is an enum, instrument_id access differs")
-def test_bar_type_construction(audusd_sim_id, one_min_bid):
-    bar_type = BarType(audusd_sim_id, one_min_bid)
+def test_bar_type_equality(audusd_id, one_min_bid):
+    bt1 = BarType(audusd_id, one_min_bid)
+    bt2 = BarType(audusd_id, one_min_bid)
+    bt3 = BarType(InstrumentId(Symbol("GBP/USD"), Venue("SIM")), one_min_bid)
 
-    assert bar_type.instrument_id == audusd_sim_id
-    assert bar_type.spec == one_min_bid
+    assert bt1 == bt2
+    assert bt1 != bt3
 
 
-def test_bar_type_from_str(audusd_sim_id):
+def test_bar_type_hash(audusd_id, one_min_bid):
+    bt = BarType(audusd_id, one_min_bid)
+    assert isinstance(hash(bt), int)
+
+
+def test_bar_type_str(audusd_id, one_min_bid):
+    bt = BarType(audusd_id, one_min_bid)
+
+    assert str(bt) == "AUD/USD.SIM-1-MINUTE-BID-EXTERNAL"
+
+
+def test_bar_type_from_str(audusd_id):
     bar_type = BarType.from_str("AUD/USD.SIM-1-MINUTE-BID-INTERNAL")
 
-    assert bar_type.instrument_id == audusd_sim_id
     assert bar_type.spec.step == 1
     assert bar_type.spec.aggregation == BarAggregation.MINUTE
     assert bar_type.spec.price_type == PriceType.BID
 
 
-def test_bar_type_equality(audusd_sim_id, one_min_bid):
-    bt1 = BarType(audusd_sim_id, one_min_bid)
-    bt2 = BarType(audusd_sim_id, one_min_bid)
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            "AUD/USD.IDEALPRO-1-MINUTE-BID-EXTERNAL",
+            BarType(
+                InstrumentId(Symbol("AUD/USD"), Venue("IDEALPRO")),
+                BarSpecification(1, BarAggregation.MINUTE, PriceType.BID),
+            ),
+        ),
+        (
+            "GBP/USD.SIM-1000-TICK-MID-INTERNAL",
+            BarType(
+                InstrumentId(Symbol("GBP/USD"), Venue("SIM")),
+                BarSpecification(1000, BarAggregation.TICK, PriceType.MID),
+                AggregationSource.INTERNAL,
+            ),
+        ),
+        (
+            "AAPL.NYSE-1-HOUR-MID-INTERNAL",
+            BarType(
+                InstrumentId(Symbol("AAPL"), Venue("NYSE")),
+                BarSpecification(1, BarAggregation.HOUR, PriceType.MID),
+                AggregationSource.INTERNAL,
+            ),
+        ),
+        (
+            "ETHUSDT-PERP.BINANCE-100-TICK-LAST-INTERNAL",
+            BarType(
+                InstrumentId(Symbol("ETHUSDT-PERP"), Venue("BINANCE")),
+                BarSpecification(100, BarAggregation.TICK, PriceType.LAST),
+                AggregationSource.INTERNAL,
+            ),
+        ),
+    ],
+)
+def test_bar_type_from_str_valid(value, expected):
+    assert BarType.from_str(value) == expected
 
-    assert bt1 == bt2
+
+@pytest.mark.parametrize(
+    "value",
+    ["", "AUD/USD", "AUD/USD.IDEALPRO-1-MILLISECOND-BID"],
+)
+def test_bar_type_from_str_invalid(value):
+    with pytest.raises(ValueError, match="Error parsing"):
+        BarType.from_str(value)
 
 
-def test_bar_type_hash(audusd_sim_id, one_min_bid):
-    bt = BarType(audusd_sim_id, one_min_bid)
-    assert isinstance(hash(bt), int)
+def test_bar_type_from_str_with_utf8():
+    bar_type = BarType.from_str("TËST-PÉRP.BINANCE-1-MINUTE-LAST-EXTERNAL")
+
+    assert bar_type.spec == BarSpecification(1, BarAggregation.MINUTE, PriceType.LAST)
+    assert str(bar_type) == "TËST-PÉRP.BINANCE-1-MINUTE-LAST-EXTERNAL"
 
 
-@pytest.mark.skip(reason="WIP: BarType does not support pickle yet")
-def test_bar_type_pickle_roundtrip(audusd_sim_id, one_min_bid):
-    bt = BarType(audusd_sim_id, one_min_bid)
-    pickled = pickle.dumps(bt)
-    unpickled = pickle.loads(pickled)  # noqa: S301
+def test_bar_type_composite():
+    bt = BarType.from_str("BTCUSDT-PERP.BINANCE-2-MINUTE-LAST-INTERNAL@1-MINUTE-EXTERNAL")
 
-    assert unpickled == bt
+    assert bt.is_composite()
+    assert str(bt) == "BTCUSDT-PERP.BINANCE-2-MINUTE-LAST-INTERNAL@1-MINUTE-EXTERNAL"
+
+    std = bt.standard()
+    assert std.is_standard()
+    assert str(std) == "BTCUSDT-PERP.BINANCE-2-MINUTE-LAST-INTERNAL"
+
+    comp = bt.composite()
+    assert comp.is_standard()
+    assert str(comp) == "BTCUSDT-PERP.BINANCE-1-MINUTE-LAST-EXTERNAL"
+
+
+def test_bar_fully_qualified_name():
+    assert Bar.fully_qualified_name() == "nautilus_trader.core.nautilus_pyo3.model:Bar"
 
 
 def test_bar_construction(audusd_1_min_bid):
@@ -159,25 +224,26 @@ def test_bar_equality(audusd_1_min_bid):
     bar1 = Bar(
         audusd_1_min_bid,
         Price.from_str("1.00001"),
-        Price.from_str("1.00010"),
-        Price.from_str("1.00000"),
-        Price.from_str("1.00002"),
+        Price.from_str("1.00004"),
+        Price.from_str("1.00001"),
+        Price.from_str("1.00001"),
         Quantity.from_int(100_000),
         0,
         0,
     )
     bar2 = Bar(
         audusd_1_min_bid,
-        Price.from_str("1.00001"),
-        Price.from_str("1.00010"),
         Price.from_str("1.00000"),
-        Price.from_str("1.00002"),
+        Price.from_str("1.00004"),
+        Price.from_str("1.00000"),
+        Price.from_str("1.00003"),
         Quantity.from_int(100_000),
         0,
         0,
     )
 
-    assert bar1 == bar2
+    assert bar1 == bar1
+    assert bar1 != bar2
 
 
 def test_bar_hash(audusd_1_min_bid):
@@ -195,7 +261,117 @@ def test_bar_hash(audusd_1_min_bid):
     assert isinstance(hash(bar), int)
 
 
-def test_bar_to_dict_and_from_dict_roundtrip(audusd_1_min_bid):
+def test_bar_str(audusd_1_min_bid):
+    bar = Bar(
+        audusd_1_min_bid,
+        Price.from_str("1.00001"),
+        Price.from_str("1.00004"),
+        Price.from_str("1.00000"),
+        Price.from_str("1.00003"),
+        Quantity.from_int(100_000),
+        0,
+        0,
+    )
+
+    assert str(bar) == "AUD/USD.SIM-1-MINUTE-BID-EXTERNAL,1.00001,1.00004,1.00000,1.00003,100000,0"
+
+
+def test_bar_validation_high_below_open(audusd_1_min_bid):
+    with pytest.raises(ValueError, match="high >= open"):
+        Bar(
+            audusd_1_min_bid,
+            Price.from_str("1.00001"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00000"),
+            Quantity.from_int(100_000),
+            0,
+            0,
+        )
+
+
+def test_bar_validation_high_below_low(audusd_1_min_bid):
+    with pytest.raises(ValueError, match="high >= open"):
+        Bar(
+            audusd_1_min_bid,
+            Price.from_str("1.00001"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00002"),
+            Price.from_str("1.00003"),
+            Quantity.from_int(100_000),
+            0,
+            0,
+        )
+
+
+def test_bar_validation_high_below_close(audusd_1_min_bid):
+    with pytest.raises(ValueError, match="high >= close"):
+        Bar(
+            audusd_1_min_bid,
+            Price.from_str("1.00000"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00001"),
+            Quantity.from_int(100_000),
+            0,
+            0,
+        )
+
+
+def test_bar_validation_low_above_open(audusd_1_min_bid):
+    with pytest.raises(ValueError, match="low <= open"):
+        Bar(
+            audusd_1_min_bid,
+            Price.from_str("0.99999"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00000"),
+            Price.from_str("1.00000"),
+            Quantity.from_int(100_000),
+            0,
+            0,
+        )
+
+
+def test_bar_validation_low_above_close(audusd_1_min_bid):
+    with pytest.raises(ValueError, match="low <= close"):
+        Bar(
+            audusd_1_min_bid,
+            Price.from_str("1.00000"),
+            Price.from_str("1.00005"),
+            Price.from_str("1.00000"),
+            Price.from_str("0.99999"),
+            Quantity.from_int(100_000),
+            0,
+            0,
+        )
+
+
+def test_bar_to_dict(audusd_1_min_bid):
+    bar = Bar(
+        audusd_1_min_bid,
+        Price.from_str("1.00001"),
+        Price.from_str("1.00004"),
+        Price.from_str("1.00000"),
+        Price.from_str("1.00003"),
+        Quantity.from_int(100_000),
+        0,
+        0,
+    )
+
+    assert bar.to_dict() == {
+        "type": "Bar",
+        "bar_type": "AUD/USD.SIM-1-MINUTE-BID-EXTERNAL",
+        "open": "1.00001",
+        "high": "1.00004",
+        "low": "1.00000",
+        "close": "1.00003",
+        "volume": "100000",
+        "ts_event": 0,
+        "ts_init": 0,
+    }
+
+
+def test_bar_from_dict_roundtrip(audusd_1_min_bid):
     bar = Bar(
         audusd_1_min_bid,
         Price.from_str("1.00001"),
@@ -207,33 +383,6 @@ def test_bar_to_dict_and_from_dict_roundtrip(audusd_1_min_bid):
         2,
     )
 
-    d = bar.to_dict()
-    restored = Bar.from_dict(d)
+    restored = Bar.from_dict(bar.to_dict())
 
-    assert restored.bar_type == bar.bar_type
-    assert restored.open == bar.open
-    assert restored.high == bar.high
-    assert restored.low == bar.low
-    assert restored.close == bar.close
-    assert restored.volume == bar.volume
-    assert restored.ts_event == bar.ts_event
-    assert restored.ts_init == bar.ts_init
-
-
-@pytest.mark.skip(reason="WIP: Bar does not support pickle yet")
-def test_bar_pickle_roundtrip(audusd_1_min_bid):
-    bar = Bar(
-        audusd_1_min_bid,
-        Price.from_str("1.00001"),
-        Price.from_str("1.00010"),
-        Price.from_str("1.00000"),
-        Price.from_str("1.00002"),
-        Quantity.from_int(100_000),
-        0,
-        0,
-    )
-
-    pickled = pickle.dumps(bar)
-    unpickled = pickle.loads(pickled)  # noqa: S301
-
-    assert unpickled == bar
+    assert restored == bar

@@ -18,11 +18,19 @@ import pickle
 import pytest
 
 from nautilus_trader.model import AccountId
+from nautilus_trader.model import ClientId
+from nautilus_trader.model import ClientOrderId
+from nautilus_trader.model import ComponentId
 from nautilus_trader.model import ExecAlgorithmId
 from nautilus_trader.model import InstrumentId
+from nautilus_trader.model import OrderListId
+from nautilus_trader.model import PositionId
+from nautilus_trader.model import StrategyId
 from nautilus_trader.model import Symbol
+from nautilus_trader.model import TradeId
 from nautilus_trader.model import TraderId
 from nautilus_trader.model import Venue
+from nautilus_trader.model import VenueOrderId
 
 
 def test_trader_id_equality_and_value():
@@ -193,3 +201,175 @@ def test_exec_algorithm_id():
     assert isinstance(hash(ea1), int)
     assert str(ea1) == "VWAP"
     assert repr(ea1) == "ExecAlgorithmId('VWAP')"
+
+
+def test_client_id():
+    c1 = ClientId("MyClient")
+    c2 = ClientId("OtherClient")
+    c3 = ClientId("MyClient")
+
+    assert c1 == c1
+    assert c1 != c2
+    assert c1 == c3
+    assert c1.value == "MyClient"
+    assert str(c1) == "MyClient"
+    assert repr(c1) == "ClientId('MyClient')"
+
+
+def test_client_order_id():
+    co1 = ClientOrderId("O-123456")
+    co2 = ClientOrderId("O-789012")
+    co3 = ClientOrderId("O-123456")
+
+    assert co1 == co1
+    assert co1 != co2
+    assert co1 == co3
+    assert co1.value == "O-123456"
+    assert str(co1) == "O-123456"
+    assert repr(co1) == "ClientOrderId('O-123456')"
+
+
+def test_component_id():
+    comp1 = ComponentId("MyComponent")
+    comp2 = ComponentId("OtherComponent")
+
+    assert comp1 == comp1
+    assert comp1 != comp2
+    assert comp1.value == "MyComponent"
+    assert str(comp1) == "MyComponent"
+    assert repr(comp1) == "ComponentId('MyComponent')"
+
+
+def test_strategy_id():
+    s1 = StrategyId("S-001")
+    s2 = StrategyId("S-002")
+
+    assert s1 == s1
+    assert s1 != s2
+    assert s1.value == "S-001"
+    assert str(s1) == "S-001"
+    assert repr(s1) == "StrategyId('S-001')"
+
+
+def test_venue_order_id():
+    vo1 = VenueOrderId("V-123456")
+    vo2 = VenueOrderId("V-789012")
+
+    assert vo1 == vo1
+    assert vo1 != vo2
+    assert vo1.value == "V-123456"
+    assert str(vo1) == "V-123456"
+    assert repr(vo1) == "VenueOrderId('V-123456')"
+
+
+def test_order_list_id():
+    ol1 = OrderListId("OL-123456")
+    ol2 = OrderListId("OL-789012")
+
+    assert ol1 == ol1
+    assert ol1 != ol2
+    assert ol1.value == "OL-123456"
+    assert str(ol1) == "OL-123456"
+    assert repr(ol1) == "OrderListId('OL-123456')"
+
+
+def test_position_id():
+    p1 = PositionId("P-123456")
+    p2 = PositionId("P-789012")
+
+    assert p1 == p1
+    assert p1 != p2
+    assert p1.value == "P-123456"
+    assert str(p1) == "P-123456"
+    assert repr(p1) == "PositionId('P-123456')"
+
+
+def test_trade_id():
+    t1 = TradeId("T-123456")
+    t2 = TradeId("T-789012")
+
+    assert t1 == t1
+    assert t1 != t2
+    assert t1.value == "T-123456"
+    assert str(t1) == "T-123456"
+    assert repr(t1) == "TradeId('T-123456')"
+
+
+def test_trade_id_maximum_length():
+    with pytest.raises(ValueError, match="exceeds maximum length"):
+        TradeId("A" * 37)
+
+
+@pytest.mark.parametrize(
+    "id_obj",
+    [
+        ClientId("MyClient"),
+        ClientOrderId("O-123456"),
+        ComponentId("MyComponent"),
+        ExecAlgorithmId("VWAP"),
+        OrderListId("OL-123456"),
+        PositionId("P-123456"),
+        TradeId("T-123456"),
+        VenueOrderId("V-123456"),
+    ],
+)
+def test_identifier_pickle_roundtrip(id_obj):
+    pickled = pickle.dumps(id_obj)
+    unpickled = pickle.loads(pickled)  # noqa: S301
+
+    assert unpickled == id_obj
+    assert unpickled.value == id_obj.value
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        Symbol("AUD/USD"),
+        Venue("BINANCE"),
+        InstrumentId(Symbol("BTC/USD"), Venue("BINANCE")),
+        ComponentId("MyComponent"),
+        ClientId("MyClient"),
+        TraderId("TRADER-001"),
+        StrategyId("Strategy-001"),
+        ExecAlgorithmId("TWAP"),
+        AccountId("SIM-001"),
+        ClientOrderId("O-123456"),
+        VenueOrderId("V-123456"),
+        OrderListId("OL-123456"),
+        PositionId("P-123456"),
+        TradeId("T-123456"),
+    ],
+)
+def test_identifier_equality_with_none(identifier):
+    assert (identifier == None) is False  # noqa: E711
+    assert (identifier != None) is True  # noqa: E711
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        Symbol("AUD/USD"),
+        Venue("BINANCE"),
+        InstrumentId(Symbol("BTC/USD"), Venue("BINANCE")),
+        ComponentId("MyComponent"),
+        ClientId("MyClient"),
+        TraderId("TRADER-001"),
+        StrategyId("Strategy-001"),
+        ExecAlgorithmId("TWAP"),
+        AccountId("SIM-001"),
+        ClientOrderId("O-123456"),
+        VenueOrderId("V-123456"),
+        OrderListId("OL-123456"),
+        PositionId("P-123456"),
+        TradeId("T-123456"),
+    ],
+)
+def test_identifier_ordering_with_none_raises(identifier):
+    with pytest.raises(TypeError):
+        _ = identifier < None
+    with pytest.raises(TypeError):
+        _ = identifier <= None
+    with pytest.raises(TypeError):
+        _ = identifier > None
+    with pytest.raises(TypeError):
+        _ = identifier >= None
