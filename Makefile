@@ -593,18 +593,17 @@ cargo-test-coverage:  #-- Run Rust tests with coverage reporting
 #   make cargo-test-crate-<crate_name>
 # Examples:
 #   make cargo-test-crate-nautilus-model
-#   make cargo-test-crate-nautilus-core FEATURES="python,ffi"
+#   make cargo-test-crate-nautilus-live
 #
-# This reuses the same flags as `cargo-test-lib` but targets only the specified
-# crate by replacing `--workspace` with `-p <crate>`.
-# To include specific features, use the FEATURES variable with comma-separated values.
+# Enables all crate features except extension-module (which requires a Python
+# interpreter at link time). Feature list is resolved by crate-test-features.sh.
 # -----------------------------------------------------------------------------
 
 .PHONY: cargo-test-crate-%
 cargo-test-crate-%: export RUST_BACKTRACE=1
 cargo-test-crate-%: check-nextest-installed
 cargo-test-crate-%:  #-- Run Rust tests for a specific crate (usage: make cargo-test-crate-<crate_name>)
-	cargo nextest run --lib $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest -p $* $(if $(FEATURES),--features "$(FEATURES)")
+	cargo nextest run --lib $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest -p $* --features "$$(./scripts/crate-test-features.sh $*)"
 
 .PHONY: cargo-test-coverage-crate-%
 cargo-test-coverage-crate-%: export RUST_BACKTRACE=1

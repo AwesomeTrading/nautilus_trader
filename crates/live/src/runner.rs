@@ -273,16 +273,34 @@ impl AsyncRunner {
         self.channels
     }
 
-    /// Drains all pending data events from the channel and processes them.
-    pub fn drain_pending_data_events(&mut self) {
-        let mut count = 0;
-        while let Ok(evt) = self.channels.data_evt_rx.try_recv() {
-            Self::handle_data_event(evt);
-            count += 1;
+    /// Flushes all pending data events and commands from the channels.
+    ///
+    /// Loops until both data channels are empty, processing each item
+    /// into the cache immediately. Used in `start()` where channels are
+    /// not extracted.
+    pub fn flush_pending_data(&mut self) {
+        let mut total = 0;
+        loop {
+            let mut progressed = false;
+
+            while let Ok(evt) = self.channels.data_evt_rx.try_recv() {
+                Self::handle_data_event(evt);
+                progressed = true;
+                total += 1;
+            }
+            while let Ok(cmd) = self.channels.data_cmd_rx.try_recv() {
+                Self::handle_data_command(cmd);
+                progressed = true;
+                total += 1;
+            }
+
+            if !progressed {
+                break;
+            }
         }
 
-        if count > 0 {
-            log::debug!("Drained {count} pending data events");
+        if total > 0 {
+            log::debug!("Flushed {total} pending data events/commands");
         }
     }
 

@@ -27,6 +27,22 @@
 //! before polling the next, so `RefCell` borrows held across `.await` points
 //! within a single branch cannot conflict with borrows in other branches.
 //!
+//! # Startup sequencing
+//!
+//! Startup connects clients in two phases so that instruments are in the
+//! cache before execution clients read them:
+//!
+//! 1. Connect data clients (instruments arrive as buffered `DataEvent`s).
+//! 2. Flush all pending data events and commands into the cache via
+//!    `flush_pending_data`, which loops `try_recv` on the channel receivers
+//!    until no items remain.
+//! 3. Connect execution clients (`load_instruments_from_cache` now finds
+//!    populated instruments).
+//! 4. Drain remaining events, then run reconciliation.
+//!
+//! Both `run()` (integrated event loop) and `start()` (manual lifecycle)
+//! follow this sequence.
+//!
 //! # Reconciliation
 //!
 //! Three sub-checks run on independent intervals: inflight orders, open order
@@ -310,11 +326,11 @@ impl LiveNode {
 
         self.kernel.start_async().await;
 
-        // Connect data clients first and drain instruments into cache
+        // Connect data clients first and flush instrument events into cache
         self.kernel.connect_data_clients().await;
 
         if let Some(runner) = self.runner.as_mut() {
-            runner.drain_pending_data_events();
+            runner.flush_pending_data();
         }
 
         self.kernel.connect_exec_clients().await;
@@ -638,8 +654,10 @@ impl LiveNode {
         )
         .await;
 
-        // Drain data events so instruments are in cache for execution clients
-        pending.drain_data();
+        // Flush any data events still queued in the channel receivers that the
+        // select loop did not capture before the connect future resolved, then
+        // drain everything into cache.
+        flush_pending_data(&mut pending, &mut data_evt_rx, &mut data_cmd_rx);
 
         // Startup phase 2: Connect execution clients (instruments now in cache)
         let engines_connected = drive_with_event_buffering(
@@ -1262,6 +1280,36 @@ impl LiveNode {
     }
 }
 
+/// Flushes data events and commands from both `pending` and the channel receivers
+/// into the cache, looping until no progress is made.
+///
+/// This closes the gap where `drive_with_event_buffering` exits as soon as its
+/// driven future resolves (biased select), leaving items in the channel receivers
+/// that were not captured into `pending`.
+fn flush_pending_data(
+    pending: &mut PendingEvents,
+    data_evt_rx: &mut tokio::sync::mpsc::UnboundedReceiver<DataEvent>,
+    data_cmd_rx: &mut tokio::sync::mpsc::UnboundedReceiver<DataCommand>,
+) {
+    loop {
+        let mut progressed = pending.drain_data();
+
+        while let Ok(evt) = data_evt_rx.try_recv() {
+            AsyncRunner::handle_data_event(evt);
+            progressed = true;
+        }
+
+        while let Ok(cmd) = data_cmd_rx.try_recv() {
+            AsyncRunner::handle_data_command(cmd);
+            progressed = true;
+        }
+
+        if !progressed {
+            break;
+        }
+    }
+}
+
 /// Drives a future to completion while buffering channel events.
 ///
 /// Time events are handled immediately. Account events are forwarded directly.
@@ -1328,9 +1376,8 @@ struct PendingEvents {
 impl PendingEvents {
     /// Drains only data events and commands into the cache.
     ///
-    /// Called between data and execution client connects so that instruments
-    /// are available in the cache when execution clients load them.
-    fn drain_data(&mut self) {
+    /// Returns `true` if any events or commands were drained.
+    fn drain_data(&mut self) -> bool {
         let total = self.data_evts.len() + self.data_cmds.len();
 
         if total > 0 {
@@ -1345,9 +1392,12 @@ impl PendingEvents {
         for evt in self.data_evts.drain(..) {
             AsyncRunner::handle_data_event(evt);
         }
+
         for cmd in self.data_cmds.drain(..) {
             AsyncRunner::handle_data_command(cmd);
         }
+
+        total > 0
     }
 
     /// Drains all remaining pending events.
@@ -1373,15 +1423,19 @@ impl PendingEvents {
         for evt in self.data_evts.drain(..) {
             AsyncRunner::handle_data_event(evt);
         }
+
         for cmd in self.data_cmds.drain(..) {
             AsyncRunner::handle_data_command(cmd);
         }
+
         for report in self.exec_reports.drain(..) {
             AsyncRunner::handle_exec_event(ExecutionEvent::Report(report));
         }
+
         for cmd in self.exec_cmds.drain(..) {
             AsyncRunner::handle_exec_command(cmd);
         }
+
         for evt in self.order_evts.drain(..) {
             AsyncRunner::handle_exec_event(ExecutionEvent::Order(evt));
         }
@@ -1630,5 +1684,95 @@ mod tests {
 
         assert_eq!(handle.state(), NodeState::Idle);
         assert!(!handle.is_running());
+    }
+
+    #[rstest]
+    fn test_pending_drain_data_returns_false_when_empty() {
+        let mut pending = PendingEvents::default();
+
+        assert!(!pending.drain_data());
+    }
+
+    #[rstest]
+    fn test_pending_drain_data_returns_true_when_non_empty() {
+        use nautilus_model::instruments::{InstrumentAny, stubs::crypto_perpetual_ethusdt};
+
+        let mut pending = PendingEvents::default();
+        pending
+            .data_evts
+            .push(DataEvent::Instrument(InstrumentAny::CryptoPerpetual(
+                crypto_perpetual_ethusdt(),
+            )));
+
+        assert!(pending.drain_data());
+        assert!(pending.data_evts.is_empty());
+    }
+
+    fn stub_data_event() -> DataEvent {
+        use nautilus_model::instruments::{InstrumentAny, stubs::crypto_perpetual_ethusdt};
+
+        DataEvent::Instrument(InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt()))
+    }
+
+    fn stub_data_command() -> DataCommand {
+        use nautilus_common::messages::data::{SubscribeCommand, subscribe::SubscribeInstruments};
+        use nautilus_core::{UUID4, UnixNanos};
+        use nautilus_model::identifiers::Venue;
+
+        DataCommand::Subscribe(SubscribeCommand::Instruments(SubscribeInstruments::new(
+            None,
+            Venue::from("TEST"),
+            UUID4::new(),
+            UnixNanos::default(),
+            None,
+            None,
+        )))
+    }
+
+    #[rstest]
+    fn test_flush_pending_data_drains_events_and_commands() {
+        let (evt_tx, mut evt_rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<DataCommand>();
+
+        let mut pending = PendingEvents::default();
+
+        // Pre-load pending (items captured by the select loop)
+        pending.data_evts.push(stub_data_event());
+        pending.data_cmds.push(stub_data_command());
+
+        // Pre-load channels (items missed by the select loop)
+        evt_tx.send(stub_data_event()).unwrap();
+        cmd_tx.send(stub_data_command()).unwrap();
+
+        flush_pending_data(&mut pending, &mut evt_rx, &mut cmd_rx);
+
+        assert!(pending.data_evts.is_empty());
+        assert!(pending.data_cmds.is_empty());
+        assert!(evt_rx.try_recv().is_err());
+        assert!(cmd_rx.try_recv().is_err());
+    }
+
+    #[rstest]
+    fn test_flush_pending_data_drains_mixed_sources() {
+        let (evt_tx, mut evt_rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+        let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::unbounded_channel::<DataCommand>();
+
+        let mut pending = PendingEvents::default();
+
+        // First pass: pending has an event, channel has a command
+        pending.data_evts.push(stub_data_event());
+        cmd_tx.send(stub_data_command()).unwrap();
+
+        // Second pass: channel has items that simulate arrival during first drain
+        evt_tx.send(stub_data_event()).unwrap();
+        evt_tx.send(stub_data_event()).unwrap();
+        cmd_tx.send(stub_data_command()).unwrap();
+
+        flush_pending_data(&mut pending, &mut evt_rx, &mut cmd_rx);
+
+        assert!(pending.data_evts.is_empty());
+        assert!(pending.data_cmds.is_empty());
+        assert!(evt_rx.try_recv().is_err());
+        assert!(cmd_rx.try_recv().is_err());
     }
 }
