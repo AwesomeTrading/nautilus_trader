@@ -61,6 +61,9 @@ pub struct DeltaNeutralVolConfig {
     pub entry_iv_offset: f64,
     /// Time-in-force for strangle entry orders.
     pub entry_time_in_force: TimeInForce,
+    /// Param key for implied volatility passed to `submit_order_with_params`.
+    /// Adapter-specific: Bybit uses `"order_iv"`, OKX uses `"px_vol"`.
+    pub iv_param_key: String,
 }
 
 impl DeltaNeutralVolConfig {
@@ -89,6 +92,7 @@ impl DeltaNeutralVolConfig {
             enter_strangle: true,
             entry_iv_offset: 0.0,
             entry_time_in_force: TimeInForce::Gtc,
+            iv_param_key: "px_vol".to_string(),
         }
     }
 
@@ -157,6 +161,12 @@ impl DeltaNeutralVolConfig {
         self.base.order_id_tag = Some(tag);
         self
     }
+
+    #[must_use]
+    pub fn with_iv_param_key(mut self, key: String) -> Self {
+        self.iv_param_key = key;
+        self
+    }
 }
 
 #[cfg(feature = "python")]
@@ -178,6 +188,7 @@ impl DeltaNeutralVolConfig {
         enter_strangle=true,
         entry_iv_offset=0.0,
         entry_time_in_force=TimeInForce::Gtc,
+        iv_param_key="px_vol",
     ))]
     #[allow(clippy::too_many_arguments)]
     fn py_new(
@@ -195,6 +206,7 @@ impl DeltaNeutralVolConfig {
         enter_strangle: bool,
         entry_iv_offset: f64,
         entry_time_in_force: TimeInForce,
+        iv_param_key: &str,
     ) -> Self {
         let mut config = Self::new(option_family, hedge_instrument_id, client_id)
             .with_target_call_delta(target_call_delta)
@@ -204,7 +216,8 @@ impl DeltaNeutralVolConfig {
             .with_rehedge_interval_secs(rehedge_interval_secs)
             .with_enter_strangle(enter_strangle)
             .with_entry_iv_offset(entry_iv_offset)
-            .with_entry_time_in_force(entry_time_in_force);
+            .with_entry_time_in_force(entry_time_in_force)
+            .with_iv_param_key(iv_param_key.to_string());
 
         if let Some(id) = strategy_id {
             config.base.strategy_id = Some(id);

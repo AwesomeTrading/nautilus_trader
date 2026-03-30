@@ -293,6 +293,10 @@ pub struct BybitWsPlaceOrderParams {
     pub sl_limit_price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tp_limit_price: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_iv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mmp: Option<bool>,
 }
 
 /// Parameters for amending an order via WebSocket.
@@ -319,6 +323,8 @@ pub struct BybitWsAmendOrderParams {
     pub tp_trigger_by: Option<BybitTriggerType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sl_trigger_by: Option<BybitTriggerType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_iv: Option<String>,
 }
 
 /// Parameters for canceling an order via WebSocket.
@@ -401,6 +407,10 @@ pub struct BybitWsBatchPlaceItem {
     pub sl_limit_price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tp_limit_price: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_iv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mmp: Option<bool>,
 }
 
 /// Arguments for batch place order operation via WebSocket.
@@ -951,6 +961,103 @@ mod tests {
 
     use super::*;
     use crate::common::testing::load_test_json;
+
+    #[rstest]
+    fn serialize_place_params_includes_order_iv_when_set() {
+        let params = BybitWsPlaceOrderParams {
+            category: BybitProductType::Option,
+            symbol: Ustr::from("BTC-30JUN25-100000-C"),
+            side: BybitOrderSide::Buy,
+            order_type: BybitOrderType::Limit,
+            qty: "0.1".to_string(),
+            is_leverage: None,
+            market_unit: None,
+            price: Some("500".to_string()),
+            time_in_force: Some(BybitTimeInForce::Gtc),
+            order_link_id: Some("test-1".to_string()),
+            reduce_only: None,
+            close_on_trigger: None,
+            trigger_price: None,
+            trigger_by: None,
+            trigger_direction: None,
+            tpsl_mode: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            sl_trigger_price: None,
+            tp_trigger_price: None,
+            sl_order_type: None,
+            tp_order_type: None,
+            sl_limit_price: None,
+            tp_limit_price: None,
+            order_iv: Some("0.80".to_string()),
+            mmp: Some(true),
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        assert!(json.contains("\"orderIv\":\"0.80\""));
+        assert!(json.contains("\"mmp\":true"));
+    }
+
+    #[rstest]
+    fn serialize_place_params_omits_order_iv_when_none() {
+        let params = BybitWsPlaceOrderParams {
+            category: BybitProductType::Linear,
+            symbol: Ustr::from("BTCUSDT"),
+            side: BybitOrderSide::Buy,
+            order_type: BybitOrderType::Limit,
+            qty: "0.01".to_string(),
+            is_leverage: None,
+            market_unit: None,
+            price: Some("50000".to_string()),
+            time_in_force: Some(BybitTimeInForce::Gtc),
+            order_link_id: None,
+            reduce_only: None,
+            close_on_trigger: None,
+            trigger_price: None,
+            trigger_by: None,
+            trigger_direction: None,
+            tpsl_mode: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            sl_trigger_price: None,
+            tp_trigger_price: None,
+            sl_order_type: None,
+            tp_order_type: None,
+            sl_limit_price: None,
+            tp_limit_price: None,
+            order_iv: None,
+            mmp: None,
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        assert!(!json.contains("orderIv"));
+        assert!(!json.contains("mmp"));
+    }
+
+    #[rstest]
+    fn serialize_amend_params_includes_order_iv_when_set() {
+        let params = BybitWsAmendOrderParams {
+            category: BybitProductType::Option,
+            symbol: Ustr::from("BTC-30JUN25-100000-C"),
+            order_id: None,
+            order_link_id: Some("test-1".to_string()),
+            qty: None,
+            price: None,
+            trigger_price: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            order_iv: Some("0.90".to_string()),
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        assert!(json.contains("\"orderIv\":\"0.90\""));
+    }
 
     #[rstest]
     fn deserialize_account_order_frame_uses_enums() {

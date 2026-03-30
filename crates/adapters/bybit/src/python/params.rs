@@ -81,6 +81,10 @@ pub struct BybitWsPlaceOrderParams {
     pub sl_limit_price: Option<String>,
     #[pyo3(get, set)]
     pub tp_limit_price: Option<String>,
+    #[pyo3(get, set)]
+    pub order_iv: Option<String>,
+    #[pyo3(get, set)]
+    pub mmp: Option<bool>,
 }
 
 #[pymethods]
@@ -116,6 +120,8 @@ impl BybitWsPlaceOrderParams {
         tp_order_type: Option<String>,
         sl_limit_price: Option<String>,
         tp_limit_price: Option<String>,
+        order_iv: Option<String>,
+        mmp: Option<bool>,
     ) -> Self {
         Self {
             category,
@@ -144,6 +150,8 @@ impl BybitWsPlaceOrderParams {
             tp_order_type,
             sl_limit_price,
             tp_limit_price,
+            order_iv,
+            mmp,
         }
     }
 }
@@ -245,6 +253,8 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             tp_order_type,
             sl_limit_price: params.sl_limit_price,
             tp_limit_price: params.tp_limit_price,
+            order_iv: params.order_iv,
+            mmp: params.mmp,
         })
     }
 }
@@ -323,6 +333,8 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
             tp_order_type,
             sl_limit_price: params.sl_limit_price,
             tp_limit_price: params.tp_limit_price,
+            order_iv: params.order_iv,
+            mmp: params.mmp,
         }
     }
 }
@@ -354,6 +366,8 @@ pub struct BybitWsAmendOrderParams {
     pub tp_trigger_by: Option<String>,
     #[pyo3(get, set)]
     pub sl_trigger_by: Option<String>,
+    #[pyo3(get, set)]
+    pub order_iv: Option<String>,
 }
 
 #[pymethods]
@@ -374,6 +388,7 @@ impl BybitWsAmendOrderParams {
         stop_loss: Option<String>,
         tp_trigger_by: Option<String>,
         sl_trigger_by: Option<String>,
+        order_iv: Option<String>,
     ) -> Self {
         Self {
             category,
@@ -387,6 +402,7 @@ impl BybitWsAmendOrderParams {
             stop_loss,
             tp_trigger_by,
             sl_trigger_by,
+            order_iv,
         }
     }
 }
@@ -425,6 +441,7 @@ impl TryFrom<BybitWsAmendOrderParams> for messages::BybitWsAmendOrderParams {
             stop_loss: params.stop_loss,
             tp_trigger_by,
             sl_trigger_by,
+            order_iv: params.order_iv,
         })
     }
 }
@@ -456,6 +473,7 @@ impl From<messages::BybitWsAmendOrderParams> for BybitWsAmendOrderParams {
             stop_loss: params.stop_loss,
             tp_trigger_by,
             sl_trigger_by,
+            order_iv: params.order_iv,
         }
     }
 }

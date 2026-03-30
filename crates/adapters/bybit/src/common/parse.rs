@@ -1357,6 +1357,8 @@ pub struct BybitTpSlParams {
     pub sl_trigger_price: Option<String>,
     pub close_on_trigger: Option<bool>,
     pub is_leverage: bool,
+    pub order_iv: Option<String>,
+    pub mmp: Option<bool>,
 }
 
 impl BybitTpSlParams {
@@ -1366,7 +1368,7 @@ impl BybitTpSlParams {
 }
 
 /// Extracts a string value from params, accepting both string and numeric JSON values.
-fn get_price_str(params: &Params, key: &str) -> Option<String> {
+pub fn get_price_str(params: &Params, key: &str) -> Option<String> {
     let value = params.get(key)?;
     if let Some(s) = value.as_str() {
         Some(s.to_string())
@@ -1484,6 +1486,22 @@ pub fn parse_bybit_tp_sl_params(params: Option<&Params>) -> anyhow::Result<Bybit
     }
 
     result.close_on_trigger = params.get_bool("close_on_trigger");
+
+    if let Some(value) = params.get("order_iv") {
+        match get_price_str(params, "order_iv") {
+            Some(s) => result.order_iv = Some(s),
+            None => {
+                anyhow::bail!("invalid type for 'order_iv': {value}, expected string or number")
+            }
+        }
+    }
+
+    if let Some(value) = params.get("mmp") {
+        match value.as_bool() {
+            Some(b) => result.mmp = Some(b),
+            None => anyhow::bail!("invalid type for 'mmp': {value}, expected bool"),
+        }
+    }
 
     Ok(result)
 }
@@ -1918,6 +1936,8 @@ mod tests {
         let result = parse_bybit_tp_sl_params(None).unwrap();
         assert!(!result.is_leverage);
         assert!(!result.has_tp_sl());
+        assert!(result.order_iv.is_none());
+        assert!(result.mmp.is_none());
     }
 
     #[rstest]
@@ -1926,6 +1946,8 @@ mod tests {
         let result = parse_bybit_tp_sl_params(Some(&p)).unwrap();
         assert!(!result.is_leverage);
         assert!(!result.has_tp_sl());
+        assert!(result.order_iv.is_none());
+        assert!(result.mmp.is_none());
     }
 
     #[rstest]
@@ -2046,6 +2068,41 @@ mod tests {
         let p = params_from(&[("sl_trigger_by", json!("IndexPrice"))]);
         let err = parse_bybit_tp_sl_params(Some(&p)).unwrap_err();
         assert!(err.to_string().contains("SL override fields require"));
+    }
+
+    #[rstest]
+    fn test_parse_tp_sl_params_rejects_bool_order_iv() {
+        let p = params_from(&[("order_iv", json!(true))]);
+        let err = parse_bybit_tp_sl_params(Some(&p)).unwrap_err();
+        assert!(err.to_string().contains("order_iv"));
+    }
+
+    #[rstest]
+    fn test_parse_tp_sl_params_rejects_string_mmp() {
+        let p = params_from(&[("mmp", json!("true"))]);
+        let err = parse_bybit_tp_sl_params(Some(&p)).unwrap_err();
+        assert!(err.to_string().contains("mmp"));
+    }
+
+    #[rstest]
+    fn test_parse_tp_sl_params_order_iv_string() {
+        let p = params_from(&[("order_iv", json!("0.75"))]);
+        let result = parse_bybit_tp_sl_params(Some(&p)).unwrap();
+        assert_eq!(result.order_iv.as_deref(), Some("0.75"));
+    }
+
+    #[rstest]
+    fn test_parse_tp_sl_params_order_iv_numeric() {
+        let p = params_from(&[("order_iv", json!(0.75))]);
+        let result = parse_bybit_tp_sl_params(Some(&p)).unwrap();
+        assert_eq!(result.order_iv.as_deref(), Some("0.75"));
+    }
+
+    #[rstest]
+    fn test_parse_tp_sl_params_mmp() {
+        let p = params_from(&[("mmp", json!(true))]);
+        let result = parse_bybit_tp_sl_params(Some(&p)).unwrap();
+        assert_eq!(result.mmp, Some(true));
     }
 
     #[rstest]

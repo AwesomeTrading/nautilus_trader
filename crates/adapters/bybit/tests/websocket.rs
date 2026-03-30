@@ -65,6 +65,7 @@ struct TestServerState {
     disconnect_trigger: Arc<AtomicBool>,
     ping_count: Arc<AtomicUsize>,
     pong_count: Arc<AtomicUsize>,
+    captured_messages: Arc<tokio::sync::Mutex<Vec<serde_json::Value>>>,
 }
 
 impl Default for TestServerState {
@@ -79,6 +80,7 @@ impl Default for TestServerState {
             disconnect_trigger: Arc::new(AtomicBool::new(false)),
             ping_count: Arc::new(AtomicUsize::new(0)),
             pong_count: Arc::new(AtomicUsize::new(0)),
+            captured_messages: Arc::new(tokio::sync::Mutex::new(Vec::new())),
         }
     }
 }
@@ -369,7 +371,7 @@ async fn handle_socket(mut socket: WebSocket, state: TestServerState) {
                         }
                     }
                     Some("order.place") => {
-                        // Handle batch place orders
+                        state.captured_messages.lock().await.push(value.clone());
                         let req_id = value.get("req_id").and_then(|v| v.as_str());
                         let response = json!({
                             "success": true,
@@ -388,7 +390,7 @@ async fn handle_socket(mut socket: WebSocket, state: TestServerState) {
                         }
                     }
                     Some("order.amend") => {
-                        // Handle batch amend orders
+                        state.captured_messages.lock().await.push(value.clone());
                         let req_id = value.get("req_id").and_then(|v| v.as_str());
                         let response = json!({
                             "success": true,
@@ -407,7 +409,6 @@ async fn handle_socket(mut socket: WebSocket, state: TestServerState) {
                         }
                     }
                     Some("order.cancel") => {
-                        // Handle batch cancel orders
                         let req_id = value.get("req_id").and_then(|v| v.as_str());
                         let response = json!({
                             "success": true,
@@ -415,6 +416,44 @@ async fn handle_socket(mut socket: WebSocket, state: TestServerState) {
                             "conn_id": "test-conn-id",
                             "req_id": req_id.unwrap_or(""),
                             "op": "order.cancel"
+                        });
+
+                        if socket
+                            .send(Message::Text(response.to_string().into()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Some("order.create-batch") => {
+                        state.captured_messages.lock().await.push(value.clone());
+                        let req_id = value.get("req_id").and_then(|v| v.as_str());
+                        let response = json!({
+                            "success": true,
+                            "ret_msg": "",
+                            "conn_id": "test-conn-id",
+                            "req_id": req_id.unwrap_or(""),
+                            "op": "order.create-batch"
+                        });
+
+                        if socket
+                            .send(Message::Text(response.to_string().into()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Some("order.amend-batch") => {
+                        state.captured_messages.lock().await.push(value.clone());
+                        let req_id = value.get("req_id").and_then(|v| v.as_str());
+                        let response = json!({
+                            "success": true,
+                            "ret_msg": "",
+                            "conn_id": "test-conn-id",
+                            "req_id": req_id.unwrap_or(""),
+                            "op": "order.amend-batch"
                         });
 
                         if socket
@@ -1918,6 +1957,8 @@ mod conditional_order_tests {
                 tp_order_type: None,
                 sl_limit_price: None,
                 tp_limit_price: None,
+                order_iv: None,
+                mmp: None,
             }
         } else {
             BybitWsPlaceOrderParams {
@@ -1947,6 +1988,8 @@ mod conditional_order_tests {
                 tp_order_type: None,
                 sl_limit_price: None,
                 tp_limit_price: None,
+                order_iv: None,
+                mmp: None,
             }
         }
     }
@@ -2218,6 +2261,8 @@ async fn test_batch_place_orders_with_cache_keys() {
         tp_order_type: None,
         sl_limit_price: None,
         tp_limit_price: None,
+        order_iv: None,
+        mmp: None,
     }];
 
     let result = client.batch_place_orders(orders).await;
@@ -2265,6 +2310,7 @@ async fn test_batch_amend_orders() {
         stop_loss: None,
         tp_trigger_by: None,
         sl_trigger_by: None,
+        order_iv: None,
     }];
 
     let result = client.batch_amend_orders(orders).await;
@@ -2545,6 +2591,202 @@ async fn test_option_trade_unsubscribe_preserves_shared_topic() {
         subs.contains(&"publicTrade.BTC".to_string()),
         "Topic should remain active while another instrument is subscribed, found: {subs:?}"
     );
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_batch_place_order_with_order_iv_and_mmp() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let ws_url = format!("ws://{addr}/v5/private");
+
+    let mut client = BybitWebSocketClient::new_private(
+        BybitEnvironment::Mainnet,
+        Some("test_api_key".to_string()),
+        Some("test_api_secret".to_string()),
+        Some(ws_url),
+        20,
+    );
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { state.authenticated.load(Ordering::Relaxed) },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let orders = vec![BybitWsPlaceOrderParams {
+        category: BybitProductType::Option,
+        symbol: Ustr::from("BTC-30JUN25-100000-C"),
+        side: BybitOrderSide::Buy,
+        order_type: BybitOrderType::Limit,
+        qty: "0.1".to_string(),
+        is_leverage: None,
+        market_unit: None,
+        price: Some("500".to_string()),
+        time_in_force: Some(BybitTimeInForce::Gtc),
+        order_link_id: Some("option-test-1".to_string()),
+        reduce_only: None,
+        close_on_trigger: None,
+        trigger_price: None,
+        trigger_by: None,
+        trigger_direction: None,
+        tpsl_mode: None,
+        take_profit: None,
+        stop_loss: None,
+        tp_trigger_by: None,
+        sl_trigger_by: None,
+        sl_trigger_price: None,
+        tp_trigger_price: None,
+        sl_order_type: None,
+        tp_order_type: None,
+        sl_limit_price: None,
+        tp_limit_price: None,
+        order_iv: Some("0.80".to_string()),
+        mmp: Some(true),
+    }];
+
+    let result = client.batch_place_orders(orders).await;
+    assert!(result.is_ok());
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let messages = state.captured_messages.lock().await;
+    assert_eq!(messages.len(), 1);
+
+    let msg = &messages[0];
+    let args = msg.get("args").unwrap().as_array().unwrap();
+    let request = &args[0]["request"][0];
+
+    assert_eq!(request["orderIv"], "0.80");
+    assert_eq!(request["mmp"], true);
+    assert_eq!(request["symbol"], "BTC-30JUN25-100000-C");
+    assert_eq!(request["orderLinkId"], "option-test-1");
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_batch_place_order_omits_order_iv_when_none() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let ws_url = format!("ws://{addr}/v5/private");
+
+    let mut client = BybitWebSocketClient::new_private(
+        BybitEnvironment::Mainnet,
+        Some("test_api_key".to_string()),
+        Some("test_api_secret".to_string()),
+        Some(ws_url),
+        20,
+    );
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { state.authenticated.load(Ordering::Relaxed) },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let orders = vec![BybitWsPlaceOrderParams {
+        category: BybitProductType::Linear,
+        symbol: Ustr::from("BTCUSDT"),
+        side: BybitOrderSide::Buy,
+        order_type: BybitOrderType::Limit,
+        qty: "0.001".to_string(),
+        is_leverage: None,
+        market_unit: None,
+        price: Some("50000.0".to_string()),
+        time_in_force: Some(BybitTimeInForce::Gtc),
+        order_link_id: Some("linear-test-1".to_string()),
+        reduce_only: None,
+        close_on_trigger: None,
+        trigger_price: None,
+        trigger_by: None,
+        trigger_direction: None,
+        tpsl_mode: None,
+        take_profit: None,
+        stop_loss: None,
+        tp_trigger_by: None,
+        sl_trigger_by: None,
+        sl_trigger_price: None,
+        tp_trigger_price: None,
+        sl_order_type: None,
+        tp_order_type: None,
+        sl_limit_price: None,
+        tp_limit_price: None,
+        order_iv: None,
+        mmp: None,
+    }];
+
+    let result = client.batch_place_orders(orders).await;
+    assert!(result.is_ok());
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let messages = state.captured_messages.lock().await;
+    assert_eq!(messages.len(), 1);
+
+    let msg_str = serde_json::to_string(&messages[0]).unwrap();
+    assert!(!msg_str.contains("orderIv"));
+    assert!(!msg_str.contains("\"mmp\""));
+
+    client.close().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_batch_amend_order_with_order_iv() {
+    let (addr, state) = start_test_server().await.unwrap();
+    let ws_url = format!("ws://{addr}/v5/private");
+
+    let mut client = BybitWebSocketClient::new_private(
+        BybitEnvironment::Mainnet,
+        Some("test_api_key".to_string()),
+        Some("test_api_secret".to_string()),
+        Some(ws_url),
+        20,
+    );
+
+    client.connect().await.unwrap();
+
+    wait_until_async(
+        || async { state.authenticated.load(Ordering::Relaxed) },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let orders = vec![BybitWsAmendOrderParams {
+        category: BybitProductType::Option,
+        symbol: Ustr::from("BTC-30JUN25-100000-C"),
+        order_id: None,
+        order_link_id: Some("option-test-1".to_string()),
+        qty: None,
+        price: None,
+        trigger_price: None,
+        take_profit: None,
+        stop_loss: None,
+        tp_trigger_by: None,
+        sl_trigger_by: None,
+        order_iv: Some("0.90".to_string()),
+    }];
+
+    let result = client.batch_amend_orders(orders).await;
+    assert!(result.is_ok());
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let messages = state.captured_messages.lock().await;
+    assert_eq!(messages.len(), 1);
+
+    let msg = &messages[0];
+    let args = msg.get("args").unwrap().as_array().unwrap();
+    let order = &args[0];
+
+    assert_eq!(order["orderIv"], "0.90");
+    assert_eq!(order["orderLinkId"], "option-test-1");
 
     client.close().await.unwrap();
 }

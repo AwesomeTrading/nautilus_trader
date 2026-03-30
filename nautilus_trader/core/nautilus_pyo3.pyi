@@ -7225,6 +7225,8 @@ class BybitWsPlaceOrderParams:
     tp_order_type: str | None
     sl_limit_price: str | None
     tp_limit_price: str | None
+    order_iv: str | None
+    mmp: bool | None
 
 class BybitWsAmendOrderParams:
     category: BybitProductType
@@ -7238,6 +7240,7 @@ class BybitWsAmendOrderParams:
     stop_loss: str | None
     tp_trigger_by: str | None
     sl_trigger_by: str | None
+    order_iv: str | None
 
 class BybitWsCancelOrderParams:
     category: BybitProductType

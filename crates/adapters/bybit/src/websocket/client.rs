@@ -1348,6 +1348,8 @@ impl BybitWebSocketClient {
                 tp_order_type: order.tp_order_type,
                 sl_limit_price: order.sl_limit_price,
                 tp_limit_price: order.tp_limit_price,
+                order_iv: order.order_iv,
+                mmp: order.mmp,
             })
             .collect();
 
@@ -1663,6 +1665,8 @@ impl BybitWebSocketClient {
                 tp_order_type: None,
                 sl_limit_price: None,
                 tp_limit_price: None,
+                order_iv: None,
+                mmp: None,
             }
         } else {
             BybitWsPlaceOrderParams {
@@ -1696,6 +1700,8 @@ impl BybitWebSocketClient {
                 tp_order_type: None,
                 sl_limit_price: None,
                 tp_limit_price: None,
+                order_iv: None,
+                mmp: None,
             }
         };
 
@@ -1729,6 +1735,7 @@ impl BybitWebSocketClient {
             stop_loss: None,
             tp_trigger_by: None,
             sl_trigger_by: None,
+            order_iv: None,
         })
     }
 

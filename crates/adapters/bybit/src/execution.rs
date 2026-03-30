@@ -63,8 +63,8 @@ use crate::{
             BybitTimeInForce, BybitTriggerType,
         },
         parse::{
-            BybitTpSlParams, extract_raw_symbol, nanos_to_millis, parse_bybit_tp_sl_params,
-            spot_leverage, spot_market_unit,
+            BybitTpSlParams, extract_raw_symbol, get_price_str, nanos_to_millis,
+            parse_bybit_tp_sl_params, spot_leverage, spot_market_unit,
         },
     },
     config::BybitExecClientConfig,
@@ -320,6 +320,8 @@ impl BybitExecutionClient {
             tp_order_type: tp_sl.tp_order_type,
             sl_limit_price: tp_sl.sl_limit_price.clone(),
             tp_limit_price: tp_sl.tp_limit_price.clone(),
+            order_iv: tp_sl.order_iv.clone(),
+            mmp: tp_sl.mmp,
         })
     }
 }
@@ -893,9 +895,13 @@ impl ExecutionClient for BybitExecutionClient {
             }
         };
 
-        if self.config.environment == BybitEnvironment::Demo && tp_sl.has_tp_sl() {
-            self.emitter
-                .emit_order_denied(&order, "Native TP/SL params are not supported in demo mode");
+        if self.config.environment == BybitEnvironment::Demo
+            && (tp_sl.has_tp_sl() || tp_sl.order_iv.is_some() || tp_sl.mmp.is_some())
+        {
+            self.emitter.emit_order_denied(
+                &order,
+                "Native TP/SL and option params are not supported in demo mode",
+            );
             return Ok(());
         }
 
@@ -1027,14 +1033,16 @@ impl ExecutionClient for BybitExecutionClient {
             }
         };
 
-        if self.config.environment == BybitEnvironment::Demo && tp_sl.has_tp_sl() {
+        if self.config.environment == BybitEnvironment::Demo
+            && (tp_sl.has_tp_sl() || tp_sl.order_iv.is_some() || tp_sl.mmp.is_some())
+        {
             let cache = self.core.cache();
 
             for cid in &cmd.order_list.client_order_ids {
                 if let Some(order) = cache.order(cid) {
                     self.emitter.emit_order_denied(
                         order,
-                        "Native TP/SL params are not supported in demo mode",
+                        "Native TP/SL and option params are not supported in demo mode",
                     );
                 }
             }
@@ -1233,6 +1241,25 @@ impl ExecutionClient for BybitExecutionClient {
         let emitter = self.emitter.clone();
         let clock = self.clock;
 
+        let has_order_iv = cmd
+            .params
+            .as_ref()
+            .and_then(|p| p.get("order_iv"))
+            .is_some();
+
+        if self.config.environment == BybitEnvironment::Demo && has_order_iv {
+            let ts_event = self.clock.get_time_ns();
+            self.emitter.emit_order_modify_rejected_event(
+                strategy_id,
+                instrument_id,
+                client_order_id,
+                venue_order_id,
+                "Option params (order_iv) are not supported in demo mode",
+                ts_event,
+            );
+            return Ok(());
+        }
+
         if self.config.environment == BybitEnvironment::Demo {
             let http_client = self.http_client.clone();
             let account_id = self.core.account_id;
@@ -1273,6 +1300,26 @@ impl ExecutionClient for BybitExecutionClient {
 
         let raw_symbol = extract_raw_symbol(instrument_id.symbol.as_str());
 
+        let order_iv = if let Some(value) = cmd.params.as_ref().and_then(|p| p.get("order_iv")) {
+            match get_price_str(cmd.params.as_ref().unwrap(), "order_iv") {
+                Some(s) => Some(s),
+                None => {
+                    let ts_event = self.clock.get_time_ns();
+                    self.emitter.emit_order_modify_rejected_event(
+                        strategy_id,
+                        instrument_id,
+                        client_order_id,
+                        venue_order_id,
+                        &format!("invalid type for 'order_iv': {value}, expected string or number"),
+                        ts_event,
+                    );
+                    return Ok(());
+                }
+            }
+        } else {
+            None
+        };
+
         let params = BybitWsAmendOrderParams {
             category: product_type,
             symbol: Ustr::from(raw_symbol),
@@ -1285,6 +1332,7 @@ impl ExecutionClient for BybitExecutionClient {
             stop_loss: None,
             tp_trigger_by: None,
             sl_trigger_by: None,
+            order_iv,
         };
 
         let ws_trade = self.ws_trade.clone();
@@ -1579,6 +1627,8 @@ mod tests {
             tp_order_type: None,
             sl_limit_price: None,
             tp_limit_price: None,
+            order_iv: None,
+            mmp: None,
         };
 
         assert_eq!(params.market_unit, expected);

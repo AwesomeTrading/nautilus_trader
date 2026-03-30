@@ -143,23 +143,17 @@ def _parse_bybit_tp_sl_params(params: dict | None) -> dict:
         if val is not None:
             result[key] = _validate_price_string(key, val)
 
-    for key in ("tp_trigger_by", "sl_trigger_by"):
+    for key, valid, label in (
+        ("tp_trigger_by", _BYBIT_VALID_TRIGGER_TYPES, "trigger type"),
+        ("sl_trigger_by", _BYBIT_VALID_TRIGGER_TYPES, "trigger type"),
+        ("tp_order_type", _BYBIT_VALID_ORDER_TYPES, "order type"),
+        ("sl_order_type", _BYBIT_VALID_ORDER_TYPES, "order type"),
+    ):
         val = p.get(key)
         if val is not None:
-            if val not in _BYBIT_VALID_TRIGGER_TYPES:
+            if val not in valid:
                 raise ValueError(
-                    f"Invalid Bybit trigger type for '{key}': '{val}'. "
-                    f"Expected one of {sorted(_BYBIT_VALID_TRIGGER_TYPES)}.",
-                )
-            result[key] = val
-
-    for key in ("tp_order_type", "sl_order_type"):
-        val = p.get(key)
-        if val is not None:
-            if val not in _BYBIT_VALID_ORDER_TYPES:
-                raise ValueError(
-                    f"Invalid Bybit order type for '{key}': '{val}'. "
-                    f"Expected one of {sorted(_BYBIT_VALID_ORDER_TYPES)}.",
+                    f"Invalid Bybit {label} for '{key}': '{val}'. Expected one of {sorted(valid)}.",
                 )
             result[key] = val
 
@@ -169,7 +163,27 @@ def _parse_bybit_tp_sl_params(params: dict | None) -> dict:
     if val is not None:
         result["close_on_trigger"] = bool(val)
 
+    _parse_option_params(p, result)
+
     return result
+
+
+def _parse_option_params(p: dict, result: dict) -> None:
+    val = p.get("order_iv")
+    if val is not None:
+        if isinstance(val, bool) or not isinstance(val, (str, int, float)):
+            raise ValueError(
+                f"Invalid type for 'order_iv': {type(val).__name__}, expected str or number",
+            )
+        result["order_iv"] = str(val)
+
+    val = p.get("mmp")
+    if val is not None:
+        if not isinstance(val, bool):
+            raise ValueError(
+                f"Invalid type for 'mmp': {type(val).__name__}, expected bool",
+            )
+        result["mmp"] = val
 
 
 def _apply_tp_sl_fields(order_params: object, tp_sl: dict) -> None:
@@ -186,6 +200,8 @@ def _apply_tp_sl_fields(order_params: object, tp_sl: dict) -> None:
         "tp_limit_price",
         "sl_limit_price",
         "close_on_trigger",
+        "order_iv",
+        "mmp",
     ):
         val = tp_sl.get(attr)
         if val is not None:
@@ -1010,12 +1026,17 @@ class BybitExecutionClient(LiveExecutionClient):
             )
             return
 
-        if self._is_demo and (tp_sl.get("take_profit") or tp_sl.get("stop_loss")):
+        if self._is_demo and (
+            tp_sl.get("take_profit")
+            or tp_sl.get("stop_loss")
+            or tp_sl.get("order_iv") is not None
+            or tp_sl.get("mmp") is not None
+        ):
             self.generate_order_denied(
                 strategy_id=order.strategy_id,
                 instrument_id=order.instrument_id,
                 client_order_id=order.client_order_id,
-                reason="Native TP/SL params are not supported in demo mode",
+                reason="Native TP/SL and option params are not supported in demo mode",
                 ts_event=self._clock.timestamp_ns(),
             )
             return
@@ -1067,11 +1088,14 @@ class BybitExecutionClient(LiveExecutionClient):
                     is_quote_quantity=is_quote_quantity,
                     is_leverage=is_leverage,
                 )
-            elif tp_sl.get("take_profit") or tp_sl.get("stop_loss"):
-                # Native TP/SL: pass take_profit/stop_loss as Price objects so the Rust
-                # layer sets tpsl_mode="Full" and default trigger types automatically.
-                # _apply_tp_sl_fields then applies any override fields (trigger type,
-                # order type, limit prices, etc.).
+            elif (
+                tp_sl.get("take_profit")
+                or tp_sl.get("stop_loss")
+                or tp_sl.get("order_iv") is not None
+                or tp_sl.get("mmp") is not None
+            ):
+                # Batch path: required for native TP/SL and option-specific fields
+                # (order_iv, mmp) that the simple submit_order API does not accept.
                 pyo3_take_profit = (
                     nautilus_pyo3.Price.from_str(tp_sl["take_profit"])
                     if tp_sl.get("take_profit")
@@ -1155,14 +1179,19 @@ class BybitExecutionClient(LiveExecutionClient):
             return
 
         if self._is_demo:
-            if tp_sl.get("take_profit") or tp_sl.get("stop_loss"):
+            if (
+                tp_sl.get("take_profit")
+                or tp_sl.get("stop_loss")
+                or tp_sl.get("order_iv") is not None
+                or tp_sl.get("mmp") is not None
+            ):
                 now_ns = self._clock.timestamp_ns()
                 for order in command.order_list.orders:
                     self.generate_order_denied(
                         strategy_id=order.strategy_id,
                         instrument_id=order.instrument_id,
                         client_order_id=order.client_order_id,
-                        reason="Native TP/SL params are not supported in demo mode",
+                        reason="Native TP/SL and option params are not supported in demo mode",
                         ts_event=now_ns,
                     )
                 return
@@ -1383,6 +1412,34 @@ class BybitExecutionClient(LiveExecutionClient):
             command.instrument_id.symbol.value,
         )
 
+        order_iv = None
+
+        if command.params:
+            val = command.params.get("order_iv")
+            if val is not None:
+                if isinstance(val, bool) or not isinstance(val, (str, int, float)):
+                    self.generate_order_modify_rejected(
+                        strategy_id=order.strategy_id,
+                        instrument_id=order.instrument_id,
+                        client_order_id=order.client_order_id,
+                        venue_order_id=order.venue_order_id,
+                        reason=f"Invalid type for 'order_iv': {type(val).__name__}, expected str or number",
+                        ts_event=self._clock.timestamp_ns(),
+                    )
+                    return
+                order_iv = str(val)
+
+        if self._is_demo and order_iv is not None:
+            self.generate_order_modify_rejected(
+                strategy_id=order.strategy_id,
+                instrument_id=order.instrument_id,
+                client_order_id=order.client_order_id,
+                venue_order_id=order.venue_order_id,
+                reason="Option params (order_iv) are not supported in demo mode",
+                ts_event=self._clock.timestamp_ns(),
+            )
+            return
+
         try:
             if self._is_demo:
                 await self._http_client.modify_order(
@@ -1393,6 +1450,21 @@ class BybitExecutionClient(LiveExecutionClient):
                     venue_order_id=pyo3_venue_order_id,
                     quantity=pyo3_quantity,
                     price=pyo3_price,
+                )
+            elif order_iv is not None:
+                amend_params = self._ws_trade_client.build_amend_order_params(
+                    product_type=product_type,
+                    instrument_id=pyo3_instrument_id,
+                    venue_order_id=pyo3_venue_order_id,
+                    client_order_id=pyo3_client_order_id,
+                    quantity=pyo3_quantity,
+                    price=pyo3_price,
+                )
+                amend_params.order_iv = order_iv
+                await self._ws_trade_client.batch_modify_orders(
+                    pyo3_trader_id,
+                    pyo3_strategy_id,
+                    [amend_params],
                 )
             else:
                 await self._ws_trade_client.modify_order(

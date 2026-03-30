@@ -186,7 +186,10 @@ impl DeltaNeutralVol {
         );
 
         let mut call_params = Params::new();
-        call_params.insert("px_vol".to_string(), json!(call_entry_iv.to_string()));
+        call_params.insert(
+            self.config.iv_param_key.clone(),
+            json!(call_entry_iv.to_string()),
+        );
 
         self.submit_order_with_params(call_order, None, Some(client_id), call_params)?;
 
@@ -210,7 +213,10 @@ impl DeltaNeutralVol {
         );
 
         let mut put_params = Params::new();
-        put_params.insert("px_vol".to_string(), json!(put_entry_iv.to_string()));
+        put_params.insert(
+            self.config.iv_param_key.clone(),
+            json!(put_entry_iv.to_string()),
+        );
 
         self.submit_order_with_params(put_order, None, Some(client_id), put_params)?;
 

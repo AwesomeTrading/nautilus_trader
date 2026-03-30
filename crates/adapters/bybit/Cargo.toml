@@ -54,7 +54,7 @@ nautilus-live = { workspace = true }
 nautilus-model = { workspace = true }
 nautilus-network = { workspace = true }
 nautilus-system = { workspace = true }
-nautilus-trading = { workspace = true }
+nautilus-trading = { workspace = true, features = ["examples"] }
 
 ahash = { workspace = true }
 anyhow = { workspace = true }
@@ -138,5 +138,12 @@ doc = false
 [[example]]
 name = "bybit-option-chain"
 path = "examples/node_option_chain.rs"
+required-features = []
+doc = false
+
+# Run with `cargo run --example bybit-delta-neutral --package nautilus-bybit`.
+[[example]]
+name = "bybit-delta-neutral"
+path = "examples/node_delta_neutral.rs"
 required-features = []
 doc = false
