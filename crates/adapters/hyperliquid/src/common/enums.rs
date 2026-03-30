@@ -858,6 +858,8 @@ pub enum HyperliquidInfoRequestType {
     ValidatorStats,
     /// Get user fee schedule and effective rates.
     UserFees,
+    /// Get metadata for all perp dexes (standard + HIP-3).
+    AllPerpMetas,
 }
 
 impl HyperliquidInfoRequestType {
@@ -893,6 +895,7 @@ impl HyperliquidInfoRequestType {
             Self::DelegatorRewards => "delegatorRewards",
             Self::ValidatorStats => "validatorStats",
             Self::UserFees => "userFees",
+            Self::AllPerpMetas => "allPerpMetas",
         }
     }
 }

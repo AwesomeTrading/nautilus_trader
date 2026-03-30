@@ -8841,8 +8841,9 @@ class HyperliquidHttpClient:
     async def info_user_fees(self) -> str: ...
     async def load_instrument_definitions(
         self,
-        include_perp: bool = True,
         include_spot: bool = True,
+        include_perps: bool = True,
+        include_perps_hip3: bool = False,
     ) -> list[Instrument]: ...
     async def request_order_status_reports(
         self,

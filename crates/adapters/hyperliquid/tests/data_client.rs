@@ -57,6 +57,7 @@ use nautilus_model::{
     data::Data,
     enums::BookType,
     identifiers::{ClientId, InstrumentId, Venue},
+    instruments::Instrument,
 };
 use nautilus_network::http::{HttpClient, Method};
 use rstest::rstest;
@@ -117,6 +118,16 @@ async fn handle_info(State(state): State<TestServerState>, body: axum::body::Byt
         "meta" => {
             let meta = load_json("http_meta_perp_sample.json");
             Json(meta).into_response()
+        }
+        "allPerpMetas" => {
+            let standard_meta = load_json("http_meta_perp_sample.json");
+            let hip3_meta = json!({
+                "universe": [
+                    {"name": "xyz:TSLA", "szDecimals": 3, "maxLeverage": 10, "growthMode": "enabled", "marginMode": "strictIsolated"},
+                    {"name": "xyz:NVDA", "szDecimals": 3, "maxLeverage": 20}
+                ]
+            });
+            Json(json!([standard_meta, hip3_meta])).into_response()
         }
         "metaAndAssetCtxs" => {
             let meta = load_json("http_meta_perp_sample.json");
@@ -509,6 +520,41 @@ async fn test_data_client_emits_instruments_on_connect() {
         instrument_count > 0,
         "Expected instrument events on connect"
     );
+
+    client.disconnect().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_data_client_emits_hip3_instruments() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state).await;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+    set_data_event_sender(tx);
+
+    let config = create_data_client_config(addr);
+    let mut client = HyperliquidDataClient::new(ClientId::new("HYPERLIQUID"), config).unwrap();
+    client.connect().await.unwrap();
+
+    let mut standard_symbols = Vec::new();
+    let mut hip3_symbols = Vec::new();
+
+    while let Ok(event) = rx.try_recv() {
+        if let DataEvent::Instrument(instrument) = event {
+            let symbol = instrument.id().symbol.to_string();
+            if symbol.contains(':') {
+                hip3_symbols.push(symbol);
+            } else {
+                standard_symbols.push(symbol);
+            }
+        }
+    }
+
+    // Mock returns 3 standard perps (BTC, ETH, ATOM) and 2 HIP-3 (xyz:TSLA, xyz:NVDA)
+    assert_eq!(standard_symbols.len(), 3);
+    assert_eq!(hip3_symbols.len(), 2);
+    assert!(hip3_symbols.contains(&"xyz:TSLA-USD-PERP".to_string()));
+    assert!(hip3_symbols.contains(&"xyz:NVDA-USD-PERP".to_string()));
 
     client.disconnect().await.unwrap();
 }

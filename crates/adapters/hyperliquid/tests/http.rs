@@ -127,6 +127,10 @@ async fn handle_info(State(state): State<TestServerState>, body: axum::body::Byt
             let meta = load_json("http_meta_perp_sample.json");
             Json(meta).into_response()
         }
+        "allPerpMetas" => {
+            let meta = load_json("http_meta_perp_sample.json");
+            Json(json!([meta])).into_response()
+        }
         "spotMeta" => Json(json!({
             "universe": [],
             "tokens": []

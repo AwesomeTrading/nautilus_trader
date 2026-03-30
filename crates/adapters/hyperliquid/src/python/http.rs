@@ -20,7 +20,7 @@ use nautilus_model::{
     data::BarType,
     enums::{OrderSide, OrderType, TimeInForce},
     identifiers::{AccountId, ClientOrderId, InstrumentId, VenueOrderId},
-    instruments::{Instrument, InstrumentAny},
+    instruments::Instrument,
     orders::OrderAny,
     python::{
         instruments::{instrument_any_to_pyobject, pyobject_to_instrument_any},
@@ -31,7 +31,7 @@ use nautilus_model::{
 use pyo3::{prelude::*, types::PyList};
 use serde_json::to_string;
 
-use crate::http::client::HyperliquidHttpClient;
+use crate::http::{client::HyperliquidHttpClient, parse::HyperliquidMarketType};
 
 #[pymethods]
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
@@ -159,26 +159,34 @@ impl HyperliquidHttpClient {
         })
     }
 
-    #[pyo3(name = "load_instrument_definitions", signature = (include_perp=true, include_spot=true))]
+    #[pyo3(name = "load_instrument_definitions", signature = (include_spot=true, include_perps=true, include_perps_hip3=false))]
     fn py_load_instrument_definitions<'py>(
         &self,
         py: Python<'py>,
-        include_perp: bool,
         include_spot: bool,
+        include_perps: bool,
+        include_perps_hip3: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = self.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let mut instruments = client.request_instruments().await.map_err(to_pyvalue_err)?;
+            let mut defs = client
+                .request_instrument_defs()
+                .await
+                .map_err(to_pyvalue_err)?;
 
-            if !include_perp || !include_spot {
-                instruments.retain(|instrument| match instrument {
-                    InstrumentAny::CryptoPerpetual(_) => include_perp,
-                    InstrumentAny::CurrencyPair(_) => include_spot,
-                    _ => true,
-                });
-            }
+            defs.retain(|def| match def.market_type {
+                HyperliquidMarketType::Perp => {
+                    if def.is_hip3 {
+                        include_perps_hip3
+                    } else {
+                        include_perps
+                    }
+                }
+                HyperliquidMarketType::Spot => include_spot,
+            });
 
+            let mut instruments = client.convert_defs(defs);
             instruments.sort_by_key(|instrument| instrument.id());
 
             Python::attach(|py| {

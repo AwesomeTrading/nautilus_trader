@@ -339,6 +339,13 @@ impl HyperliquidRawHttpClient {
         serde_json::from_value(response).map_err(Error::Serde)
     }
 
+    /// Get metadata for all perp dexes (standard + HIP-3).
+    pub(crate) async fn load_all_perp_metas(&self) -> Result<Vec<PerpMeta>> {
+        let request = InfoRequest::all_perp_metas();
+        let response = self.send_info_request(&request).await?;
+        serde_json::from_value(response).map_err(Error::Serde)
+    }
+
     /// Get L2 order book for a coin.
     pub async fn info_l2_book(&self, coin: &str) -> Result<HyperliquidL2Book> {
         let request = InfoRequest::l2_book(coin);
@@ -1173,25 +1180,49 @@ impl HyperliquidHttpClient {
         self.account_id = Some(account_id);
     }
 
-    /// Fetch and parse all available instrument definitions from Hyperliquid.
-    pub async fn request_instruments(&self) -> Result<Vec<InstrumentAny>> {
+    /// Fetch and parse all instrument definitions, populating the asset indices cache.
+    pub async fn request_instrument_defs(&self) -> Result<Vec<HyperliquidInstrumentDef>> {
         let mut defs: Vec<HyperliquidInstrumentDef> = Vec::new();
 
-        match self.inner.load_perp_meta().await {
-            Ok(perp_meta) => match parse_perp_instruments(&perp_meta) {
-                Ok(perp_defs) => {
-                    log::debug!(
-                        "Loaded Hyperliquid perp definitions: count={}",
-                        perp_defs.len(),
-                    );
-                    defs.extend(perp_defs);
+        // Load all perp dexes: index 0 = standard, index 1+ = HIP-3
+        match self.inner.load_all_perp_metas().await {
+            Ok(all_metas) => {
+                for (dex_index, meta) in all_metas.iter().enumerate() {
+                    let base = perp_dex_asset_index_base(dex_index);
+
+                    match parse_perp_instruments(meta, base) {
+                        Ok(perp_defs) => {
+                            log::debug!(
+                                "Loaded Hyperliquid perp defs: dex_index={dex_index}, count={}",
+                                perp_defs.len(),
+                            );
+                            defs.extend(perp_defs);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to parse perp instruments for dex {dex_index}: {e}");
+                        }
+                    }
                 }
-                Err(e) => {
-                    log::warn!("Failed to parse Hyperliquid perp instruments: {e}");
-                }
-            },
+            }
             Err(e) => {
-                log::warn!("Failed to load Hyperliquid perp metadata: {e}");
+                log::warn!("Failed to load allPerpMetas, falling back to meta: {e}");
+                match self.inner.load_perp_meta().await {
+                    Ok(perp_meta) => match parse_perp_instruments(&perp_meta, 0) {
+                        Ok(perp_defs) => {
+                            log::debug!(
+                                "Loaded Hyperliquid perp defs via fallback: count={}",
+                                perp_defs.len(),
+                            );
+                            defs.extend(perp_defs);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to parse perp instruments: {e}");
+                        }
+                    },
+                    Err(e) => {
+                        log::warn!("Failed to load Hyperliquid perp metadata: {e}");
+                    }
+                }
             }
         }
 
@@ -1213,7 +1244,7 @@ impl HyperliquidHttpClient {
             }
         }
 
-        // Populate asset indices map before converting to instruments
+        // Populate asset indices for all instruments (including filtered HIP-3)
         self.asset_indices.rcu(|m| {
             for def in &defs {
                 m.insert(def.symbol, def.asset_index);
@@ -1224,15 +1255,26 @@ impl HyperliquidHttpClient {
             self.asset_indices.len()
         );
 
+        Ok(defs)
+    }
+
+    /// Converts instrument definitions into Nautilus instruments.
+    pub fn convert_defs(&self, defs: Vec<HyperliquidInstrumentDef>) -> Vec<InstrumentAny> {
         let ts_init = self.clock.get_time_ns();
-        Ok(instruments_from_defs_owned(defs, ts_init))
+        instruments_from_defs_owned(defs, ts_init)
+    }
+
+    /// Fetch and parse all available instrument definitions from Hyperliquid.
+    pub async fn request_instruments(&self) -> Result<Vec<InstrumentAny>> {
+        let defs = self.request_instrument_defs().await?;
+        Ok(self.convert_defs(defs))
     }
 
     /// Get asset index for a symbol from the cached map.
     ///
-    /// This is the authoritative source for asset indices used in order submission.
     /// For perps: index in meta.universe (0, 1, 2, ...).
-    /// For spot: 10000 + index in spotMeta.universe.
+    /// For spot: 10_000 + index in spotMeta.universe.
+    /// For HIP-3: 100_000 + dex_index * 10_000 + index in dex meta.universe.
     ///
     /// Returns `None` if the symbol is not found in the map.
     pub fn get_asset_index(&self, symbol: &str) -> Option<u32> {
@@ -1256,14 +1298,15 @@ impl HyperliquidHttpClient {
     /// This method also caches the mapping internally for use by fill parsing methods.
     #[must_use]
     pub fn get_spot_fill_coin_mapping(&self) -> AHashMap<Ustr, Ustr> {
-        const SPOT_INDEX_OFFSET: u32 = 10000;
+        const SPOT_INDEX_OFFSET: u32 = 10_000;
+        const BUILDER_PERP_OFFSET: u32 = 100_000;
 
         let guard = self.asset_indices.load();
 
         let mut mapping = AHashMap::new();
         for (symbol, &asset_index) in guard.iter() {
-            // Spot instruments have asset_index >= 10000
-            if asset_index >= SPOT_INDEX_OFFSET {
+            // Spot instruments: asset_index in [10_000, 100_000)
+            if (SPOT_INDEX_OFFSET..BUILDER_PERP_OFFSET).contains(&asset_index) {
                 let pair_index = asset_index - SPOT_INDEX_OFFSET;
                 let fill_coin = Ustr::from(&format!("@{pair_index}"));
                 mapping.insert(fill_coin, *symbol);
@@ -1280,6 +1323,12 @@ impl HyperliquidHttpClient {
     #[allow(dead_code)]
     pub(crate) async fn load_perp_meta(&self) -> Result<PerpMeta> {
         self.inner.load_perp_meta().await
+    }
+
+    /// Get metadata for all perp dexes (standard + HIP-3).
+    #[allow(dead_code)]
+    pub(crate) async fn load_all_perp_metas(&self) -> Result<Vec<PerpMeta>> {
+        self.inner.load_all_perp_metas().await
     }
 
     /// Get spot metadata (internal helper).
@@ -2413,6 +2462,18 @@ impl HyperliquidHttpClient {
             ))),
             _ => Err(Error::bad_request("Unexpected response format")),
         }
+    }
+}
+
+/// Returns the asset index base for a perp dex.
+///
+/// Standard perps (dex 0) start at 0. HIP-3 dexes start at
+/// 100_000 + dex_index * 10_000.
+fn perp_dex_asset_index_base(dex_index: usize) -> u32 {
+    if dex_index == 0 {
+        0
+    } else {
+        100_000 + dex_index as u32 * 10_000
     }
 }
 
