@@ -1338,7 +1338,24 @@ fn handle_order_response(
                                 has_filled = true;
                             }
                         }
-                        for report in buffered {
+
+                        // Cap filled_qty to tracked fills to prevent
+                        // duplicate inferred fills from the race with trades
+                        let tracked_filled = fill_tracker
+                            .get_cumulative_filled(&venue_order_id)
+                            .unwrap_or(0.0);
+                        let tracked_qty = Quantity::new(tracked_filled, size_precision);
+
+                        for mut report in buffered {
+                            if report.filled_qty > tracked_qty {
+                                log::debug!(
+                                    "Capping buffered filled_qty for {venue_order_id} \
+                                     from {} to {} (awaiting trade messages)",
+                                    report.filled_qty,
+                                    tracked_qty,
+                                );
+                                report.filled_qty = tracked_qty;
+                            }
                             emitter.send_order_status_report(report);
                         }
 

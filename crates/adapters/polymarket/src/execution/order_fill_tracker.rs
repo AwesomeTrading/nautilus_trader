@@ -104,6 +104,15 @@ impl OrderFillTrackerMap {
         }
     }
 
+    /// Returns the cumulative filled quantity for an order, if tracked.
+    pub fn get_cumulative_filled(&self, venue_order_id: &VenueOrderId) -> Option<f64> {
+        self.inner
+            .lock()
+            .expect(MUTEX_POISONED)
+            .get(venue_order_id)
+            .map(|s| s.cumulative_filled)
+    }
+
     /// Record a fill, updating cumulative total and last price/ts.
     pub fn record_fill(&self, venue_order_id: &VenueOrderId, qty: f64, px: f64, ts: UnixNanos) {
         if let Some(s) = self
@@ -454,5 +463,49 @@ mod tests {
             UnixNanos::from(3_000u64),
         );
         assert!(dust_fill2.is_none());
+    }
+
+    #[rstest]
+    fn test_get_cumulative_filled_no_fills() {
+        let tracker = OrderFillTrackerMap::new();
+        let vid = VenueOrderId::from("order-1");
+        tracker.register(
+            vid,
+            Quantity::new(100.0, 6),
+            OrderSide::Buy,
+            InstrumentId::from("TEST.POLYMARKET"),
+            6,
+            2,
+        );
+
+        let filled = tracker.get_cumulative_filled(&vid);
+        assert_eq!(filled, Some(0.0));
+    }
+
+    #[rstest]
+    fn test_get_cumulative_filled_with_fills() {
+        let tracker = OrderFillTrackerMap::new();
+        let vid = VenueOrderId::from("order-1");
+        tracker.register(
+            vid,
+            Quantity::new(100.0, 6),
+            OrderSide::Buy,
+            InstrumentId::from("TEST.POLYMARKET"),
+            6,
+            2,
+        );
+
+        tracker.record_fill(&vid, 30.0, 0.5, UnixNanos::from(1_000u64));
+        tracker.record_fill(&vid, 20.0, 0.5, UnixNanos::from(2_000u64));
+
+        let filled = tracker.get_cumulative_filled(&vid);
+        assert_eq!(filled, Some(50.0));
+    }
+
+    #[rstest]
+    fn test_get_cumulative_filled_unregistered() {
+        let tracker = OrderFillTrackerMap::new();
+        let vid = VenueOrderId::from("unknown");
+        assert!(tracker.get_cumulative_filled(&vid).is_none());
     }
 }

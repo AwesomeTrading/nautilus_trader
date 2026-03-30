@@ -102,8 +102,22 @@ fn dispatch_order_update(order: &PolymarketUserOrder, ctx: &WsDispatchContext<'_
     let ts_event = parse_timestamp_ms(&order.timestamp).unwrap_or_else(|_| ctx.clock.get_time_ns());
     let venue_order_id = VenueOrderId::from(order.id.as_str());
 
-    let report = build_ws_order_status_report(order, &instrument, ctx.account_id, ts_event);
+    let mut report = build_ws_order_status_report(order, &instrument, ctx.account_id, ts_event);
     let is_accepted = ctx.fill_tracker.contains(&venue_order_id);
+
+    // Order updates can race ahead of trade messages, so cap filled_qty
+    // to what the fill tracker has recorded to prevent duplicate inferred fills
+    if let Some(tracked_filled) = ctx.fill_tracker.get_cumulative_filled(&venue_order_id) {
+        let tracked_qty = Quantity::new(tracked_filled, instrument.size_precision());
+        if report.filled_qty > tracked_qty {
+            log::debug!(
+                "Capping filled_qty for {venue_order_id} from {} to {} (awaiting trade messages)",
+                report.filled_qty,
+                tracked_qty,
+            );
+            report.filled_qty = tracked_qty;
+        }
+    }
 
     emit_or_buffer_order_report(
         report,
@@ -431,6 +445,7 @@ fn emit_or_buffer_fill_report(
 
 #[cfg(test)]
 mod tests {
+    use nautilus_common::messages::{ExecutionEvent, ExecutionReport};
     use nautilus_model::{
         enums::{AccountType, CurrencyType, OrderStatus},
         identifiers::TraderId,
@@ -594,5 +609,114 @@ mod tests {
             guard.get(&venue_order_id).map_or(0, |v| v.len())
         };
         assert_eq!(fills_count_after, 1);
+    }
+
+    #[rstest]
+    fn test_dispatch_order_matched_caps_filled_qty_when_no_trades_tracked() {
+        let order: PolymarketUserOrder = load("ws_user_order_matched.json");
+        let instrument = test_instrument();
+
+        let token_instruments = AtomicMap::new();
+        token_instruments.insert(order.asset_id, instrument.clone());
+
+        let fill_tracker = OrderFillTrackerMap::new();
+        let venue_order_id = VenueOrderId::from(order.id.as_str());
+
+        // Register order so it is "accepted" but with no fills tracked
+        fill_tracker.register(
+            venue_order_id,
+            Quantity::from("100"),
+            OrderSide::Buy,
+            instrument.id(),
+            instrument.size_precision(),
+            instrument.price_precision(),
+        );
+
+        let pending_fills = Mutex::new(FifoCacheMap::default());
+        let pending_order_reports = Mutex::new(FifoCacheMap::default());
+        let mut emitter = test_emitter();
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        emitter.set_sender(sender);
+
+        let ctx = WsDispatchContext {
+            token_instruments: &token_instruments,
+            fill_tracker: &fill_tracker,
+            pending_fills: &pending_fills,
+            pending_order_reports: &pending_order_reports,
+            emitter: &emitter,
+            account_id: AccountId::from("POLY-001"),
+            clock: nautilus_core::time::get_atomic_clock_realtime(),
+            user_address: "0xtest",
+            user_api_key: "test-key",
+        };
+        let mut state = WsDispatchState::default();
+
+        dispatch_user_message(&UserWsMessage::Order(order), &ctx, &mut state);
+
+        let event = receiver.try_recv().expect("Expected report");
+        match event {
+            ExecutionEvent::Report(report) => match report {
+                ExecutionReport::Order(order_report) => {
+                    assert_eq!(order_report.filled_qty, Quantity::from("0"));
+                }
+                other => panic!("Expected order report, was {other:?}"),
+            },
+            other => panic!("Expected report event, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_dispatch_order_matched_uses_tracked_fills_for_filled_qty() {
+        let order: PolymarketUserOrder = load("ws_user_order_matched.json");
+        let instrument = test_instrument();
+
+        let token_instruments = AtomicMap::new();
+        token_instruments.insert(order.asset_id, instrument.clone());
+
+        let fill_tracker = OrderFillTrackerMap::new();
+        let venue_order_id = VenueOrderId::from(order.id.as_str());
+
+        // Register and record a partial fill (50 of 100)
+        fill_tracker.register(
+            venue_order_id,
+            Quantity::from("100"),
+            OrderSide::Buy,
+            instrument.id(),
+            instrument.size_precision(),
+            instrument.price_precision(),
+        );
+        fill_tracker.record_fill(&venue_order_id, 50.0, 0.5, UnixNanos::from(1_000u64));
+
+        let pending_fills = Mutex::new(FifoCacheMap::default());
+        let pending_order_reports = Mutex::new(FifoCacheMap::default());
+        let mut emitter = test_emitter();
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        emitter.set_sender(sender);
+
+        let ctx = WsDispatchContext {
+            token_instruments: &token_instruments,
+            fill_tracker: &fill_tracker,
+            pending_fills: &pending_fills,
+            pending_order_reports: &pending_order_reports,
+            emitter: &emitter,
+            account_id: AccountId::from("POLY-001"),
+            clock: nautilus_core::time::get_atomic_clock_realtime(),
+            user_address: "0xtest",
+            user_api_key: "test-key",
+        };
+        let mut state = WsDispatchState::default();
+
+        dispatch_user_message(&UserWsMessage::Order(order), &ctx, &mut state);
+
+        let event = receiver.try_recv().expect("Expected report");
+        match event {
+            ExecutionEvent::Report(report) => match report {
+                ExecutionReport::Order(order_report) => {
+                    assert_eq!(order_report.filled_qty, Quantity::from("50"));
+                }
+                other => panic!("Expected order report, was {other:?}"),
+            },
+            other => panic!("Expected report event, was {other:?}"),
+        }
     }
 }
