@@ -101,8 +101,6 @@ impl ExecutionAlgorithm for TestExecAlgorithm {
     }
 }
 
-// -- LiveNodeHandle tests (no global state, can run in parallel) ----------------------------------
-
 #[rstest]
 fn test_handle_initial_state() {
     let handle = LiveNodeHandle::new();
@@ -149,8 +147,6 @@ fn test_node_state_is_running() {
     assert!(!NodeState::Stopped.is_running());
 }
 
-// -- LiveNode builder validation tests (no global state conflicts) --------------------------------
-
 #[rstest]
 fn test_builder_rejects_backtest_environment() {
     let result = LiveNode::builder(TraderId::from("TESTER-001"), Environment::Backtest);
@@ -194,7 +190,7 @@ mod serial_tests {
     }
 
     #[rstest]
-    fn test_live_node_build_with_sandbox_environment() {
+    fn test_live_node_build_overrides_environment_to_live() {
         let config = LiveNodeConfig {
             environment: Environment::Sandbox,
             trader_id: TraderId::from("TESTER-001"),
