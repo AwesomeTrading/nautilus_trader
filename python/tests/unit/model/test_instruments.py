@@ -668,9 +668,12 @@ def test_betting_instrument_construction_and_roundtrip():
     assert bi.type_name == "BettingInstrument"
     assert bi.market_type == "SPECIAL"
     assert bi.selection_id == 50214
+    assert bi.selection_name == "Kansas City Chiefs"
+    assert bi.selection_handicap == -9999999.0
     assert bi.betting_type == "ODDS"
 
     restored = BettingInstrument.from_dict(bi.to_dict())
 
     assert restored.id == bi.id
     assert restored.market_type == bi.market_type
+    assert restored.selection_name == bi.selection_name

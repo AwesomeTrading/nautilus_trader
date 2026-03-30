@@ -106,6 +106,7 @@ Released on TBD (UTC).
 - Fixed Rust `Portfolio` account-scoped `net_exposure`, `net_exposures`, and balance updates in multi-account mode
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
 - Fixed option chains emitting data after expiry (#3735), thanks @filipmacek
+- Fixed `BettingInstrument.selection_handicap` PyO3 name
 - Fixed Betfair order modify `Quantity` serialization for partial cancel size reduction
 - Fixed Binance Spot SBE schema version mismatch after Binance upgraded to schema 3:3 (released 2026-03-25)
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
