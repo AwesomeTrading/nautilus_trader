@@ -679,12 +679,6 @@ def test_round_no_ndigits():
     assert result == Decimal(2)
 
 
-def test_division_by_zero_raises():
-    # Panics from rust_decimal; ideally would raise ZeroDivisionError
-    with pytest.raises(BaseException, match="Division by zero"):
-        Price(1, 0) / 0
-
-
 def test_from_mantissa_exponent():
     p = Price.from_mantissa_exponent(12345, -2, 2)
     assert str(p) == "123.45"

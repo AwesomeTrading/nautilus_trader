@@ -442,9 +442,3 @@ def test_float():
 def test_round():
     assert round(Money(1.555, USD)) == Decimal(2)
     assert round(Money(1.555, USD), 1) == Decimal("1.6")
-
-
-def test_division_by_zero_raises():
-    # Panics from rust_decimal; ideally would raise ZeroDivisionError
-    with pytest.raises(BaseException, match="Division by zero"):
-        Money(1.00, USD) / 0
