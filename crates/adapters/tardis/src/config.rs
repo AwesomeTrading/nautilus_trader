@@ -88,14 +88,7 @@ pub struct TardisDataClientConfig {
 
 impl Default for TardisDataClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            tardis_ws_url: None,
-            normalize_symbols: true,
-            book_snapshot_output: BookSnapshotOutput::default(),
-            options: Vec::new(),
-            stream_options: Vec::new(),
-        }
+        Self::builder().build()
     }
 }
 

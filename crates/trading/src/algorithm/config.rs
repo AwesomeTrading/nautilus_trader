@@ -42,11 +42,7 @@ pub struct ExecutionAlgorithmConfig {
 
 impl Default for ExecutionAlgorithmConfig {
     fn default() -> Self {
-        Self {
-            exec_algorithm_id: None,
-            log_events: true,
-            log_commands: true,
-        }
+        Self::builder().build()
     }
 }
 

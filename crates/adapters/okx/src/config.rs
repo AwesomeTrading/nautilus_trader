@@ -67,42 +67,28 @@ pub struct OKXDataClientConfig {
     /// When true the client will use OKX demo endpoints.
     #[builder(default)]
     pub is_demo: bool,
-    /// Optional HTTP timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry delay in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry delay in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
-    /// Optional interval for refreshing instruments.
-    pub update_instruments_interval_mins: Option<u64>,
+    /// HTTP timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry delay in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry delay in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
+    /// Interval for refreshing instruments in minutes.
+    #[builder(default = 60)]
+    pub update_instruments_interval_mins: u64,
     /// Optional VIP level that unlocks additional subscriptions.
     pub vip_level: Option<OKXVipLevel>,
 }
 
 impl Default for OKXDataClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            api_secret: None,
-            api_passphrase: None,
-            instrument_types: vec![OKXInstrumentType::Spot],
-            contract_types: None,
-            instrument_families: None,
-            base_url_http: None,
-            base_url_ws_public: None,
-            base_url_ws_business: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            is_demo: false,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            update_instruments_interval_mins: Some(60),
-            vip_level: None,
-        }
+        Self::builder().build()
     }
 }
 
@@ -204,20 +190,24 @@ pub struct OKXExecClientConfig {
     /// When true the client will use OKX demo endpoints.
     #[builder(default)]
     pub is_demo: bool,
-    /// Optional HTTP timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
+    /// HTTP timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
     /// Enables consumption of the fills WebSocket channel when true.
     #[builder(default)]
     pub use_fills_channel: bool,
     /// Enables mass-cancel support when true.
     #[builder(default)]
     pub use_mm_mass_cancel: bool,
-    /// Optional maximum retry attempts for requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry delay in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry delay in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
+    /// Maximum retry attempts for requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry delay in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry delay in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
     /// Optional margin mode (CROSS or ISOLATED) for margin/derivative accounts.
     pub margin_mode: Option<OKXMarginMode>,
     /// Enables margin/leverage for SPOT trading when true.
@@ -227,30 +217,7 @@ pub struct OKXExecClientConfig {
 
 impl Default for OKXExecClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::from("TRADER-001"),
-            account_id: AccountId::from("OKX-001"),
-            api_key: None,
-            api_secret: None,
-            api_passphrase: None,
-            instrument_types: vec![OKXInstrumentType::Spot],
-            contract_types: None,
-            instrument_families: None,
-            base_url_http: None,
-            base_url_ws_private: None,
-            base_url_ws_business: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            is_demo: false,
-            http_timeout_secs: Some(60),
-            use_fills_channel: false,
-            use_mm_mass_cancel: false,
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            margin_mode: None,
-            use_spot_margin: false,
-        }
+        Self::builder().build()
     }
 }
 

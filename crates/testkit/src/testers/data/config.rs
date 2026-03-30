@@ -180,41 +180,6 @@ impl DataTesterConfig {
 
 impl Default for DataTesterConfig {
     fn default() -> Self {
-        Self {
-            base: DataActorConfig::default(),
-            instrument_ids: Vec::new(),
-            client_id: None,
-            bar_types: None,
-            subscribe_book_deltas: false,
-            subscribe_book_depth: false,
-            subscribe_book_at_interval: false,
-            subscribe_quotes: false,
-            subscribe_trades: false,
-            subscribe_mark_prices: false,
-            subscribe_index_prices: false,
-            subscribe_funding_rates: false,
-            subscribe_bars: false,
-            subscribe_instrument: false,
-            subscribe_instrument_status: false,
-            subscribe_instrument_close: false,
-            subscribe_option_greeks: false,
-            subscribe_params: None,
-            request_params: None,
-            can_unsubscribe: true,
-            request_instruments: false,
-            request_quotes: false,
-            request_trades: false,
-            request_bars: false,
-            request_book_snapshot: false,
-            request_book_deltas: false,
-            request_funding_rates: false,
-            book_type: BookType::L2_MBP,
-            book_depth: None,
-            book_interval_ms: NonZeroUsize::new(1000).unwrap(),
-            book_levels_to_print: 10,
-            manage_book: false,
-            log_data: true,
-            stats_interval_secs: 5,
-        }
+        Self::builder().build()
     }
 }

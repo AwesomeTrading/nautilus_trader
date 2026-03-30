@@ -221,29 +221,7 @@ impl NautilusKernelConfig for BacktestEngineConfig {
 
 impl Default for BacktestEngineConfig {
     fn default() -> Self {
-        Self {
-            environment: Environment::Backtest,
-            trader_id: TraderId::default(),
-            load_state: false,
-            save_state: false,
-            logging: LoggerConfig::default(),
-            instance_id: None,
-            timeout_connection: Duration::from_secs(60),
-            timeout_reconciliation: Duration::from_secs(30),
-            timeout_portfolio: Duration::from_secs(10),
-            timeout_disconnection: Duration::from_secs(10),
-            delay_post_stop: Duration::from_secs(10),
-            timeout_shutdown: Duration::from_secs(5),
-            cache: None,
-            msgbus: None,
-            data_engine: None,
-            risk_engine: None,
-            exec_engine: None,
-            portfolio: None,
-            streaming: None,
-            bypass_logging: false,
-            run_analysis: true,
-        }
+        Self::builder().build()
     }
 }
 

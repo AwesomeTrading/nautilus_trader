@@ -160,23 +160,8 @@ pub struct MessageBusConfig {
 }
 
 impl Default for MessageBusConfig {
-    /// Creates a new default [`MessageBusConfig`] instance.
     fn default() -> Self {
-        Self {
-            database: None,
-            encoding: SerializationEncoding::MsgPack,
-            timestamps_as_iso8601: false,
-            buffer_interval_ms: None,
-            autotrim_mins: None,
-            use_trader_prefix: true,
-            use_trader_id: true,
-            use_instance_id: false,
-            streams_prefix: "stream".to_string(),
-            stream_per_topic: true,
-            external_streams: None,
-            types_filter: None,
-            heartbeat_interval_secs: None,
-        }
+        Self::builder().build()
     }
 }
 

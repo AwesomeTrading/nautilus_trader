@@ -99,18 +99,8 @@ pub struct LoggerConfig {
 }
 
 impl Default for LoggerConfig {
-    /// Creates a new default [`LoggerConfig`] instance.
     fn default() -> Self {
-        Self {
-            stdout_level: LevelFilter::Info,
-            fileout_level: LevelFilter::Off,
-            component_level: AHashMap::new(),
-            module_level: AHashMap::new(),
-            log_components_only: false,
-            is_colored: true,
-            print_config: false,
-            use_tracing: false,
-        }
+        Self::builder().build()
     }
 }
 

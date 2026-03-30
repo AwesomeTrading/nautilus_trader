@@ -461,11 +461,7 @@ impl DataClient for AxDataClient {
     }
 
     fn subscribe_funding_rates(&mut self, cmd: &SubscribeFundingRates) -> anyhow::Result<()> {
-        let poll_interval_mins = self
-            .config
-            .funding_rate_poll_interval_mins
-            .unwrap_or(15)
-            .max(1);
+        let poll_interval_mins = self.config.funding_rate_poll_interval_mins.max(1);
 
         // Use 7-day lookback to capture latest rate across weekends/holidays
         let lookback = ChronoDuration::days(7);

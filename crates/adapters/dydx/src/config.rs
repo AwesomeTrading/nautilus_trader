@@ -22,11 +22,7 @@ use nautilus_network::ratelimiter::quota::Quota;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    common::{
-        consts::{DYDX_CHAIN_ID, DYDX_TESTNET_CHAIN_ID},
-        enums::DydxNetwork,
-        urls,
-    },
+    common::{consts::DYDX_CHAIN_ID, enums::DydxNetwork, urls},
     grpc::types::ChainId,
 };
 
@@ -126,7 +122,7 @@ pub struct DydxAdapterConfig {
     /// - AutoStake: 4 req/s
     ///
     /// Default: 4 requests per second (conservative, works across all public providers).
-    /// Set to `None` to disable rate limiting.
+    /// When `None`, rate limiting is disabled.
     #[serde(default = "default_grpc_rate_limit_per_second")]
     pub grpc_rate_limit_per_second: Option<u32>,
 }
@@ -143,9 +139,28 @@ fn default_retry_delay_max_ms() -> u64 {
     10000
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "serde default must match field type Option<u32>"
+)]
 fn default_grpc_rate_limit_per_second() -> Option<u32> {
     Some(4)
+}
+
+fn default_http_timeout_secs() -> u64 {
+    60
+}
+
+fn default_data_max_retries() -> u64 {
+    3
+}
+
+fn default_data_retry_delay_initial_ms() -> u64 {
+    100
+}
+
+fn default_data_retry_delay_max_ms() -> u64 {
+    5000
 }
 
 impl DydxAdapterConfig {
@@ -190,31 +205,9 @@ impl DydxAdapterConfig {
 
 impl Default for DydxAdapterConfig {
     fn default() -> Self {
-        let network = DydxNetwork::default();
-        let is_testnet = matches!(network, DydxNetwork::Testnet);
-        let grpc_urls = urls::grpc_urls(is_testnet);
         Self {
-            network,
-            base_url: urls::http_base_url(is_testnet).to_string(),
-            ws_url: urls::ws_url(is_testnet).to_string(),
-            grpc_url: grpc_urls[0].to_string(),
-            grpc_urls: grpc_urls.iter().map(|&s| s.to_string()).collect(),
-            chain_id: if is_testnet {
-                DYDX_TESTNET_CHAIN_ID
-            } else {
-                DYDX_CHAIN_ID
-            }
-            .to_string(),
-            timeout_secs: 30,
-            wallet_address: None,
-            subaccount: 0,
-            is_testnet,
-            private_key: None,
-            authenticator_ids: Vec::new(),
-            max_retries: default_max_retries(),
-            retry_delay_initial_ms: default_retry_delay_initial_ms(),
-            retry_delay_max_ms: default_retry_delay_max_ms(),
             grpc_rate_limit_per_second: default_grpc_rate_limit_per_second(),
+            ..Self::builder().build()
         }
     }
 }
@@ -235,13 +228,21 @@ pub struct DydxDataClientConfig {
     /// Base URL for the WebSocket API.
     pub base_url_ws: Option<String>,
     /// HTTP request timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
+    #[serde(default = "default_http_timeout_secs")]
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
     /// Maximum number of retry attempts for failed HTTP requests.
-    pub max_retries: Option<u64>,
+    #[serde(default = "default_data_max_retries")]
+    #[builder(default = 3)]
+    pub max_retries: u64,
     /// Initial retry delay in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
+    #[serde(default = "default_data_retry_delay_initial_ms")]
+    #[builder(default = 100)]
+    pub retry_delay_initial_ms: u64,
     /// Maximum retry delay in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
+    #[serde(default = "default_data_retry_delay_max_ms")]
+    #[builder(default = 5000)]
+    pub retry_delay_max_ms: u64,
     /// Whether this is a testnet configuration.
     #[builder(default)]
     pub is_testnet: bool,
@@ -253,17 +254,7 @@ pub struct DydxDataClientConfig {
 
 impl Default for DydxDataClientConfig {
     fn default() -> Self {
-        Self {
-            base_url_http: None,
-            base_url_ws: None,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(100),
-            retry_delay_max_ms: Some(5000),
-            is_testnet: false,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-        }
+        Self::builder().build()
     }
 }
 
@@ -327,6 +318,7 @@ pub struct DydxExecClientConfig {
     /// Maximum retry delay in milliseconds.
     pub retry_delay_max_ms: Option<u64>,
     /// gRPC rate limit: maximum broadcast requests per second.
+    /// When `None`, rate limiting is disabled.
     #[serde(default = "default_grpc_rate_limit_per_second")]
     pub grpc_rate_limit_per_second: Option<u32>,
 }
@@ -334,22 +326,8 @@ pub struct DydxExecClientConfig {
 impl Default for DydxExecClientConfig {
     fn default() -> Self {
         Self {
-            trader_id: TraderId::from("TRADER-001"),
-            account_id: AccountId::from("DYDX-001"),
-            network: DydxNetwork::default(),
-            grpc_endpoint: None,
-            grpc_urls: Vec::new(),
-            ws_endpoint: None,
-            http_endpoint: None,
-            private_key: None,
-            wallet_address: None,
-            subaccount_number: 0,
-            authenticator_ids: Vec::new(),
-            http_timeout_secs: None,
-            max_retries: None,
-            retry_delay_initial_ms: None,
-            retry_delay_max_ms: None,
             grpc_rate_limit_per_second: default_grpc_rate_limit_per_second(),
+            ..Self::builder().build()
         }
     }
 }

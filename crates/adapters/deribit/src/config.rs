@@ -50,36 +50,29 @@ pub struct DeribitDataClientConfig {
     /// When true the client will use Deribit testnet endpoints.
     #[builder(default)]
     pub use_testnet: bool,
-    /// Optional HTTP timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry delay in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry delay in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
-    /// Optional heartbeat interval in seconds for WebSocket connection.
-    pub heartbeat_interval_secs: Option<u64>,
-    /// Optional interval for refreshing instruments (in minutes).
-    pub update_instruments_interval_mins: Option<u64>,
+    /// HTTP timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry delay in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry delay in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
+    /// Heartbeat interval in seconds for WebSocket connection.
+    #[builder(default = 30)]
+    pub heartbeat_interval_secs: u64,
+    /// Interval for refreshing instruments (in minutes).
+    #[builder(default = 60)]
+    pub update_instruments_interval_mins: u64,
 }
 
 impl Default for DeribitDataClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            api_secret: None,
-            product_types: vec![DeribitProductType::Future],
-            base_url_http: None,
-            base_url_ws: None,
-            use_testnet: false,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            heartbeat_interval_secs: Some(30),
-            update_instruments_interval_mins: Some(60),
-        }
+        Self::builder().build()
     }
 }
 
@@ -147,32 +140,23 @@ pub struct DeribitExecClientConfig {
     /// When true the client will use Deribit testnet endpoints.
     #[builder(default)]
     pub use_testnet: bool,
-    /// Optional HTTP timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry delay in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry delay in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
+    /// HTTP timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry delay in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry delay in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
 }
 
 impl Default for DeribitExecClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::default(),
-            account_id: AccountId::from("DERIBIT-001"),
-            api_key: None,
-            api_secret: None,
-            product_types: vec![DeribitProductType::Future],
-            base_url_http: None,
-            base_url_ws: None,
-            use_testnet: false,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-        }
+        Self::builder().build()
     }
 }
 
@@ -224,7 +208,7 @@ mod tests {
         let config = DeribitDataClientConfig::default();
         assert!(!config.use_testnet);
         assert_eq!(config.product_types.len(), 1);
-        assert_eq!(config.http_timeout_secs, Some(60));
+        assert_eq!(config.http_timeout_secs, 60);
     }
 
     #[rstest]

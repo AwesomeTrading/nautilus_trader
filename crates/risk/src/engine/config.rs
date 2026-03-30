@@ -37,14 +37,7 @@ pub struct RiskEngineConfig {
 }
 
 impl Default for RiskEngineConfig {
-    /// Creates a new [`RiskEngineConfig`] instance.
     fn default() -> Self {
-        Self {
-            bypass: false,
-            max_order_submit: RateLimit::new(100, NANOSECONDS_IN_SECOND),
-            max_order_modify: RateLimit::new(100, NANOSECONDS_IN_SECOND),
-            max_notional_per_order: AHashMap::new(),
-            debug: false,
-        }
+        Self::builder().build()
     }
 }

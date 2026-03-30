@@ -117,20 +117,20 @@ impl OKXDataClient {
                 config.api_secret.clone(),
                 config.api_passphrase.clone(),
                 config.base_url_http.clone(),
-                config.http_timeout_secs,
-                config.max_retries,
-                config.retry_delay_initial_ms,
-                config.retry_delay_max_ms,
+                Some(config.http_timeout_secs),
+                Some(config.max_retries),
+                Some(config.retry_delay_initial_ms),
+                Some(config.retry_delay_max_ms),
                 config.is_demo,
                 config.http_proxy_url.clone(),
             )?
         } else {
             OKXHttpClient::new(
                 config.base_url_http.clone(),
-                config.http_timeout_secs,
-                config.max_retries,
-                config.retry_delay_initial_ms,
-                config.retry_delay_max_ms,
+                Some(config.http_timeout_secs),
+                Some(config.max_retries),
+                Some(config.retry_delay_initial_ms),
+                Some(config.retry_delay_max_ms),
                 config.is_demo,
                 config.http_proxy_url.clone(),
             )?

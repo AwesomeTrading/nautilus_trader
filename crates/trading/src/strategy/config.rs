@@ -139,24 +139,7 @@ pub struct ImportableStrategyConfig {
 
 impl Default for StrategyConfig {
     fn default() -> Self {
-        Self {
-            strategy_id: None,
-            order_id_tag: None,
-            use_uuid_client_order_ids: false,
-            use_hyphens_in_client_order_ids: true,
-            oms_type: None,
-            external_order_claims: None,
-            manage_contingent_orders: false,
-            manage_gtd_expiry: false,
-            manage_stop: false,
-            market_exit_interval_ms: default_market_exit_interval_ms(),
-            market_exit_max_attempts: default_market_exit_max_attempts(),
-            market_exit_time_in_force: TimeInForce::Gtc,
-            market_exit_reduce_only: true,
-            log_events: true,
-            log_commands: true,
-            log_rejected_due_post_only_as_warning: true,
-        }
+        Self::builder().build()
     }
 }
 

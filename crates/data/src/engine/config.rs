@@ -90,17 +90,6 @@ impl DataEngineConfig {
 
 impl Default for DataEngineConfig {
     fn default() -> Self {
-        Self {
-            time_bars_build_with_no_updates: true,
-            time_bars_timestamp_on_close: true,
-            time_bars_interval_type: BarIntervalType::LeftOpen,
-            validate_data_sequence: false,
-            buffer_deltas: false,
-            external_clients: None,
-            debug: false,
-            time_bars_skip_first_non_full_bar: false,
-            time_bars_build_delay: 0,
-            time_bars_origins: HashMap::new(),
-        }
+        Self::builder().build()
     }
 }

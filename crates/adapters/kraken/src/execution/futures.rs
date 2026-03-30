@@ -103,7 +103,7 @@ impl KrakenFuturesExecutionClient {
             config.api_secret.clone(),
             config.environment,
             config.base_url.clone(),
-            config.timeout_secs,
+            Some(config.timeout_secs),
             None,
             None,
             None,
@@ -114,7 +114,7 @@ impl KrakenFuturesExecutionClient {
         let credential = KrakenCredential::new(config.api_key.clone(), config.api_secret.clone());
         let ws = KrakenFuturesWebSocketClient::with_credentials(
             config.ws_url(),
-            config.heartbeat_interval_secs,
+            Some(config.heartbeat_interval_secs),
             Some(credential),
         );
 

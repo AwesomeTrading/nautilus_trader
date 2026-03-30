@@ -58,15 +58,7 @@ pub struct BinanceDataClientConfig {
 
 impl Default for BinanceDataClientConfig {
     fn default() -> Self {
-        Self {
-            product_types: vec![BinanceProductType::Spot],
-            environment: BinanceEnvironment::Mainnet,
-            base_url_http: None,
-            base_url_ws: None,
-            api_key: None,
-            api_secret: None,
-            instrument_status_poll_secs: 3600,
-        }
+        Self::builder().build()
     }
 }
 
@@ -135,20 +127,7 @@ pub struct BinanceExecClientConfig {
 
 impl Default for BinanceExecClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::from("TRADER-001"),
-            account_id: AccountId::from("BINANCE-001"),
-            product_types: vec![BinanceProductType::Spot],
-            environment: BinanceEnvironment::Mainnet,
-            base_url_http: None,
-            base_url_ws: None,
-            base_url_ws_trading: None,
-            use_ws_trading: true,
-            use_position_ids: true,
-            default_taker_fee: Decimal::new(4, 4), // 0.0004
-            api_key: None,
-            api_secret: None,
-        }
+        Self::builder().build()
     }
 }
 

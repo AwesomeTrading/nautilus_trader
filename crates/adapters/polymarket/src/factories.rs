@@ -81,7 +81,7 @@ impl DataClientFactory for PolymarketDataClientFactory {
 
         let gamma_client = PolymarketGammaHttpClient::new(
             Some(polymarket_config.gamma_url()),
-            polymarket_config.http_timeout_secs,
+            Some(polymarket_config.http_timeout_secs),
             RetryConfig {
                 max_retries: 10,
                 initial_delay_ms: 5_000,
@@ -96,12 +96,12 @@ impl DataClientFactory for PolymarketDataClientFactory {
 
         let clob_public_client = PolymarketClobPublicClient::new(
             polymarket_config.base_url_http.clone(),
-            polymarket_config.http_timeout_secs,
+            Some(polymarket_config.http_timeout_secs),
         )?;
 
         let data_api_client = PolymarketDataApiHttpClient::new(
             Some(polymarket_config.data_api_url()),
-            polymarket_config.http_timeout_secs,
+            Some(polymarket_config.http_timeout_secs),
         )?;
 
         let ws_client = PolymarketWebSocketClient::new_market(

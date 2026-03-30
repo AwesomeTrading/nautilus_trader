@@ -118,26 +118,6 @@ impl SandboxExecutionClientConfig {
 
 impl Default for SandboxExecutionClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::from("SANDBOX-001"),
-            account_id: AccountId::from("SANDBOX-001"),
-            venue: Venue::new("SANDBOX"),
-            starting_balances: Vec::new(),
-            base_currency: None,
-            oms_type: OmsType::Netting,
-            account_type: AccountType::Margin,
-            default_leverage: Decimal::ONE,
-            leverages: AHashMap::new(),
-            book_type: BookType::L1_MBP,
-            frozen_account: false,
-            bar_execution: true,
-            trade_execution: true,
-            reject_stop_orders: true,
-            support_gtd_orders: true,
-            support_contingent_orders: true,
-            use_position_ids: true,
-            use_random_ids: false,
-            use_reduce_only: true,
-        }
+        Self::builder().build()
     }
 }

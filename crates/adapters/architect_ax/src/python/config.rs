@@ -53,16 +53,18 @@ impl AxDataClientConfig {
             base_url_ws_private,
             http_proxy_url,
             ws_proxy_url,
-            http_timeout_secs: http_timeout_secs.or(default.http_timeout_secs),
-            max_retries: max_retries.or(default.max_retries),
-            retry_delay_initial_ms: retry_delay_initial_ms.or(default.retry_delay_initial_ms),
-            retry_delay_max_ms: retry_delay_max_ms.or(default.retry_delay_max_ms),
-            heartbeat_interval_secs: heartbeat_interval_secs.or(default.heartbeat_interval_secs),
-            recv_window_ms: recv_window_ms.or(default.recv_window_ms),
+            http_timeout_secs: http_timeout_secs.unwrap_or(default.http_timeout_secs),
+            max_retries: max_retries.unwrap_or(default.max_retries),
+            retry_delay_initial_ms: retry_delay_initial_ms
+                .unwrap_or(default.retry_delay_initial_ms),
+            retry_delay_max_ms: retry_delay_max_ms.unwrap_or(default.retry_delay_max_ms),
+            heartbeat_interval_secs: heartbeat_interval_secs
+                .unwrap_or(default.heartbeat_interval_secs),
+            recv_window_ms: recv_window_ms.unwrap_or(default.recv_window_ms),
             update_instruments_interval_mins: update_instruments_interval_mins
-                .or(default.update_instruments_interval_mins),
+                .unwrap_or(default.update_instruments_interval_mins),
             funding_rate_poll_interval_mins: funding_rate_poll_interval_mins
-                .or(default.funding_rate_poll_interval_mins),
+                .unwrap_or(default.funding_rate_poll_interval_mins),
         }
     }
 
@@ -112,12 +114,14 @@ impl AxExecClientConfig {
             base_url_ws_private,
             http_proxy_url,
             ws_proxy_url,
-            http_timeout_secs: http_timeout_secs.or(default.http_timeout_secs),
-            max_retries: max_retries.or(default.max_retries),
-            retry_delay_initial_ms: retry_delay_initial_ms.or(default.retry_delay_initial_ms),
-            retry_delay_max_ms: retry_delay_max_ms.or(default.retry_delay_max_ms),
-            heartbeat_interval_secs: heartbeat_interval_secs.or(default.heartbeat_interval_secs),
-            recv_window_ms: recv_window_ms.or(default.recv_window_ms),
+            http_timeout_secs: http_timeout_secs.unwrap_or(default.http_timeout_secs),
+            max_retries: max_retries.unwrap_or(default.max_retries),
+            retry_delay_initial_ms: retry_delay_initial_ms
+                .unwrap_or(default.retry_delay_initial_ms),
+            retry_delay_max_ms: retry_delay_max_ms.unwrap_or(default.retry_delay_max_ms),
+            heartbeat_interval_secs: heartbeat_interval_secs
+                .unwrap_or(default.heartbeat_interval_secs),
+            recv_window_ms: recv_window_ms.unwrap_or(default.recv_window_ms),
         }
     }
 

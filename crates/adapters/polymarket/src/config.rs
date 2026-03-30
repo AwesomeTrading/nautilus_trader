@@ -42,12 +42,17 @@ pub struct PolymarketDataClientConfig {
     pub base_url_ws: Option<String>,
     pub base_url_gamma: Option<String>,
     pub base_url_data_api: Option<String>,
-    pub http_timeout_secs: Option<u64>,
-    pub ws_timeout_secs: Option<u64>,
+    /// HTTP timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// WebSocket timeout in seconds.
+    #[builder(default = 30)]
+    pub ws_timeout_secs: u64,
     #[builder(default = crate::common::consts::WS_DEFAULT_SUBSCRIPTIONS)]
     pub ws_max_subscriptions: usize,
     /// Instrument reload interval in minutes.
-    pub update_instruments_interval_mins: Option<u64>,
+    #[builder(default = 60)]
+    pub update_instruments_interval_mins: u64,
     /// Whether to subscribe to new market discovery events via WebSocket.
     #[builder(default)]
     pub subscribe_new_markets: bool,
@@ -99,19 +104,7 @@ impl Debug for PolymarketDataClientConfig {
 
 impl Default for PolymarketDataClientConfig {
     fn default() -> Self {
-        Self {
-            base_url_http: None,
-            base_url_ws: None,
-            base_url_gamma: None,
-            base_url_data_api: None,
-            http_timeout_secs: Some(60),
-            ws_timeout_secs: Some(30),
-            ws_max_subscriptions: crate::common::consts::WS_DEFAULT_SUBSCRIPTIONS,
-            update_instruments_interval_mins: Some(60),
-            subscribe_new_markets: false,
-            filters: Vec::new(),
-            new_market_filter: None,
-        }
+        Self::builder().build()
     }
 }
 
@@ -241,23 +234,7 @@ impl Debug for PolymarketExecClientConfig {
 
 impl Default for PolymarketExecClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::default(),
-            account_id: AccountId::from("POLYMARKET-001"),
-            private_key: None,
-            api_key: None,
-            api_secret: None,
-            passphrase: None,
-            funder: None,
-            signature_type: SignatureType::Eoa,
-            base_url_http: None,
-            base_url_ws: None,
-            http_timeout_secs: 60,
-            max_retries: 3,
-            retry_delay_initial_ms: 1000,
-            retry_delay_max_ms: 10000,
-            ack_timeout_secs: 5,
-        }
+        Self::builder().build()
     }
 }
 

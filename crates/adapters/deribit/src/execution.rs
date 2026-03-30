@@ -86,20 +86,20 @@ impl DeribitExecutionClient {
                 config.api_secret.clone(),
                 config.base_url_http.clone(),
                 config.use_testnet,
-                config.http_timeout_secs,
-                config.max_retries,
-                config.retry_delay_initial_ms,
-                config.retry_delay_max_ms,
+                Some(config.http_timeout_secs),
+                Some(config.max_retries),
+                Some(config.retry_delay_initial_ms),
+                Some(config.retry_delay_max_ms),
                 None, // proxy_url
             )?
         } else {
             DeribitHttpClient::new(
                 config.base_url_http.clone(),
                 config.use_testnet,
-                config.http_timeout_secs,
-                config.max_retries,
-                config.retry_delay_initial_ms,
-                config.retry_delay_max_ms,
+                Some(config.http_timeout_secs),
+                Some(config.max_retries),
+                Some(config.retry_delay_initial_ms),
+                Some(config.retry_delay_max_ms),
                 None, // proxy_url
             )?
         };

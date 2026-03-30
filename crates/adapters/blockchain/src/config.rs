@@ -54,9 +54,7 @@ impl DexPoolFilters {
 
 impl Default for DexPoolFilters {
     fn default() -> Self {
-        Self {
-            remove_pools_with_empty_erc20fields: true,
-        }
+        Self::builder().build()
     }
 }
 

@@ -161,7 +161,8 @@ pub struct BetfairDataConfig {
     /// stream updates for this interval. `None` uses Betfair defaults.
     pub stream_conflate_ms: Option<u64>,
     /// Delay in seconds before sending the initial subscription message after connecting.
-    pub subscription_delay_secs: Option<u64>,
+    #[builder(default = 3)]
+    pub subscription_delay_secs: u64,
     /// Subscribe to the race stream for Total Performance Data (TPD).
     #[builder(default)]
     pub subscribe_race_data: bool,
@@ -169,35 +170,7 @@ pub struct BetfairDataConfig {
 
 impl Default for BetfairDataConfig {
     fn default() -> Self {
-        let stream_defaults = BetfairStreamConfig::default();
-
-        Self {
-            account_currency: "GBP".to_string(),
-            username: None,
-            password: None,
-            app_key: None,
-            proxy_url: None,
-            request_rate_per_second: 5,
-            default_min_notional: None,
-            event_type_ids: None,
-            event_type_names: None,
-            event_ids: None,
-            country_codes: None,
-            market_types: None,
-            market_ids: None,
-            min_market_start_time: None,
-            max_market_start_time: None,
-            stream_host: None,
-            stream_port: None,
-            stream_heartbeat_ms: stream_defaults.heartbeat_ms,
-            stream_idle_timeout_ms: stream_defaults.idle_timeout_ms,
-            stream_reconnect_delay_initial_ms: stream_defaults.reconnect_delay_initial_ms,
-            stream_reconnect_delay_max_ms: stream_defaults.reconnect_delay_max_ms,
-            stream_use_tls: stream_defaults.use_tls,
-            stream_conflate_ms: None,
-            subscription_delay_secs: Some(3),
-            subscribe_race_data: false,
-        }
+        Self::builder().build()
     }
 }
 
@@ -364,33 +337,7 @@ pub struct BetfairExecConfig {
 
 impl Default for BetfairExecConfig {
     fn default() -> Self {
-        let stream_defaults = BetfairStreamConfig::default();
-
-        Self {
-            trader_id: TraderId::from("TRADER-001"),
-            account_id: AccountId::from("BETFAIR-001"),
-            account_currency: "GBP".to_string(),
-            username: None,
-            password: None,
-            app_key: None,
-            proxy_url: None,
-            request_rate_per_second: 5,
-            order_request_rate_per_second: 20,
-            stream_host: None,
-            stream_port: None,
-            stream_heartbeat_ms: stream_defaults.heartbeat_ms,
-            stream_idle_timeout_ms: stream_defaults.idle_timeout_ms,
-            stream_reconnect_delay_initial_ms: stream_defaults.reconnect_delay_initial_ms,
-            stream_reconnect_delay_max_ms: stream_defaults.reconnect_delay_max_ms,
-            stream_use_tls: stream_defaults.use_tls,
-            stream_market_ids_filter: None,
-            ignore_external_orders: false,
-            calculate_account_state: true,
-            request_account_state_secs: 300,
-            reconcile_market_ids_only: false,
-            reconcile_market_ids: None,
-            use_market_version: false,
-        }
+        Self::builder().build()
     }
 }
 
@@ -472,7 +419,7 @@ mod tests {
         assert!(config.market_ids.is_none());
         assert_eq!(config.stream_heartbeat_ms, 5_000);
         assert!(config.stream_conflate_ms.is_none());
-        assert_eq!(config.subscription_delay_secs, Some(3));
+        assert_eq!(config.subscription_delay_secs, 3);
         assert!(!config.subscribe_race_data);
     }
 

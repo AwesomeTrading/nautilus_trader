@@ -98,7 +98,7 @@ impl KrakenSpotDataClient {
         let http = KrakenSpotHttpClient::new(
             config.environment,
             config.base_url.clone(),
-            config.timeout_secs,
+            Some(config.timeout_secs),
             None,
             None,
             None,

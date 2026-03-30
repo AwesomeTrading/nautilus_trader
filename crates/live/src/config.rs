@@ -48,7 +48,7 @@ pub struct LiveDataEngineConfig {
 
 impl Default for LiveDataEngineConfig {
     fn default() -> Self {
-        Self { qsize: 100_000 }
+        Self::builder().build()
     }
 }
 
@@ -76,7 +76,7 @@ pub struct LiveRiskEngineConfig {
 
 impl Default for LiveRiskEngineConfig {
     fn default() -> Self {
-        Self { qsize: 100_000 }
+        Self::builder().build()
     }
 }
 
@@ -130,6 +130,7 @@ pub struct LiveExecEngineConfig {
     /// The interval (seconds) between checks for open orders at the venue.
     pub open_check_interval_secs: Option<f64>,
     /// The lookback minutes for open order checks.
+    /// When `None`, the check is unbounded (no time filter).
     pub open_check_lookback_mins: Option<u32>,
     /// The minimum elapsed time (milliseconds) since an order update before acting on discrepancies.
     #[builder(default = 5_000)]
@@ -185,38 +186,8 @@ pub struct LiveExecEngineConfig {
 impl Default for LiveExecEngineConfig {
     fn default() -> Self {
         Self {
-            reconciliation: true,
-            reconciliation_startup_delay_secs: 10.0,
-            reconciliation_lookback_mins: None,
-            reconciliation_instrument_ids: None,
-            filter_unclaimed_external_orders: false,
-            filter_position_reports: false,
-            filtered_client_order_ids: None,
-            generate_missing_orders: true,
-            inflight_check_interval_ms: 2_000,
-            inflight_check_threshold_ms: 5_000,
-            inflight_check_retries: 5,
-            open_check_interval_secs: None,
             open_check_lookback_mins: Some(60),
-            open_check_threshold_ms: 5_000,
-            open_check_missing_retries: 5,
-            open_check_open_only: true,
-            max_single_order_queries_per_cycle: 5,
-            single_order_query_delay_ms: 100,
-            position_check_interval_secs: None,
-            position_check_lookback_mins: 60,
-            position_check_threshold_ms: 60_000,
-            position_check_retries: 3,
-            purge_closed_orders_interval_mins: None,
-            purge_closed_orders_buffer_mins: None,
-            purge_closed_positions_interval_mins: None,
-            purge_closed_positions_buffer_mins: None,
-            purge_account_events_interval_mins: None,
-            purge_account_events_lookback_mins: None,
-            purge_from_database: false,
-            own_books_audit_interval_secs: None,
-            graceful_shutdown_on_error: false,
-            qsize: 100_000,
+            ..Self::builder().build()
         }
     }
 }
@@ -278,11 +249,7 @@ pub struct InstrumentProviderConfig {
 
 impl Default for InstrumentProviderConfig {
     fn default() -> Self {
-        Self {
-            load_all: false,
-            load_ids: true,
-            filters: HashMap::new(),
-        }
+        Self::builder().build()
     }
 }
 
@@ -400,29 +367,7 @@ pub struct LiveNodeConfig {
 
 impl Default for LiveNodeConfig {
     fn default() -> Self {
-        Self {
-            environment: Environment::Live,
-            trader_id: TraderId::from("TRADER-001"),
-            load_state: false,
-            save_state: false,
-            logging: LoggerConfig::default(),
-            instance_id: None,
-            timeout_connection: Duration::from_secs(60),
-            timeout_reconciliation: Duration::from_secs(30),
-            timeout_portfolio: Duration::from_secs(10),
-            timeout_disconnection: Duration::from_secs(10),
-            delay_post_stop: Duration::from_secs(10),
-            timeout_shutdown: Duration::from_secs(5),
-            cache: None,
-            msgbus: None,
-            portfolio: None,
-            streaming: None,
-            data_engine: LiveDataEngineConfig::default(),
-            risk_engine: LiveRiskEngineConfig::default(),
-            exec_engine: LiveExecEngineConfig::default(),
-            data_clients: HashMap::new(),
-            exec_clients: HashMap::new(),
-        }
+        Self::builder().build()
     }
 }
 

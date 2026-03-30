@@ -93,25 +93,8 @@ impl OrderMatchingEngineConfig {
     }
 }
 
-#[allow(clippy::derivable_impls)]
 impl Default for OrderMatchingEngineConfig {
-    /// Creates a new default [`OrderMatchingEngineConfig`] instance.
     fn default() -> Self {
-        Self {
-            bar_execution: false,
-            bar_adaptive_high_low_ordering: false,
-            trade_execution: true,
-            liquidity_consumption: false,
-            reject_stop_orders: false,
-            support_gtd_orders: false,
-            support_contingent_orders: false,
-            use_position_ids: false,
-            use_random_ids: false,
-            use_reduce_only: false,
-            use_market_order_acks: false,
-            queue_position: false,
-            oto_full_trigger: false,
-            price_protection_points: None,
-        }
+        Self::builder().build()
     }
 }

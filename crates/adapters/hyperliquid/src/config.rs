@@ -48,26 +48,19 @@ pub struct HyperliquidDataClientConfig {
     #[builder(default)]
     pub is_testnet: bool,
     /// HTTP timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
     /// WebSocket timeout in seconds.
-    pub ws_timeout_secs: Option<u64>,
-    /// Optional interval for refreshing instruments.
-    pub update_instruments_interval_mins: Option<u64>,
+    #[builder(default = 30)]
+    pub ws_timeout_secs: u64,
+    /// Interval for refreshing instruments in minutes.
+    #[builder(default = 60)]
+    pub update_instruments_interval_mins: u64,
 }
 
 impl Default for HyperliquidDataClientConfig {
     fn default() -> Self {
-        Self {
-            private_key: None,
-            base_url_ws: None,
-            base_url_http: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            is_testnet: false,
-            http_timeout_secs: Some(60),
-            ws_timeout_secs: Some(30),
-            update_instruments_interval_mins: Some(60),
-        }
+        Self::builder().build()
     }
 }
 
@@ -165,22 +158,7 @@ pub struct HyperliquidExecClientConfig {
 
 impl Default for HyperliquidExecClientConfig {
     fn default() -> Self {
-        Self {
-            private_key: None,
-            vault_address: None,
-            account_address: None,
-            base_url_ws: None,
-            base_url_http: None,
-            base_url_exchange: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            is_testnet: false,
-            http_timeout_secs: 60,
-            max_retries: 3,
-            retry_delay_initial_ms: 100,
-            retry_delay_max_ms: 5000,
-            normalize_prices: true,
-        }
+        Self::builder().build()
     }
 }
 

@@ -117,7 +117,8 @@ impl KrakenSpotWebSocketClient {
             environment: env,
             ws_public_url,
             ws_private_url,
-            heartbeat_interval_secs: heartbeat_secs,
+            heartbeat_interval_secs: heartbeat_secs
+                .unwrap_or(KrakenDataClientConfig::default().heartbeat_interval_secs),
             api_key: resolved_api_key,
             api_secret: resolved_api_secret,
             ..Default::default()

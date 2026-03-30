@@ -70,6 +70,9 @@ Released on TBD (UTC).
 - Changed `ExecutionEngine.register_client` to error when a venue is already routed to another client (Rust)
 - Changed `ExecutionEngine.register_venue_routing` to error when re-routing a venue to a different client (Rust)
 - Changed collection-cloning PyO3 getters to methods: `Position.events()`, `adjustments()`, `client_order_ids()`, `venue_order_ids()`, `trade_ids()`; and `events()` on all order types
+- Changed config structs to use `bon::Builder` defaults as single source of truth; `Default` impls now delegate to `Self::builder().build()`
+- Changed config fields that always had a sensible default from `Option<T>` to plain `T` with `#[builder(default)]` across all adapter, live, and engine configs (Rust)
+- Changed `Option<T>` fields retained only where `None` carries distinct meaning (feature disabled, unbounded, etc.)
 
 ### Security
 - Hardened Docker Compose to bind all ports to localhost and add `no-new-privileges` to all services
@@ -264,6 +267,7 @@ Released on TBD (UTC).
 - Added `how_to/configure_live_trading.md` extracted from `concepts/live.md` configuration content
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
+- Added adapter developer guide section on configuration best practices: builder defaults, `T` vs `Option<T>` rules, `Default` delegation pattern
 - Added OKX options trading section to integration guide with pricing modes, order types, restrictions, and configuration
 - Added Group 10 (options trading) to execution testing spec with venue-agnostic test cases
 - Added `DeltaNeutralVol` README updates for strangle entry flow, config fields, and usage examples

@@ -84,22 +84,6 @@ pub struct ExecutionEngineConfig {
 
 impl Default for ExecutionEngineConfig {
     fn default() -> Self {
-        Self {
-            load_cache: true,
-            manage_own_order_books: false,
-            snapshot_orders: false,
-            snapshot_positions: false,
-            snapshot_positions_interval_secs: None,
-            allow_overfills: false,
-            external_clients: None,
-            purge_closed_orders_interval_mins: None,
-            purge_closed_orders_buffer_mins: None,
-            purge_closed_positions_interval_mins: None,
-            purge_closed_positions_buffer_mins: None,
-            purge_account_events_interval_mins: None,
-            purge_account_events_lookback_mins: None,
-            purge_from_database: false,
-            debug: false,
-        }
+        Self::builder().build()
     }
 }

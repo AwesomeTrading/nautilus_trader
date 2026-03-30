@@ -111,23 +111,16 @@ impl DataClientFactory for DydxDataClientFactory {
             .clone()
             .unwrap_or_else(|| urls::ws_url(dydx_config.is_testnet).to_string());
 
-        let retry_config = if dydx_config.max_retries.is_some()
-            || dydx_config.retry_delay_initial_ms.is_some()
-            || dydx_config.retry_delay_max_ms.is_some()
-        {
-            Some(RetryConfig {
-                max_retries: dydx_config.max_retries.unwrap_or(3) as u32,
-                initial_delay_ms: dydx_config.retry_delay_initial_ms.unwrap_or(1000),
-                max_delay_ms: dydx_config.retry_delay_max_ms.unwrap_or(10000),
-                ..Default::default()
-            })
-        } else {
-            None
-        };
+        let retry_config = Some(RetryConfig {
+            max_retries: dydx_config.max_retries as u32,
+            initial_delay_ms: dydx_config.retry_delay_initial_ms,
+            max_delay_ms: dydx_config.retry_delay_max_ms,
+            ..Default::default()
+        });
 
         let http_client = DydxHttpClient::new(
             Some(http_url),
-            dydx_config.http_timeout_secs,
+            Some(dydx_config.http_timeout_secs),
             dydx_config.http_proxy_url.clone(),
             dydx_config.is_testnet,
             retry_config,

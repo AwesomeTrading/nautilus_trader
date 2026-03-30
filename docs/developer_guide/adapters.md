@@ -245,23 +245,112 @@ Expose typed config structs in `src/config.rs` so Python callers toggle venue-sp
 (see how OKX wires demo URLs, retries, and channel flags).
 Keep defaults minimal and delegate URL selection to helpers in `common::urls`.
 
-All config structs (data and execution) must implement `Default`. This enables the
-`..Default::default()` pattern in examples and tests, keeping only the fields that differ
-from defaults visible:
+#### Builder and Default
+
+Config structs derive `bon::Builder` and implement `Default`. The builder owns all default
+values via `#[builder(default = value)]` annotations. The `Default` impl delegates to the
+builder so defaults are defined in exactly one place:
 
 ```rust
-let exec_config = VenueExecClientConfig {
+#[derive(Clone, Debug, bon::Builder)]
+pub struct VenueDataClientConfig {
+    pub api_key: Option<String>,
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    #[builder(default = 3)]
+    pub max_retries: u32,
+}
+
+impl Default for VenueDataClientConfig {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+```
+
+This prevents drift between builder defaults and `Default` output. Never duplicate
+default values in the `Default` impl body.
+
+Bon always defaults `Option<T>` fields to `None`. For the rare case where an
+`Option<T>` field should default to `Some(value)`, override it in the `Default` impl
+and delegate everything else to the builder:
+
+```rust
+impl Default for VenueDataClientConfig {
+    fn default() -> Self {
+        Self {
+            poll_interval_secs: Some(60),
+            ..Self::builder().build()
+        }
+    }
+}
+```
+
+#### Field type rules
+
+Use plain `T` with `#[builder(default = value)]` when a field always has a sensible
+default and downstream code consumes the value directly:
+
+```rust
+#[builder(default = 60)]
+pub http_timeout_secs: u64,
+```
+
+Use `Option<T>` (no builder annotation) when `None` carries distinct meaning such as
+"feature disabled", "unbounded", or "inherit from environment":
+
+```rust
+/// Interval in seconds between open order checks.
+/// When `None`, open order polling is disabled.
+pub open_check_interval_secs: Option<f64>,
+```
+
+Choose the type based on the config's own semantics, not downstream function
+signatures. If `None` means "this feature is off" at the config level, use
+`Option<T>`. If the field always resolves to a concrete value, use plain `T`
+even when a downstream constructor still accepts `Option<T>` and the call site
+wraps with `Some(config.field)`.
+
+#### Python constructors
+
+The `py_new` constructor accepts `Option<T>` for all configurable fields (Python callers
+pass `None` to mean "use default"). For plain `T` fields, unwrap against the default:
+
+```rust
+fn py_new(http_timeout_secs: Option<u64>) -> Self {
+    let defaults = Self::default();
+    Self {
+        http_timeout_secs: http_timeout_secs.unwrap_or(defaults.http_timeout_secs),
+        ..
+    }
+}
+```
+
+For `Option<T>` fields, use `.or()` to fall back to the default option value.
+When the default is `None`, this preserves the caller's `None`. When the default
+is `Some(value)`, this fills in the default if the caller passed `None`:
+
+```rust
+open_check_interval_secs: open_check_interval_secs.or(defaults.open_check_interval_secs),
+```
+
+#### Default values
+
+Use sensible production defaults: credentials as `None` (resolved from environment at
+runtime), mainnet URLs, standard timeouts. For `trader_id` and `account_id`, use
+placeholder values like `TraderId::from("TRADER-001")` and `AccountId::from("VENUE-001")`.
+
+The `..Default::default()` pattern keeps examples and tests focused on fields that
+differ from defaults:
+
+```rust
+let config = VenueExecClientConfig {
     trader_id,
     account_id,
     environment: VenueEnvironment::Testnet,
     ..Default::default()
 };
 ```
-
-Default values should use sensible production defaults: credentials as `None` (resolved
-from environment at runtime), mainnet URLs, standard timeouts. For `trader_id` and
-`account_id`, use placeholder values like `TraderId::from("TRADER-001")` and
-`AccountId::from("VENUE-001")`.
 
 ### Error taxonomy (`common/error.rs`)
 

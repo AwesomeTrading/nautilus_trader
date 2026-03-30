@@ -102,7 +102,7 @@ impl KrakenFuturesDataClient {
         let http = KrakenFuturesHttpClient::new(
             config.environment,
             config.base_url.clone(),
-            config.timeout_secs,
+            Some(config.timeout_secs),
             None,
             None,
             None,
@@ -112,7 +112,7 @@ impl KrakenFuturesDataClient {
 
         let ws = KrakenFuturesWebSocketClient::new(
             config.ws_public_url(),
-            config.heartbeat_interval_secs,
+            Some(config.heartbeat_interval_secs),
         );
 
         Ok(Self {

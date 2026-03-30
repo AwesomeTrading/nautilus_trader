@@ -44,27 +44,16 @@ pub struct KrakenDataClientConfig {
     pub ws_private_url: Option<String>,
     pub http_proxy: Option<String>,
     pub ws_proxy: Option<String>,
-    pub timeout_secs: Option<u64>,
-    pub heartbeat_interval_secs: Option<u64>,
+    #[builder(default = 30)]
+    pub timeout_secs: u64,
+    #[builder(default = 30)]
+    pub heartbeat_interval_secs: u64,
     pub max_requests_per_second: Option<u32>,
 }
 
 impl Default for KrakenDataClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            api_secret: None,
-            product_type: KrakenProductType::Spot,
-            environment: KrakenEnvironment::Mainnet,
-            base_url: None,
-            ws_public_url: None,
-            ws_private_url: None,
-            http_proxy: None,
-            ws_proxy: None,
-            timeout_secs: Some(30),
-            heartbeat_interval_secs: Some(30),
-            max_requests_per_second: None,
-        }
+        Self::builder().build()
     }
 }
 
@@ -123,28 +112,16 @@ pub struct KrakenExecClientConfig {
     pub ws_url: Option<String>,
     pub http_proxy: Option<String>,
     pub ws_proxy: Option<String>,
-    pub timeout_secs: Option<u64>,
-    pub heartbeat_interval_secs: Option<u64>,
+    #[builder(default = 30)]
+    pub timeout_secs: u64,
+    #[builder(default = 30)]
+    pub heartbeat_interval_secs: u64,
     pub max_requests_per_second: Option<u32>,
 }
 
 impl Default for KrakenExecClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::default(),
-            account_id: AccountId::from("KRAKEN-001"),
-            api_key: String::new(),
-            api_secret: String::new(),
-            product_type: KrakenProductType::Spot,
-            environment: KrakenEnvironment::Mainnet,
-            base_url: None,
-            ws_url: None,
-            http_proxy: None,
-            ws_proxy: None,
-            timeout_secs: Some(30),
-            heartbeat_interval_secs: Some(30),
-            max_requests_per_second: None,
-        }
+        Self::builder().build()
     }
 }
 

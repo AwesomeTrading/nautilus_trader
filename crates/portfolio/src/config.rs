@@ -58,13 +58,6 @@ pub struct PortfolioConfig {
 
 impl Default for PortfolioConfig {
     fn default() -> Self {
-        Self {
-            use_mark_prices: false,
-            use_mark_xrates: false,
-            bar_updates: true,
-            convert_to_account_base_currency: true,
-            min_account_state_logging_interval_ms: None,
-            debug: false,
-        }
+        Self::builder().build()
     }
 }

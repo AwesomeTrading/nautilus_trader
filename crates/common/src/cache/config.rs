@@ -66,22 +66,8 @@ pub struct CacheConfig {
 }
 
 impl Default for CacheConfig {
-    /// Creates a new default [`CacheConfig`] instance.
     fn default() -> Self {
-        Self {
-            database: None,
-            encoding: SerializationEncoding::MsgPack,
-            timestamps_as_iso8601: false,
-            buffer_interval_ms: None,
-            bulk_read_batch_size: None,
-            use_trader_prefix: true,
-            use_instance_id: false,
-            flush_on_start: false,
-            drop_instruments_on_reset: true,
-            tick_capacity: 10_000,
-            bar_capacity: 10_000,
-            save_market_data: false,
-        }
+        Self::builder().build()
     }
 }
 

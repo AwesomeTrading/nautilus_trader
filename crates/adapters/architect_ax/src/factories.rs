@@ -101,10 +101,10 @@ impl DataClientFactory for AxDataClientFactory {
                 credential.api_secret().to_string(),
                 Some(ax_config.http_base_url()),
                 None, // orders_base_url
-                ax_config.http_timeout_secs,
-                ax_config.max_retries,
-                ax_config.retry_delay_initial_ms,
-                ax_config.retry_delay_max_ms,
+                Some(ax_config.http_timeout_secs),
+                Some(ax_config.max_retries),
+                Some(ax_config.retry_delay_initial_ms),
+                Some(ax_config.retry_delay_max_ms),
                 ax_config.http_proxy_url.clone(),
             )
             .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?
@@ -112,10 +112,10 @@ impl DataClientFactory for AxDataClientFactory {
             AxHttpClient::new(
                 Some(ax_config.http_base_url()),
                 None, // orders_base_url
-                ax_config.http_timeout_secs,
-                ax_config.max_retries,
-                ax_config.retry_delay_initial_ms,
-                ax_config.retry_delay_max_ms,
+                Some(ax_config.http_timeout_secs),
+                Some(ax_config.max_retries),
+                Some(ax_config.retry_delay_initial_ms),
+                Some(ax_config.retry_delay_max_ms),
                 ax_config.http_proxy_url.clone(),
             )
             .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?
@@ -131,7 +131,7 @@ impl DataClientFactory for AxDataClientFactory {
 
         // Token set during connect
         let ws_client =
-            AxMdWebSocketClient::without_auth(ws_url, ax_config.heartbeat_interval_secs);
+            AxMdWebSocketClient::without_auth(ws_url, Some(ax_config.heartbeat_interval_secs));
 
         let client = AxDataClient::new(client_id, ax_config, http_client, ws_client)?;
         Ok(Box::new(client))

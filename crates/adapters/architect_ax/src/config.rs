@@ -50,44 +50,35 @@ pub struct AxDataClientConfig {
     pub http_proxy_url: Option<String>,
     /// Optional WebSocket proxy URL.
     pub ws_proxy_url: Option<String>,
-    /// Optional REST timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for REST requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry backoff in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry backoff in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
-    /// Optional heartbeat interval (seconds) for WebSocket clients.
-    pub heartbeat_interval_secs: Option<u64>,
-    /// Optional receive window in milliseconds for signed requests.
-    pub recv_window_ms: Option<u64>,
-    /// Optional interval (minutes) for instrument refresh from REST.
-    pub update_instruments_interval_mins: Option<u64>,
-    /// Optional funding rate poll interval in minutes.
-    pub funding_rate_poll_interval_mins: Option<u64>,
+    /// REST timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for REST requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry backoff in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry backoff in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
+    /// Heartbeat interval (seconds) for WebSocket clients.
+    #[builder(default = 20)]
+    pub heartbeat_interval_secs: u64,
+    /// Receive window in milliseconds for signed requests.
+    #[builder(default = 5_000)]
+    pub recv_window_ms: u64,
+    /// Interval (minutes) for instrument refresh from REST.
+    #[builder(default = 60)]
+    pub update_instruments_interval_mins: u64,
+    /// Funding rate poll interval in minutes.
+    #[builder(default = 15)]
+    pub funding_rate_poll_interval_mins: u64,
 }
 
 impl Default for AxDataClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            api_secret: None,
-            is_sandbox: false,
-            base_url_http: None,
-            base_url_ws_public: None,
-            base_url_ws_private: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            heartbeat_interval_secs: Some(20),
-            recv_window_ms: Some(5_000),
-            update_instruments_interval_mins: Some(60),
-            funding_rate_poll_interval_mins: Some(15),
-        }
+        Self::builder().build()
     }
 }
 
@@ -181,40 +172,29 @@ pub struct AxExecClientConfig {
     pub http_proxy_url: Option<String>,
     /// Optional WebSocket proxy URL.
     pub ws_proxy_url: Option<String>,
-    /// Optional REST timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for REST requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry backoff in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry backoff in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
-    /// Optional heartbeat interval (seconds) for WebSocket clients.
-    pub heartbeat_interval_secs: Option<u64>,
-    /// Optional receive window in milliseconds for signed requests.
-    pub recv_window_ms: Option<u64>,
+    /// REST timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for REST requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry backoff in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry backoff in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
+    /// Heartbeat interval (seconds) for WebSocket clients.
+    #[builder(default = 30)]
+    pub heartbeat_interval_secs: u64,
+    /// Receive window in milliseconds for signed requests.
+    #[builder(default = 5_000)]
+    pub recv_window_ms: u64,
 }
 
 impl Default for AxExecClientConfig {
     fn default() -> Self {
-        Self {
-            trader_id: TraderId::from("TRADER-001"),
-            account_id: AccountId::from("AX-001"),
-            api_key: None,
-            api_secret: None,
-            is_sandbox: true,
-            base_url_http: None,
-            base_url_orders: None,
-            base_url_ws_private: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            heartbeat_interval_secs: Some(30),
-            recv_window_ms: Some(5_000),
-        }
+        Self::builder().build()
     }
 }
 

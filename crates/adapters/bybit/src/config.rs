@@ -58,45 +58,38 @@ pub struct BybitDataClientConfig {
     /// Note: WebSocket proxy support is not yet implemented. This field is reserved
     /// for future functionality. Use `http_proxy_url` for REST API proxy support.
     pub ws_proxy_url: Option<String>,
-    /// Optional REST timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for REST requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry backoff in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry backoff in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
-    /// Optional heartbeat interval (seconds) for WebSocket clients.
-    pub heartbeat_interval_secs: Option<u64>,
-    /// Optional receive window in milliseconds for signed requests.
-    pub recv_window_ms: Option<u64>,
-    /// Optional interval (minutes) for instrument refresh from REST.
+    /// REST timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for REST requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry backoff in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry backoff in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
+    /// Heartbeat interval in seconds for WebSocket clients.
+    #[builder(default = 20)]
+    pub heartbeat_interval_secs: u64,
+    /// Receive window in milliseconds for signed requests.
+    #[builder(default = 5_000)]
+    pub recv_window_ms: u64,
+    /// Interval in minutes for instrument refresh from REST.
+    /// When `None`, instrument refresh is disabled.
     pub update_instruments_interval_mins: Option<u64>,
-    /// Optional interval (seconds) for polling instrument status changes.
-    /// Set to `None` to disable. Defaults to `Some(60)`.
+    /// Interval in seconds for polling instrument status changes.
+    /// When `None`, status polling is disabled.
     pub instrument_status_poll_secs: Option<u64>,
 }
 
 impl Default for BybitDataClientConfig {
     fn default() -> Self {
         Self {
-            api_key: None,
-            api_secret: None,
-            product_types: vec![BybitProductType::Linear],
-            environment: BybitEnvironment::Mainnet,
-            base_url_http: None,
-            base_url_ws_public: None,
-            base_url_ws_private: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            heartbeat_interval_secs: Some(20),
-            recv_window_ms: Some(5_000),
             update_instruments_interval_mins: Some(60),
             instrument_status_poll_secs: Some(60),
+            ..Self::builder().build()
         }
     }
 }
@@ -194,18 +187,24 @@ pub struct BybitExecClientConfig {
     /// Note: WebSocket proxy support is not yet implemented. This field is reserved
     /// for future functionality. Use `http_proxy_url` for REST API proxy support.
     pub ws_proxy_url: Option<String>,
-    /// Optional REST timeout in seconds.
-    pub http_timeout_secs: Option<u64>,
-    /// Optional maximum retry attempts for REST requests.
-    pub max_retries: Option<u32>,
-    /// Optional initial retry backoff in milliseconds.
-    pub retry_delay_initial_ms: Option<u64>,
-    /// Optional maximum retry backoff in milliseconds.
-    pub retry_delay_max_ms: Option<u64>,
-    /// Optional heartbeat interval (seconds) for WebSocket clients.
-    pub heartbeat_interval_secs: Option<u64>,
-    /// Optional receive window in milliseconds for signed requests.
-    pub recv_window_ms: Option<u64>,
+    /// REST timeout in seconds.
+    #[builder(default = 60)]
+    pub http_timeout_secs: u64,
+    /// Maximum retry attempts for REST requests.
+    #[builder(default = 3)]
+    pub max_retries: u32,
+    /// Initial retry backoff in milliseconds.
+    #[builder(default = 1_000)]
+    pub retry_delay_initial_ms: u64,
+    /// Maximum retry backoff in milliseconds.
+    #[builder(default = 10_000)]
+    pub retry_delay_max_ms: u64,
+    /// Heartbeat interval in seconds for WebSocket clients.
+    #[builder(default = 5)]
+    pub heartbeat_interval_secs: u64,
+    /// Receive window in milliseconds for signed requests.
+    #[builder(default = 5_000)]
+    pub recv_window_ms: u64,
     /// Optional account identifier to associate with the execution client.
     pub account_id: Option<AccountId>,
     /// Whether to generate position reports from wallet balances for SPOT positions.
@@ -221,28 +220,7 @@ pub struct BybitExecClientConfig {
 
 impl Default for BybitExecClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            api_secret: None,
-            product_types: vec![BybitProductType::Linear],
-            environment: BybitEnvironment::Mainnet,
-            base_url_http: None,
-            base_url_ws_private: None,
-            base_url_ws_trade: None,
-            http_proxy_url: None,
-            ws_proxy_url: None,
-            http_timeout_secs: Some(60),
-            max_retries: Some(3),
-            retry_delay_initial_ms: Some(1_000),
-            retry_delay_max_ms: Some(10_000),
-            heartbeat_interval_secs: Some(5),
-            recv_window_ms: Some(5_000),
-            account_id: None,
-            use_spot_position_reports: false,
-            futures_leverages: None,
-            position_mode: None,
-            margin_mode: None,
-        }
+        Self::builder().build()
     }
 }
 
@@ -295,8 +273,8 @@ mod tests {
 
         assert!(!config.has_api_credentials());
         assert_eq!(config.product_types, vec![BybitProductType::Linear]);
-        assert_eq!(config.http_timeout_secs, Some(60));
-        assert_eq!(config.heartbeat_interval_secs, Some(20));
+        assert_eq!(config.http_timeout_secs, 60);
+        assert_eq!(config.heartbeat_interval_secs, 20);
     }
 
     #[rstest]
@@ -407,8 +385,8 @@ mod tests {
 
         assert!(!config.has_api_credentials());
         assert_eq!(config.product_types, vec![BybitProductType::Linear]);
-        assert_eq!(config.http_timeout_secs, Some(60));
-        assert_eq!(config.heartbeat_interval_secs, Some(5));
+        assert_eq!(config.http_timeout_secs, 60);
+        assert_eq!(config.heartbeat_interval_secs, 5);
     }
 
     #[rstest]

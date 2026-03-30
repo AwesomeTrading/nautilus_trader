@@ -103,10 +103,10 @@ impl AxExecutionClient {
             config.api_secret.clone().unwrap_or_default(),
             Some(config.http_base_url()),
             Some(config.orders_base_url()),
-            config.http_timeout_secs,
-            config.max_retries,
-            config.retry_delay_initial_ms,
-            config.retry_delay_max_ms,
+            Some(config.http_timeout_secs),
+            Some(config.max_retries),
+            Some(config.retry_delay_initial_ms),
+            Some(config.retry_delay_max_ms),
             config.http_proxy_url.clone(),
         )?;
 
@@ -119,7 +119,7 @@ impl AxExecutionClient {
             config.ws_private_url(),
             account_id,
             trader_id,
-            config.heartbeat_interval_secs,
+            Some(config.heartbeat_interval_secs),
         );
 
         Ok(Self {
