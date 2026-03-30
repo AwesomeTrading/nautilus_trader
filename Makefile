@@ -730,15 +730,11 @@ update-v2: cargo-update  #-- Update v2 dependencies (cargo and uv)
 	$(info $(M) Updating v2 uv lockfile...)
 	$Q cd python && VIRTUAL_ENV= uv lock --upgrade
 
-.PHONY: python-v2
-python-v2:  #-- Run v2 Python tests (no build)
+.PHONY: pytest-v2
+pytest-v2: build-debug-v2  #-- Run v2 Python tests
 	$(info $(M) Running v2 Python tests...)
 	$Q cd python && VIRTUAL_ENV= uv run --no-sync pytest tests/ -v --ignore=tests/unit/test_live_node.py
 	$Q cd python && VIRTUAL_ENV= uv run --no-sync pytest tests/unit/test_live_node.py -v
-
-.PHONY: pytest-v2
-pytest-v2: build-debug-v2  #-- Run v2 Python tests (with build)
-	@$(MAKE) --no-print-directory python-v2
 
 .PHONY: pre-flight-v2
 pre-flight-v2: export CARGO_TARGET_DIR=target-v2
