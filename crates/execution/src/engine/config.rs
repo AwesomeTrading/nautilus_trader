@@ -18,21 +18,25 @@ use nautilus_model::identifiers::ClientId;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for `ExecutionEngine` instances.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bon::Builder)]
 pub struct ExecutionEngineConfig {
     /// If the cache should be loaded on initialization.
     #[serde(default = "default_true")]
+    #[builder(default = true)]
     pub load_cache: bool,
     /// If the execution engine should maintain own/user order books based on commands and events.
     #[serde(default)]
+    #[builder(default)]
     pub manage_own_order_books: bool,
     /// If order state snapshot lists are persisted to a backing database.
     /// Snapshots will be taken at every order state update (when events are applied).
     #[serde(default)]
+    #[builder(default)]
     pub snapshot_orders: bool,
     /// If position state snapshot lists are persisted to a backing database.
     /// Snapshots will be taken at position opened, changed and closed (when events are applied).
     #[serde(default)]
+    #[builder(default)]
     pub snapshot_positions: bool,
     /// The interval (seconds) at which additional position state snapshots are persisted.
     /// If None then no additional snapshots will be taken.
@@ -41,6 +45,7 @@ pub struct ExecutionEngineConfig {
     /// If order fills exceeding order quantity are allowed (logs warning instead of raising).
     /// Useful when position reconciliation races with exchange fill events.
     #[serde(default)]
+    #[builder(default)]
     pub allow_overfills: bool,
     /// The client IDs declared for external stream processing.
     ///
@@ -69,9 +74,11 @@ pub struct ExecutionEngineConfig {
     pub purge_account_events_lookback_mins: Option<u32>,
     /// If purge operations should also delete from the backing database.
     #[serde(default)]
+    #[builder(default)]
     pub purge_from_database: bool,
     /// If debug mode is active (will provide extra debug logging).
     #[serde(default)]
+    #[builder(default)]
     pub debug: bool,
 }
 

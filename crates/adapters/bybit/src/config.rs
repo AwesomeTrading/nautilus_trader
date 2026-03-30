@@ -25,7 +25,7 @@ use crate::common::{
 };
 
 /// Configuration for the Bybit live data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.bybit", from_py_object)
@@ -40,8 +40,10 @@ pub struct BybitDataClientConfig {
     /// Optional API secret for authenticated REST/WebSocket requests.
     pub api_secret: Option<String>,
     /// Product types to subscribe to (e.g., Linear, Spot, Inverse, Option).
+    #[builder(default = vec![BybitProductType::Linear])]
     pub product_types: Vec<BybitProductType>,
     /// Environment selection (Mainnet, Testnet, Demo).
+    #[builder(default = BybitEnvironment::Mainnet)]
     pub environment: BybitEnvironment,
     /// Optional override for the REST base URL.
     pub base_url_http: Option<String>,
@@ -159,7 +161,7 @@ impl BybitDataClientConfig {
 }
 
 /// Configuration for the Bybit live execution client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.bybit", from_py_object)
@@ -174,8 +176,10 @@ pub struct BybitExecClientConfig {
     /// API secret for authenticated requests.
     pub api_secret: Option<String>,
     /// Product types to support (e.g., Linear, Spot, Inverse, Option).
+    #[builder(default = vec![BybitProductType::Linear])]
     pub product_types: Vec<BybitProductType>,
     /// Environment selection (Mainnet, Testnet, Demo).
+    #[builder(default = BybitEnvironment::Mainnet)]
     pub environment: BybitEnvironment,
     /// Optional override for the REST base URL.
     pub base_url_http: Option<String>,
@@ -205,6 +209,7 @@ pub struct BybitExecClientConfig {
     /// Optional account identifier to associate with the execution client.
     pub account_id: Option<AccountId>,
     /// Whether to generate position reports from wallet balances for SPOT positions.
+    #[builder(default)]
     pub use_spot_position_reports: bool,
     /// Leverage configuration for futures (symbol -> leverage).
     pub futures_leverages: Option<HashMap<String, u32>>,

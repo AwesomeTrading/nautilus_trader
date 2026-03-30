@@ -18,7 +18,7 @@
 use crate::common::consts::{info_url, ws_url};
 
 /// Configuration for the Hyperliquid data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(
@@ -45,6 +45,7 @@ pub struct HyperliquidDataClientConfig {
     /// for future functionality. Use `http_proxy_url` for REST API proxy support.
     pub ws_proxy_url: Option<String>,
     /// When true the client will use Hyperliquid testnet endpoints.
+    #[builder(default)]
     pub is_testnet: bool,
     /// HTTP timeout in seconds.
     pub http_timeout_secs: Option<u64>,
@@ -103,7 +104,7 @@ impl HyperliquidDataClientConfig {
 }
 
 /// Configuration for the Hyperliquid execution client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(
@@ -142,17 +143,23 @@ pub struct HyperliquidExecClientConfig {
     /// for future functionality. Use `http_proxy_url` for REST API proxy support.
     pub ws_proxy_url: Option<String>,
     /// When true the client will use Hyperliquid testnet endpoints.
+    #[builder(default)]
     pub is_testnet: bool,
     /// HTTP timeout in seconds.
+    #[builder(default = 60)]
     pub http_timeout_secs: u64,
     /// Maximum number of retry attempts for HTTP requests.
+    #[builder(default = 3)]
     pub max_retries: u32,
     /// Initial retry delay in milliseconds.
+    #[builder(default = 100)]
     pub retry_delay_initial_ms: u64,
     /// Maximum retry delay in milliseconds.
+    #[builder(default = 5000)]
     pub retry_delay_max_ms: u64,
     /// When true, normalize order prices to 5 significant figures
     /// before submission (Hyperliquid requirement).
+    #[builder(default = true)]
     pub normalize_prices: bool,
 }
 

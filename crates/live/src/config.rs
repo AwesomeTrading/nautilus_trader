@@ -39,9 +39,10 @@ use serde::{Deserialize, Serialize};
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bon::Builder)]
 pub struct LiveDataEngineConfig {
     /// The queue size for the engine's internal queue buffers.
+    #[builder(default = 100_000)]
     pub qsize: u32,
 }
 
@@ -66,9 +67,10 @@ impl From<LiveDataEngineConfig> for DataEngineConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bon::Builder)]
 pub struct LiveRiskEngineConfig {
     /// The queue size for the engine's internal queue buffers.
+    #[builder(default = 100_000)]
     pub qsize: u32,
 }
 
@@ -93,51 +95,67 @@ impl From<LiveRiskEngineConfig> for RiskEngineConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, bon::Builder)]
 pub struct LiveExecEngineConfig {
     /// If reconciliation is active at start-up.
+    #[builder(default = true)]
     pub reconciliation: bool,
     /// The delay (seconds) before starting reconciliation at startup.
+    #[builder(default = 10.0)]
     pub reconciliation_startup_delay_secs: f64,
     /// The maximum lookback minutes to reconcile state for.
     pub reconciliation_lookback_mins: Option<u32>,
     /// Specific instrument IDs to reconcile (if None, reconciles all).
     pub reconciliation_instrument_ids: Option<Vec<String>>,
     /// If unclaimed order events with an EXTERNAL strategy ID should be filtered/dropped.
+    #[builder(default)]
     pub filter_unclaimed_external_orders: bool,
     /// If position status reports are filtered from reconciliation.
+    #[builder(default)]
     pub filter_position_reports: bool,
     /// Client order IDs to filter from reconciliation.
     pub filtered_client_order_ids: Option<Vec<String>>,
     /// If MARKET order events will be generated during reconciliation to align discrepancies.
+    #[builder(default = true)]
     pub generate_missing_orders: bool,
     /// The interval (milliseconds) between checking whether in-flight orders have exceeded their threshold.
+    #[builder(default = 2_000)]
     pub inflight_check_interval_ms: u32,
     /// The threshold (milliseconds) beyond which an in-flight order's status is checked with the venue.
+    #[builder(default = 5_000)]
     pub inflight_check_threshold_ms: u32,
     /// The number of retry attempts for verifying in-flight order status.
+    #[builder(default = 5)]
     pub inflight_check_retries: u32,
     /// The interval (seconds) between checks for open orders at the venue.
     pub open_check_interval_secs: Option<f64>,
     /// The lookback minutes for open order checks.
     pub open_check_lookback_mins: Option<u32>,
     /// The minimum elapsed time (milliseconds) since an order update before acting on discrepancies.
+    #[builder(default = 5_000)]
     pub open_check_threshold_ms: u32,
     /// The number of retries for missing open orders.
+    #[builder(default = 5)]
     pub open_check_missing_retries: u32,
     /// If the `check_open_orders` requests only currently open orders from the venue.
+    #[builder(default = true)]
     pub open_check_open_only: bool,
     /// The maximum number of single-order queries per consistency check cycle.
+    #[builder(default = 5)]
     pub max_single_order_queries_per_cycle: u32,
     /// The delay (milliseconds) between consecutive single-order queries.
+    #[builder(default = 100)]
     pub single_order_query_delay_ms: u32,
     /// The interval (seconds) between checks for open positions at the venue.
     pub position_check_interval_secs: Option<f64>,
     /// The lookback minutes for position consistency checks.
+    #[builder(default = 60)]
     pub position_check_lookback_mins: u32,
     /// The minimum elapsed time (milliseconds) since a position update before acting on discrepancies.
+    #[builder(default = 60_000)]
     pub position_check_threshold_ms: u32,
     /// The maximum number of reconciliation attempts for a position discrepancy.
+    #[builder(default = 3)]
     pub position_check_retries: u32,
     /// The interval (minutes) between purging closed orders from the in-memory cache.
     pub purge_closed_orders_interval_mins: Option<u32>,
@@ -152,12 +170,15 @@ pub struct LiveExecEngineConfig {
     /// The time buffer (minutes) before account events can be purged.
     pub purge_account_events_lookback_mins: Option<u32>,
     /// If purge operations should also delete from the backing database.
+    #[builder(default)]
     pub purge_from_database: bool,
     /// The interval (seconds) between auditing own books against public order books.
     pub own_books_audit_interval_secs: Option<f64>,
     /// If the engine should gracefully shutdown when queue processing encounters unexpected errors.
+    #[builder(default)]
     pub graceful_shutdown_on_error: bool,
     /// The queue size for the engine's internal queue buffers.
+    #[builder(default = 100_000)]
     pub qsize: u32,
 }
 
@@ -224,9 +245,10 @@ impl From<LiveExecEngineConfig> for ExecutionEngineConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, bon::Builder)]
 pub struct RoutingConfig {
     /// If the client should be registered as the default routing client.
+    #[builder(default)]
     pub default: bool,
     /// The venues to register for routing.
     pub venues: Option<Vec<String>>,
@@ -241,13 +263,16 @@ pub struct RoutingConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bon::Builder)]
 pub struct InstrumentProviderConfig {
     /// Whether to load all instruments on startup.
+    #[builder(default)]
     pub load_all: bool,
     /// Whether to load instrument IDs only.
+    #[builder(default = true)]
     pub load_ids: bool,
     /// Filters for loading specific instruments.
+    #[builder(default)]
     pub filters: HashMap<String, String>,
 }
 
@@ -270,13 +295,16 @@ impl Default for InstrumentProviderConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, bon::Builder)]
 pub struct LiveDataClientConfig {
     /// If `DataClient` will emit bar updates when a new bar opens.
+    #[builder(default)]
     pub handle_revised_bars: bool,
     /// The client's instrument provider configuration.
+    #[builder(default)]
     pub instrument_provider: InstrumentProviderConfig,
     /// The client's message routing configuration.
+    #[builder(default)]
     pub routing: RoutingConfig,
 }
 
@@ -289,11 +317,13 @@ pub struct LiveDataClientConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, bon::Builder)]
 pub struct LiveExecClientConfig {
     /// The client's instrument provider configuration.
+    #[builder(default)]
     pub instrument_provider: InstrumentProviderConfig,
     /// The client's message routing configuration.
+    #[builder(default)]
     pub routing: RoutingConfig,
 }
 
@@ -306,31 +336,42 @@ pub struct LiveExecClientConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.live")
 )]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 pub struct LiveNodeConfig {
     /// The trading environment.
+    #[builder(default = Environment::Live)]
     pub environment: Environment,
     /// The trader ID for the node.
+    #[builder(default = TraderId::from("TRADER-001"))]
     pub trader_id: TraderId,
     /// If trading strategy state should be loaded from the database on start.
+    #[builder(default)]
     pub load_state: bool,
     /// If trading strategy state should be saved to the database on stop.
+    #[builder(default)]
     pub save_state: bool,
     /// The logging configuration for the kernel.
+    #[builder(default)]
     pub logging: LoggerConfig,
     /// The unique instance identifier for the kernel
     pub instance_id: Option<UUID4>,
     /// The timeout for all clients to connect and initialize.
+    #[builder(default = Duration::from_secs(60))]
     pub timeout_connection: Duration,
     /// The timeout for execution state to reconcile.
+    #[builder(default = Duration::from_secs(30))]
     pub timeout_reconciliation: Duration,
     /// The timeout for portfolio to initialize margins and unrealized pnls.
+    #[builder(default = Duration::from_secs(10))]
     pub timeout_portfolio: Duration,
     /// The timeout for all engine clients to disconnect.
+    #[builder(default = Duration::from_secs(10))]
     pub timeout_disconnection: Duration,
     /// The delay after stopping the node to await residual events before final shutdown.
+    #[builder(default = Duration::from_secs(10))]
     pub delay_post_stop: Duration,
     /// The timeout to await pending tasks cancellation during shutdown.
+    #[builder(default = Duration::from_secs(5))]
     pub timeout_shutdown: Duration,
     /// The cache configuration.
     pub cache: Option<CacheConfig>,
@@ -341,14 +382,19 @@ pub struct LiveNodeConfig {
     /// The configuration for streaming to feather files.
     pub streaming: Option<StreamingConfig>,
     /// The live data engine configuration.
+    #[builder(default)]
     pub data_engine: LiveDataEngineConfig,
     /// The live risk engine configuration.
+    #[builder(default)]
     pub risk_engine: LiveRiskEngineConfig,
     /// The live execution engine configuration.
+    #[builder(default)]
     pub exec_engine: LiveExecEngineConfig,
     /// The data client configurations.
+    #[builder(default)]
     pub data_clients: HashMap<String, LiveDataClientConfig>,
     /// The execution client configurations.
+    #[builder(default)]
     pub exec_clients: HashMap<String, LiveExecClientConfig>,
 }
 

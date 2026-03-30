@@ -26,7 +26,7 @@ use crate::{
 };
 
 /// Configuration for the Deribit data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.deribit", from_py_object)
@@ -41,12 +41,14 @@ pub struct DeribitDataClientConfig {
     /// Optional API secret for authenticated endpoints.
     pub api_secret: Option<String>,
     /// Product types to load (e.g., Future, Option, Spot).
+    #[builder(default = vec![DeribitProductType::Future])]
     pub product_types: Vec<DeribitProductType>,
     /// Optional override for the HTTP base URL.
     pub base_url_http: Option<String>,
     /// Optional override for the WebSocket URL.
     pub base_url_ws: Option<String>,
     /// When true the client will use Deribit testnet endpoints.
+    #[builder(default)]
     pub use_testnet: bool,
     /// Optional HTTP timeout in seconds.
     pub http_timeout_secs: Option<u64>,
@@ -115,7 +117,7 @@ impl DeribitDataClientConfig {
 }
 
 /// Configuration for the Deribit execution client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.deribit", from_py_object)
@@ -126,20 +128,24 @@ impl DeribitDataClientConfig {
 )]
 pub struct DeribitExecClientConfig {
     /// The trader ID for this client.
+    #[builder(default)]
     pub trader_id: TraderId,
     /// The account ID for this client.
+    #[builder(default = AccountId::from("DERIBIT-001"))]
     pub account_id: AccountId,
     /// Optional API key for authenticated endpoints.
     pub api_key: Option<String>,
     /// Optional API secret for authenticated endpoints.
     pub api_secret: Option<String>,
     /// Product types to load (e.g., Future, Option, Spot).
+    #[builder(default = vec![DeribitProductType::Future])]
     pub product_types: Vec<DeribitProductType>,
     /// Optional override for the HTTP base URL.
     pub base_url_http: Option<String>,
     /// Optional override for the WebSocket URL.
     pub base_url_ws: Option<String>,
     /// When true the client will use Deribit testnet endpoints.
+    #[builder(default)]
     pub use_testnet: bool,
     /// Optional HTTP timeout in seconds.
     pub http_timeout_secs: Option<u64>,

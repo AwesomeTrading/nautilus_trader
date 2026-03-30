@@ -29,7 +29,7 @@ pub enum BookSnapshotOutput {
 }
 
 /// Provides a configuration for a Tardis Machine -> Nautilus data -> Parquet replay run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bon::Builder)]
 pub struct TardisReplayConfig {
     /// The Tardis Machine websocket url.
     pub tardis_ws_url: Option<String>,
@@ -38,6 +38,7 @@ pub struct TardisReplayConfig {
     /// The output directory for writing Nautilus format Parquet files.
     pub output_path: Option<String>,
     /// The Tardis Machine replay options.
+    #[builder(default)]
     pub options: Vec<ReplayNormalizedRequestOptions>,
     /// Optional WebSocket proxy URL.
     ///
@@ -52,7 +53,7 @@ pub struct TardisReplayConfig {
 }
 
 /// Configuration for the Tardis data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.tardis", from_py_object)
@@ -69,15 +70,19 @@ pub struct TardisDataClientConfig {
     /// Falls back to `TARDIS_MACHINE_WS_URL` env var if not set.
     pub tardis_ws_url: Option<String>,
     /// Whether to normalize symbols to Nautilus conventions.
+    #[builder(default = true)]
     pub normalize_symbols: bool,
     /// Output format for `book_snapshot_*` messages.
+    #[builder(default)]
     pub book_snapshot_output: BookSnapshotOutput,
     /// Replay options defining exchanges, symbols, date ranges, and data types.
     /// When non-empty the client connects to `ws-replay-normalized`.
+    #[builder(default)]
     pub options: Vec<ReplayNormalizedRequestOptions>,
     /// Live stream options defining exchanges, symbols, and data types.
     /// When non-empty (and `options` is empty) the client connects to
     /// `ws-stream-normalized` with automatic reconnection.
+    #[builder(default)]
     pub stream_options: Vec<StreamNormalizedRequestOptions>,
 }
 

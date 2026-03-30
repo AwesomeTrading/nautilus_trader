@@ -70,23 +70,31 @@ use ustr::Ustr;
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.common")
 )]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, bon::Builder)]
 pub struct LoggerConfig {
     /// Maximum log level for stdout output.
+    #[builder(default = LevelFilter::Info)]
     pub stdout_level: LevelFilter,
     /// Maximum log level for file output (`Off` disables file logging).
+    #[builder(default = LevelFilter::Off)]
     pub fileout_level: LevelFilter,
     /// Per-component log level overrides (exact match).
+    #[builder(default)]
     pub component_level: AHashMap<Ustr, LevelFilter>,
     /// Per-module path log level overrides (prefix match).
+    #[builder(default)]
     pub module_level: AHashMap<Ustr, LevelFilter>,
     /// Log only components with explicit level filters.
+    #[builder(default)]
     pub log_components_only: bool,
     /// Use ANSI color codes in output.
+    #[builder(default = true)]
     pub is_colored: bool,
     /// Print configuration to stdout at startup.
+    #[builder(default)]
     pub print_config: bool,
     /// Initialize the tracing subscriber for external Rust crate logs.
+    #[builder(default)]
     pub use_tracing: bool,
 }
 

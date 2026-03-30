@@ -22,7 +22,7 @@ use nautilus_model::identifiers::ExecAlgorithmId;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for an execution algorithm.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.trading", from_py_object)
@@ -32,9 +32,11 @@ pub struct ExecutionAlgorithmConfig {
     pub exec_algorithm_id: Option<ExecAlgorithmId>,
     /// If events should be logged by the algorithm.
     #[serde(default = "default_true")]
+    #[builder(default = true)]
     pub log_events: bool,
     /// If commands should be logged by the algorithm.
     #[serde(default = "default_true")]
+    #[builder(default = true)]
     pub log_commands: bool,
 }
 

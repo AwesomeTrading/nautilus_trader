@@ -22,12 +22,17 @@ use nautilus_model::identifiers::InstrumentId;
 use rust_decimal::Decimal;
 
 /// Configuration for `RiskEngineConfig` instances.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 pub struct RiskEngineConfig {
+    #[builder(default)]
     pub bypass: bool,
+    #[builder(default = RateLimit::new(100, NANOSECONDS_IN_SECOND))]
     pub max_order_submit: RateLimit,
+    #[builder(default = RateLimit::new(100, NANOSECONDS_IN_SECOND))]
     pub max_order_modify: RateLimit,
+    #[builder(default)]
     pub max_notional_per_order: AHashMap<InstrumentId, Decimal>,
+    #[builder(default)]
     pub debug: bool,
 }
 

@@ -26,14 +26,16 @@ use crate::{enums::SerializationEncoding, msgbus::database::DatabaseConfig};
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.common")
 )]
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bon::Builder)]
 #[serde(default)]
 pub struct CacheConfig {
     /// The configuration for the cache backing database.
     pub database: Option<DatabaseConfig>,
     /// The encoding for database operations, controls the type of serializer used.
+    #[builder(default = SerializationEncoding::MsgPack)]
     pub encoding: SerializationEncoding,
     /// If timestamps should be persisted as ISO 8601 strings.
+    #[builder(default)]
     pub timestamps_as_iso8601: bool,
     /// The buffer interval (milliseconds) between pipelined/batched transactions.
     pub buffer_interval_ms: Option<usize>,
@@ -41,18 +43,25 @@ pub struct CacheConfig {
     /// If set, bulk reads will be batched into chunks of this size.
     pub bulk_read_batch_size: Option<usize>,
     /// If a 'trader-' prefix is used for keys.
+    #[builder(default = true)]
     pub use_trader_prefix: bool,
     /// If the trader's instance ID is used for keys.
+    #[builder(default)]
     pub use_instance_id: bool,
     /// If the database should be flushed on start.
+    #[builder(default)]
     pub flush_on_start: bool,
     /// If instrument data should be dropped from the cache's memory on reset.
+    #[builder(default = true)]
     pub drop_instruments_on_reset: bool,
     /// The maximum length for internal tick deques.
+    #[builder(default = 10_000)]
     pub tick_capacity: usize,
     /// The maximum length for internal bar deques.
+    #[builder(default = 10_000)]
     pub bar_capacity: usize,
     /// If market data should be persisted to disk.
+    #[builder(default)]
     pub save_market_data: bool,
 }
 

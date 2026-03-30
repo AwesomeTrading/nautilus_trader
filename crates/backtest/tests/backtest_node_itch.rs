@@ -70,52 +70,22 @@ fn create_itch_catalog(quotes: &[QuoteTick], instrument: &InstrumentAny) -> (Tem
 }
 
 fn xnas_venue_config() -> BacktestVenueConfig {
-    BacktestVenueConfig::new(
-        Ustr::from("XNAS"),
-        OmsType::Netting,
-        AccountType::Margin,
-        BookType::L1_MBP,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        vec!["1_000_000 USD".to_string()],
-        Some(Currency::from("USD")),
-        None,
-        None,
-        None,
-    )
+    BacktestVenueConfig::builder()
+        .name(Ustr::from("XNAS"))
+        .oms_type(OmsType::Netting)
+        .account_type(AccountType::Margin)
+        .book_type(BookType::L1_MBP)
+        .starting_balances(vec!["1_000_000 USD".to_string()])
+        .base_currency(Currency::from("USD"))
+        .build()
 }
 
 fn quote_data_config(catalog_path: &str, instrument_id: InstrumentId) -> BacktestDataConfig {
-    BacktestDataConfig::new(
-        NautilusDataType::QuoteTick,
-        catalog_path.to_string(),
-        None,
-        None,
-        Some(instrument_id),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
+    BacktestDataConfig::builder()
+        .data_type(NautilusDataType::QuoteTick)
+        .catalog_path(catalog_path.to_string())
+        .instrument_id(instrument_id)
+        .build()
 }
 
 struct MarketOrderStrategy {
@@ -186,16 +156,11 @@ fn test_itch_node_oneshot() {
 
     let (_temp_dir, catalog_path) = create_itch_catalog(&quotes, &instrument);
 
-    let config = BacktestRunConfig::new(
-        None,
-        vec![xnas_venue_config()],
-        vec![quote_data_config(&catalog_path, instrument_id)],
-        BacktestEngineConfig::default(),
-        None,
-        Some(false),
-        None,
-        None,
-    );
+    let config = BacktestRunConfig::builder()
+        .venues(vec![xnas_venue_config()])
+        .data(vec![quote_data_config(&catalog_path, instrument_id)])
+        .dispose_on_completion(false)
+        .build();
     let config_id = config.id().to_string();
 
     let mut node = BacktestNode::new(vec![config]).unwrap();
@@ -233,16 +198,12 @@ fn test_itch_node_streaming() {
     let (_temp_dir, catalog_path) = create_itch_catalog(&quotes, &instrument);
 
     // Stream in chunks of 500 quotes
-    let config = BacktestRunConfig::new(
-        None,
-        vec![xnas_venue_config()],
-        vec![quote_data_config(&catalog_path, instrument_id)],
-        BacktestEngineConfig::default(),
-        Some(500),
-        Some(false),
-        None,
-        None,
-    );
+    let config = BacktestRunConfig::builder()
+        .venues(vec![xnas_venue_config()])
+        .data(vec![quote_data_config(&catalog_path, instrument_id)])
+        .chunk_size(500)
+        .dispose_on_completion(false)
+        .build();
     let config_id = config.id().to_string();
 
     let mut node = BacktestNode::new(vec![config]).unwrap();
@@ -286,16 +247,12 @@ fn test_itch_node_grid_market_maker() {
         ..Default::default()
     };
 
-    let config = BacktestRunConfig::new(
-        None,
-        vec![xnas_venue_config()],
-        vec![quote_data_config(&catalog_path, instrument_id)],
-        engine_config,
-        None,
-        Some(false),
-        None,
-        None,
-    );
+    let config = BacktestRunConfig::builder()
+        .venues(vec![xnas_venue_config()])
+        .data(vec![quote_data_config(&catalog_path, instrument_id)])
+        .engine(engine_config)
+        .dispose_on_completion(false)
+        .build();
     let config_id = config.id().to_string();
 
     let mut node = BacktestNode::new(vec![config]).unwrap();
@@ -345,16 +302,13 @@ fn test_itch_node_streaming_grid_market_maker() {
     };
 
     // Stream in chunks of 1000
-    let config = BacktestRunConfig::new(
-        None,
-        vec![xnas_venue_config()],
-        vec![quote_data_config(&catalog_path, instrument_id)],
-        engine_config,
-        Some(1000),
-        Some(false),
-        None,
-        None,
-    );
+    let config = BacktestRunConfig::builder()
+        .venues(vec![xnas_venue_config()])
+        .data(vec![quote_data_config(&catalog_path, instrument_id)])
+        .engine(engine_config)
+        .chunk_size(1000)
+        .dispose_on_completion(false)
+        .build();
     let config_id = config.id().to_string();
 
     let mut node = BacktestNode::new(vec![config]).unwrap();

@@ -131,6 +131,7 @@ aws-lc-rs = { version = "1.16.2", default-features = false, features = [
   "non-fips", # FIPS 140-3 mode blocked: aws-lc-fips-sys requires Go toolchain
 ] }
 base64 = "0.22.1"
+bon = "3.9.1"
 bytes = { version = "1.11.1", features = ["serde"] }
 capnp = "0.25.2"
 chrono = { version = "0.4.44", default-features = false, features = [

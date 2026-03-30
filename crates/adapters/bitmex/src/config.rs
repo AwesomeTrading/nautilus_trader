@@ -23,7 +23,7 @@ use crate::common::{
 };
 
 /// Configuration for the BitMEX live data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.bitmex", from_py_object)
@@ -75,10 +75,12 @@ pub struct BitmexDataClientConfig {
     /// experience request expiration errors due to clock drift or high network latency.
     pub recv_window_ms: Option<u64>,
     /// When `true`, only active instruments are requested during bootstrap.
+    #[builder(default = true)]
     pub active_only: bool,
     /// Optional interval (minutes) for instrument refresh from REST.
     pub update_instruments_interval_mins: Option<u64>,
     /// When `true`, use BitMEX testnet endpoints by default.
+    #[builder(default)]
     pub use_testnet: bool,
     /// Maximum number of requests per second (burst limit).
     pub max_requests_per_second: Option<u32>,
@@ -153,7 +155,7 @@ impl BitmexDataClientConfig {
 }
 
 /// Configuration for the BitMEX live execution client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.bitmex", from_py_object)
@@ -205,8 +207,10 @@ pub struct BitmexExecClientConfig {
     /// experience request expiration errors due to clock drift or high network latency.
     pub recv_window_ms: Option<u64>,
     /// When `true`, only active instruments are requested during bootstrap.
+    #[builder(default = true)]
     pub active_only: bool,
     /// When `true`, use BitMEX testnet endpoints by default.
+    #[builder(default)]
     pub use_testnet: bool,
     /// Optional account identifier to associate with the execution client.
     pub account_id: Option<AccountId>,

@@ -31,13 +31,14 @@ use crate::common::credential::credential_env_vars;
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.architect_ax")
 )]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 pub struct AxDataClientConfig {
     /// Optional API key for authenticated REST/WebSocket requests.
     pub api_key: Option<String>,
     /// Optional API secret for authenticated REST/WebSocket requests.
     pub api_secret: Option<String>,
     /// Use sandbox environment (default: false).
+    #[builder(default)]
     pub is_sandbox: bool,
     /// Optional override for the REST base URL.
     pub base_url_http: Option<String>,
@@ -155,17 +156,20 @@ impl AxDataClientConfig {
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.architect_ax")
 )]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 pub struct AxExecClientConfig {
     /// The trader ID for the client.
+    #[builder(default = TraderId::from("TRADER-001"))]
     pub trader_id: TraderId,
     /// The account ID for the client.
+    #[builder(default = AccountId::from("AX-001"))]
     pub account_id: AccountId,
     /// API key for authenticated requests.
     pub api_key: Option<String>,
     /// API secret for authenticated requests.
     pub api_secret: Option<String>,
     /// Use sandbox environment (default: true).
+    #[builder(default = true)]
     pub is_sandbox: bool,
     /// Optional override for the REST base URL.
     pub base_url_http: Option<String>,

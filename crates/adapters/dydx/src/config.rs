@@ -31,19 +31,23 @@ use crate::{
 };
 
 /// Configuration for the dYdX adapter.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bon::Builder)]
 pub struct DydxAdapterConfig {
     /// Network environment (mainnet or testnet).
     #[serde(default)]
+    #[builder(default)]
     pub network: DydxNetwork,
     /// Base URL for the HTTP API.
+    #[builder(default = urls::http_base_url(false).to_string())]
     pub base_url: String,
     /// Base URL for the WebSocket API.
+    #[builder(default = urls::ws_url(false).to_string())]
     pub ws_url: String,
     /// Base URL for the gRPC API (Cosmos SDK transactions).
     ///
     /// For backwards compatibility, a single URL can be provided.
     /// Consider using `grpc_urls` for fallback support.
+    #[builder(default = urls::grpc_urls(false)[0].to_string())]
     pub grpc_url: String,
     /// List of gRPC URLs with fallback support.
     ///
@@ -51,10 +55,13 @@ pub struct DydxAdapterConfig {
     /// until a successful connection is established. This is recommended for
     /// production use in DEX environments where nodes can fail.
     #[serde(default)]
+    #[builder(default = urls::grpc_urls(false).iter().map(|&s| s.to_string()).collect())]
     pub grpc_urls: Vec<String>,
     /// Chain ID (e.g., "dydx-mainnet-1" for mainnet, "dydx-testnet-4" for testnet).
+    #[builder(default = DYDX_CHAIN_ID.to_string())]
     pub chain_id: String,
     /// Request timeout in seconds.
+    #[builder(default = 30)]
     pub timeout_secs: u64,
     /// Wallet address for the account.
     ///
@@ -67,6 +74,7 @@ pub struct DydxAdapterConfig {
     pub wallet_address: Option<String>,
     /// Subaccount number (default: 0).
     #[serde(default)]
+    #[builder(default)]
     pub subaccount: u32,
     /// Whether this is a testnet configuration.
     ///
@@ -75,6 +83,7 @@ pub struct DydxAdapterConfig {
     /// This flag exists for backwards compatibility and may be derived from
     /// `network` in future versions.
     #[serde(default)]
+    #[builder(default)]
     pub is_testnet: bool,
     /// Private key (hex) for wallet signing.
     ///
@@ -94,15 +103,19 @@ pub struct DydxAdapterConfig {
     /// See <https://docs.dydx.xyz/concepts/trading/authenticators> for details on
     /// permissioned keys and authenticator configuration.
     #[serde(default)]
+    #[builder(default)]
     pub authenticator_ids: Vec<u64>,
     /// Maximum number of retries for failed requests (default: 3).
     #[serde(default = "default_max_retries")]
+    #[builder(default = 3)]
     pub max_retries: u32,
     /// Initial retry delay in milliseconds (default: 1000ms).
     #[serde(default = "default_retry_delay_initial_ms")]
+    #[builder(default = 1000)]
     pub retry_delay_initial_ms: u64,
     /// Maximum retry delay in milliseconds (default: 10000ms).
     #[serde(default = "default_retry_delay_max_ms")]
+    #[builder(default = 10000)]
     pub retry_delay_max_ms: u64,
     /// gRPC rate limit: maximum broadcast requests per second.
     ///
@@ -207,7 +220,7 @@ impl Default for DydxAdapterConfig {
 }
 
 /// Configuration for the dYdX data client.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.dydx", from_py_object)
@@ -230,6 +243,7 @@ pub struct DydxDataClientConfig {
     /// Maximum retry delay in milliseconds.
     pub retry_delay_max_ms: Option<u64>,
     /// Whether this is a testnet configuration.
+    #[builder(default)]
     pub is_testnet: bool,
     /// HTTP proxy URL.
     pub http_proxy_url: Option<String>,
@@ -254,7 +268,7 @@ impl Default for DydxDataClientConfig {
 }
 
 /// Configuration for the dYdX execution client.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.dydx", from_py_object)
@@ -265,16 +279,20 @@ impl Default for DydxDataClientConfig {
 )]
 pub struct DydxExecClientConfig {
     /// The trader ID for the client.
+    #[builder(default = TraderId::from("TRADER-001"))]
     pub trader_id: TraderId,
     /// The account ID for the client.
+    #[builder(default = AccountId::from("DYDX-001"))]
     pub account_id: AccountId,
     /// Network environment (mainnet or testnet).
     #[serde(default)]
+    #[builder(default)]
     pub network: DydxNetwork,
     /// gRPC endpoint URL (optional, uses default for network if not provided).
     pub grpc_endpoint: Option<String>,
     /// Additional gRPC URLs for fallback support.
     #[serde(default)]
+    #[builder(default)]
     pub grpc_urls: Vec<String>,
     /// WebSocket endpoint URL (optional, uses default for network if not provided).
     pub ws_endpoint: Option<String>,
@@ -294,9 +312,11 @@ pub struct DydxExecClientConfig {
     pub wallet_address: Option<String>,
     /// Subaccount number (default: 0).
     #[serde(default)]
+    #[builder(default)]
     pub subaccount_number: u32,
     /// Authenticator IDs for permissioned key trading.
     #[serde(default)]
+    #[builder(default)]
     pub authenticator_ids: Vec<u64>,
     /// HTTP request timeout in seconds.
     pub http_timeout_secs: Option<u64>,

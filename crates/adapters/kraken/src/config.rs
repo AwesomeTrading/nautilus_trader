@@ -23,7 +23,7 @@ use crate::common::{
 };
 
 /// Configuration for the Kraken data client.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.kraken", from_py_object)
@@ -35,7 +35,9 @@ use crate::common::{
 pub struct KrakenDataClientConfig {
     pub api_key: Option<String>,
     pub api_secret: Option<String>,
+    #[builder(default = KrakenProductType::Spot)]
     pub product_type: KrakenProductType,
+    #[builder(default = KrakenEnvironment::Mainnet)]
     pub environment: KrakenEnvironment,
     pub base_url: Option<String>,
     pub ws_public_url: Option<String>,
@@ -95,7 +97,7 @@ impl KrakenDataClientConfig {
 }
 
 /// Configuration for the Kraken execution client.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.kraken", from_py_object)
@@ -105,11 +107,17 @@ impl KrakenDataClientConfig {
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.kraken")
 )]
 pub struct KrakenExecClientConfig {
+    #[builder(default)]
     pub trader_id: TraderId,
+    #[builder(default = AccountId::from("KRAKEN-001"))]
     pub account_id: AccountId,
+    #[builder(default)]
     pub api_key: String,
+    #[builder(default)]
     pub api_secret: String,
+    #[builder(default = KrakenProductType::Spot)]
     pub product_type: KrakenProductType,
+    #[builder(default = KrakenEnvironment::Mainnet)]
     pub environment: KrakenEnvironment,
     pub base_url: Option<String>,
     pub ws_url: Option<String>,

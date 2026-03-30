@@ -25,6 +25,7 @@ use crate::{
 };
 
 /// Configuration for the Polymarket data client.
+#[derive(bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(
@@ -43,12 +44,15 @@ pub struct PolymarketDataClientConfig {
     pub base_url_data_api: Option<String>,
     pub http_timeout_secs: Option<u64>,
     pub ws_timeout_secs: Option<u64>,
+    #[builder(default = crate::common::consts::WS_DEFAULT_SUBSCRIPTIONS)]
     pub ws_max_subscriptions: usize,
     /// Instrument reload interval in minutes.
     pub update_instruments_interval_mins: Option<u64>,
     /// Whether to subscribe to new market discovery events via WebSocket.
+    #[builder(default)]
     pub subscribe_new_markets: bool,
     /// Instrument filters applied to all instruments during loading and discovery.
+    #[builder(default)]
     pub filters: Vec<Arc<dyn InstrumentFilter>>,
     /// Optional filter applied to newly discovered markets before instrument emission.
     pub new_market_filter: Option<Arc<dyn InstrumentFilter>>,
@@ -147,6 +151,7 @@ impl PolymarketDataClientConfig {
 }
 
 /// Configuration for the Polymarket execution client.
+#[derive(bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(
@@ -159,7 +164,9 @@ impl PolymarketDataClientConfig {
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.polymarket")
 )]
 pub struct PolymarketExecClientConfig {
+    #[builder(default)]
     pub trader_id: TraderId,
+    #[builder(default = AccountId::from("POLYMARKET-001"))]
     pub account_id: AccountId,
     /// Falls back to `POLYMARKET_PK` env var.
     pub private_key: Option<String>,
@@ -171,14 +178,20 @@ pub struct PolymarketExecClientConfig {
     pub passphrase: Option<String>,
     /// Falls back to `POLYMARKET_FUNDER` env var.
     pub funder: Option<String>,
+    #[builder(default = SignatureType::Eoa)]
     pub signature_type: SignatureType,
     pub base_url_http: Option<String>,
     pub base_url_ws: Option<String>,
+    #[builder(default = 60)]
     pub http_timeout_secs: u64,
+    #[builder(default = 3)]
     pub max_retries: u32,
+    #[builder(default = 1000)]
     pub retry_delay_initial_ms: u64,
+    #[builder(default = 10000)]
     pub retry_delay_max_ms: u64,
     /// Timeout waiting for WS order acknowledgment (seconds).
+    #[builder(default = 5)]
     pub ack_timeout_secs: u64,
 }
 

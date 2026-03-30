@@ -27,7 +27,7 @@ use crate::common::{
 };
 
 /// Configuration for the OKX data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.okx", from_py_object)
@@ -44,6 +44,7 @@ pub struct OKXDataClientConfig {
     /// Optional API passphrase for authenticated endpoints.
     pub api_passphrase: Option<String>,
     /// Instrument types to load and subscribe to.
+    #[builder(default = vec![OKXInstrumentType::Spot])]
     pub instrument_types: Vec<OKXInstrumentType>,
     /// Contract type filter applied to loaded instruments.
     pub contract_types: Option<Vec<OKXContractType>>,
@@ -64,6 +65,7 @@ pub struct OKXDataClientConfig {
     /// for future functionality. Use `http_proxy_url` for REST API proxy support.
     pub ws_proxy_url: Option<String>,
     /// When true the client will use OKX demo endpoints.
+    #[builder(default)]
     pub is_demo: bool,
     /// Optional HTTP timeout in seconds.
     pub http_timeout_secs: Option<u64>,
@@ -156,7 +158,7 @@ impl OKXDataClientConfig {
 }
 
 /// Configuration for the OKX execution client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.okx", from_py_object)
@@ -167,8 +169,10 @@ impl OKXDataClientConfig {
 )]
 pub struct OKXExecClientConfig {
     /// The trader ID for the client.
+    #[builder(default = TraderId::from("TRADER-001"))]
     pub trader_id: TraderId,
     /// The account ID for the client.
+    #[builder(default = AccountId::from("OKX-001"))]
     pub account_id: AccountId,
     /// Optional API key for authenticated endpoints.
     pub api_key: Option<String>,
@@ -177,6 +181,7 @@ pub struct OKXExecClientConfig {
     /// Optional API passphrase for authenticated endpoints.
     pub api_passphrase: Option<String>,
     /// Instrument types the execution client should support.
+    #[builder(default = vec![OKXInstrumentType::Spot])]
     pub instrument_types: Vec<OKXInstrumentType>,
     /// Contract type filter applied to operations.
     pub contract_types: Option<Vec<OKXContractType>>,
@@ -197,12 +202,15 @@ pub struct OKXExecClientConfig {
     /// for future functionality. Use `http_proxy_url` for REST API proxy support.
     pub ws_proxy_url: Option<String>,
     /// When true the client will use OKX demo endpoints.
+    #[builder(default)]
     pub is_demo: bool,
     /// Optional HTTP timeout in seconds.
     pub http_timeout_secs: Option<u64>,
     /// Enables consumption of the fills WebSocket channel when true.
+    #[builder(default)]
     pub use_fills_channel: bool,
     /// Enables mass-cancel support when true.
+    #[builder(default)]
     pub use_mm_mass_cancel: bool,
     /// Optional maximum retry attempts for requests.
     pub max_retries: Option<u32>,
@@ -213,6 +221,7 @@ pub struct OKXExecClientConfig {
     /// Optional margin mode (CROSS or ISOLATED) for margin/derivative accounts.
     pub margin_mode: Option<OKXMarginMode>,
     /// Enables margin/leverage for SPOT trading when true.
+    #[builder(default)]
     pub use_spot_margin: bool,
 }
 
