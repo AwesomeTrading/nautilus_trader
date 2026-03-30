@@ -226,7 +226,7 @@ pub enum HyperliquidOrderType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.hyperliquid")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.hyperliquid")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -265,7 +265,7 @@ pub enum HyperliquidTpSl {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.hyperliquid")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.hyperliquid")
 )]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -341,7 +341,7 @@ impl From<OrderType> for HyperliquidConditionalOrderType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.hyperliquid")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.hyperliquid")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -934,7 +934,7 @@ pub enum HyperliquidLeverageType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.hyperliquid")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.hyperliquid")
 )]
 #[serde(rename_all = "UPPERCASE")]
 #[strum(serialize_all = "UPPERCASE")]

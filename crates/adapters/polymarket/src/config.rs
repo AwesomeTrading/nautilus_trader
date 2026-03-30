@@ -35,7 +35,7 @@ use crate::{
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.polymarket")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.polymarket")
 )]
 pub struct PolymarketDataClientConfig {
     pub base_url_http: Option<String>,
@@ -154,7 +154,7 @@ impl PolymarketDataClientConfig {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.polymarket")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.polymarket")
 )]
 pub struct PolymarketExecClientConfig {
     #[builder(default)]

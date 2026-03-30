@@ -131,7 +131,7 @@ const BYBIT_REPAY_ROUTE_KEY: &str = "bybit:/v5/account/no-convert-repay";
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.bybit")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")
 )]
 #[derive(Clone)]
 pub struct BybitRawHttpClient {
@@ -1222,7 +1222,7 @@ impl BybitRawHttpClient {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.bybit")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")
 )]
 /// High-level HTTP client that wraps the raw client and provides Nautilus domain types.
 ///

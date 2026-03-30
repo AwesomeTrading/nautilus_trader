@@ -171,7 +171,7 @@ pub enum OKXOrderType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXOrderStatus {
     Canceled,
@@ -260,7 +260,7 @@ impl From<LiquiditySide> for OKXExecType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXInstrumentType {
     #[default]
@@ -329,7 +329,7 @@ pub enum OKXInstrumentStatus {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXContractType {
     #[serde(rename = "")]
@@ -403,7 +403,7 @@ impl From<OKXOptionType> for OptionKind {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXTradeMode {
     #[default]
@@ -479,7 +479,7 @@ pub enum OKXAccountMode {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXMarginMode {
     #[serde(rename = "")]
@@ -521,7 +521,7 @@ pub enum OKXMarginMode {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXPositionMode {
     #[default]
@@ -756,7 +756,7 @@ pub enum OKXBookChannel {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.okx")
 )]
 pub enum OKXVipLevel {
     /// VIP level 0 (default tier).

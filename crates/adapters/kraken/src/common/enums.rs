@@ -49,7 +49,7 @@ use strum::{AsRefStr, Display, EnumString, FromRepr};
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -89,7 +89,7 @@ pub enum KrakenEnvironment {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -125,7 +125,7 @@ pub enum KrakenProductType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -181,7 +181,7 @@ pub enum KrakenOrderType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -216,7 +216,7 @@ pub enum KrakenOrderSide {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "UPPERCASE")]
 #[strum(ascii_case_insensitive, serialize_all = "UPPERCASE")]
@@ -258,7 +258,7 @@ pub enum KrakenTimeInForce {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -296,7 +296,7 @@ pub enum KrakenOrderStatus {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -331,7 +331,7 @@ pub enum KrakenPositionSide {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive, serialize_all = "snake_case")]
@@ -377,7 +377,7 @@ pub enum KrakenPairStatus {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -418,7 +418,7 @@ pub enum KrakenSystemStatus {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -455,7 +455,7 @@ pub enum KrakenAssetClass {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -542,7 +542,7 @@ pub enum KrakenFuturesOrderEventType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive, serialize_all = "camelCase")]
@@ -580,7 +580,7 @@ pub enum KrakenFuturesOrderStatus {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenTriggerSignal {
@@ -618,7 +618,7 @@ pub enum KrakenTriggerSignal {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -655,7 +655,7 @@ pub enum KrakenSpotTrigger {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -690,7 +690,7 @@ pub enum KrakenFillType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -725,7 +725,7 @@ pub enum KrakenApiResult {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive, serialize_all = "snake_case")]
@@ -762,7 +762,7 @@ pub enum KrakenInstrumentType {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive, serialize_all = "camelCase")]
@@ -815,7 +815,7 @@ pub enum KrakenSendStatus {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.adapters.kraken")
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive, serialize_all = "snake_case")]

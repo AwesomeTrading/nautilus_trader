@@ -127,7 +127,7 @@ class ClassMethodFixup:
 
 # Classes to relocate from _libnautilus to their target modules
 MODULE_FIXUPS: dict[str, StubFixup] = {
-    "adapters.blockchain": StubFixup(
+    "blockchain": StubFixup(
         classes=(
             "BlockchainDataClientConfig",
             "BlockchainDataClientFactory",
@@ -2190,8 +2190,8 @@ def collect_module_constants(workspace_root: Path) -> dict[str, list[ModuleConst
     """
     Collect module-level constants exported via ``m.add()`` in pymodule definitions.
 
-    Returns a mapping of stub module path (e.g. ``"core"``, ``"adapters.hyperliquid"``)
-    to constant declarations.
+    Returns a mapping of stub module path (e.g. ``"core"``, ``"hyperliquid"``) to
+    constant declarations.
 
     """
     constants: dict[str, list[ModuleConstant]] = {}
@@ -2219,9 +2219,14 @@ def collect_module_constants(workspace_root: Path) -> dict[str, list[ModuleConst
 def _derive_module_path(crate_dir: Path, workspace_root: Path) -> str:
     """
     Derive the stub module path from a crate directory.
+
+    The ``adapters`` directory is organizational only and is not part of
+    the module path, so ``crates/adapters/bybit`` maps to ``"bybit"``.
+
     """
     relative = crate_dir.relative_to(workspace_root / "crates")
-    return ".".join(relative.parts)
+    parts = [p for p in relative.parts if p != "adapters"]
+    return ".".join(parts)
 
 
 def _infer_constant_python_type(

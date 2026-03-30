@@ -30,7 +30,7 @@ use crate::common::{
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.bitmex")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bitmex")
 )]
 pub struct BitmexDataClientConfig {
     /// Optional API key used for authenticated REST/WebSocket requests.
@@ -151,7 +151,7 @@ impl BitmexDataClientConfig {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.bitmex")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bitmex")
 )]
 pub struct BitmexExecClientConfig {
     /// API key used for authenticated requests.

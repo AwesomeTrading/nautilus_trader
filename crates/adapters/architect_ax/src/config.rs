@@ -29,7 +29,7 @@ use crate::common::credential::credential_env_vars;
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.architect_ax")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.architect_ax")
 )]
 #[derive(Clone, Debug, bon::Builder)]
 pub struct AxDataClientConfig {
@@ -145,7 +145,7 @@ impl AxDataClientConfig {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.architect_ax")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.architect_ax")
 )]
 #[derive(Clone, Debug, bon::Builder)]
 pub struct AxExecClientConfig {

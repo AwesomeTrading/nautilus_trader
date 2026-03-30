@@ -49,7 +49,7 @@ use crate::{
 /// The cloid is a keccak256 hash of the client_order_id, truncated to 16 bytes,
 /// represented as a hex string with `0x` prefix.
 #[pyfunction]
-#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.adapters.hyperliquid")]
+#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.hyperliquid")]
 #[pyo3(name = "hyperliquid_cloid_from_client_order_id")]
 fn py_hyperliquid_cloid_from_client_order_id(client_order_id: ClientOrderId) -> String {
     Cloid::from_client_order_id(client_order_id).to_hex()
@@ -61,7 +61,7 @@ fn py_hyperliquid_cloid_from_client_order_id(client_order_id: ClientOrderId) -> 
 ///
 /// Returns an error if the symbol does not contain a valid Hyperliquid product type suffix.
 #[pyfunction]
-#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.adapters.hyperliquid")]
+#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.hyperliquid")]
 #[pyo3(name = "hyperliquid_product_type_from_symbol")]
 fn py_hyperliquid_product_type_from_symbol(
     symbol: &str,

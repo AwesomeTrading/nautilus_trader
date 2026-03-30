@@ -33,7 +33,7 @@ use nautilus_system::ClientConfig;
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.blockchain")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.blockchain")
 )]
 pub struct DexPoolFilters {
     /// Whether to exclude pools containing tokens with empty name or symbol fields.
@@ -69,7 +69,7 @@ impl Default for DexPoolFilters {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.blockchain")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.blockchain")
 )]
 pub struct BlockchainDataClientConfig {
     /// The blockchain chain configuration.

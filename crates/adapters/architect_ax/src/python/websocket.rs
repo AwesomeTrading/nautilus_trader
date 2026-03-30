@@ -69,7 +69,7 @@ use crate::{
     name = "AxMdWebSocketClient",
     module = "nautilus_trader.core.nautilus_pyo3.architect"
 )]
-#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.architect_ax")]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.architect_ax")]
 pub struct PyAxMdWebSocketClient {
     inner: AxMdWebSocketClient,
     instruments_cache: Arc<AtomicMap<Ustr, InstrumentAny>>,
@@ -367,7 +367,7 @@ impl PyAxMdWebSocketClient {
     name = "AxOrdersWebSocketClient",
     module = "nautilus_trader.core.nautilus_pyo3.architect"
 )]
-#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.architect_ax")]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.architect_ax")]
 pub struct PyAxOrdersWebSocketClient {
     inner: AxOrdersWebSocketClient,
 }

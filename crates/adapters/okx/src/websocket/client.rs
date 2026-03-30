@@ -158,7 +158,7 @@ pub(crate) struct PendingOrderInfo {
 )]
 #[cfg_attr(
     feature = "python",
-    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.adapters.okx")
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.okx")
 )]
 pub struct OKXWebSocketClient {
     url: String,
