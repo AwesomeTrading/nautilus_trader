@@ -42,9 +42,6 @@ use crate::{
     websocket::messages::AxDataWsMessage,
 };
 
-/// Default heartbeat interval in seconds.
-const DEFAULT_HEARTBEAT_SECS: u64 = 30;
-
 /// Subscription topic delimiter for Ax.
 const AX_TOPIC_DELIMITER: char = ':';
 
@@ -148,7 +145,7 @@ impl AxMdWebSocketClient {
     ///
     /// The `auth_token` is a Bearer token obtained from the HTTP `/api/authenticate` endpoint.
     #[must_use]
-    pub fn new(url: String, auth_token: String, heartbeat: Option<u64>) -> Self {
+    pub fn new(url: String, auth_token: String, heartbeat: u64) -> Self {
         let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::unbounded_channel::<HandlerCommand>();
 
         let initial_mode = AtomicU8::new(ConnectionMode::Closed.as_u8());
@@ -156,7 +153,7 @@ impl AxMdWebSocketClient {
 
         Self {
             url,
-            heartbeat: heartbeat.or(Some(DEFAULT_HEARTBEAT_SECS)),
+            heartbeat: Some(heartbeat),
             auth_token: Some(auth_token),
             connection_mode,
             cmd_tx: Arc::new(tokio::sync::RwLock::new(cmd_tx)),
@@ -174,7 +171,7 @@ impl AxMdWebSocketClient {
     ///
     /// Use [`set_auth_token`](Self::set_auth_token) to set the token before connecting.
     #[must_use]
-    pub fn without_auth(url: String, heartbeat: Option<u64>) -> Self {
+    pub fn without_auth(url: String, heartbeat: u64) -> Self {
         let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::unbounded_channel::<HandlerCommand>();
 
         let initial_mode = AtomicU8::new(ConnectionMode::Closed.as_u8());
@@ -182,7 +179,7 @@ impl AxMdWebSocketClient {
 
         Self {
             url,
-            heartbeat: heartbeat.or(Some(DEFAULT_HEARTBEAT_SECS)),
+            heartbeat: Some(heartbeat),
             auth_token: None,
             connection_mode,
             cmd_tx: Arc::new(tokio::sync::RwLock::new(cmd_tx)),

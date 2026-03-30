@@ -123,26 +123,22 @@ fn create_clob_client(addr: &SocketAddr) -> PolymarketClobHttpClient {
         test_credential(),
         TEST_ADDRESS.to_string(),
         Some(format!("http://{addr}")),
-        Some(5),
+        5,
     )
     .unwrap()
 }
 
 fn create_data_api_client(addr: &SocketAddr) -> PolymarketDataApiHttpClient {
-    PolymarketDataApiHttpClient::new(Some(format!("http://{addr}")), Some(5)).unwrap()
+    PolymarketDataApiHttpClient::new(Some(format!("http://{addr}")), 5).unwrap()
 }
 
 fn create_gamma_client(addr: &SocketAddr) -> PolymarketGammaRawHttpClient {
-    PolymarketGammaRawHttpClient::new(Some(format!("http://{addr}")), Some(5)).unwrap()
+    PolymarketGammaRawHttpClient::new(Some(format!("http://{addr}")), 5).unwrap()
 }
 
 fn create_gamma_domain_client(addr: &SocketAddr) -> PolymarketGammaHttpClient {
-    PolymarketGammaHttpClient::new(
-        Some(format!("http://{addr}")),
-        Some(5),
-        RetryConfig::default(),
-    )
-    .unwrap()
+    PolymarketGammaHttpClient::new(Some(format!("http://{addr}")), 5, RetryConfig::default())
+        .unwrap()
 }
 
 fn gamma_market_with_slug(slug: &str, condition_id: &str, token_ids: [&str; 2]) -> Value {

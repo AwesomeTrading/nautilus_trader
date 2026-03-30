@@ -163,7 +163,7 @@ impl HyperliquidExecutionClient {
 
         let mut http_client = HyperliquidHttpClient::with_secrets(
             &secrets,
-            Some(config.http_timeout_secs),
+            config.http_timeout_secs,
             config.http_proxy_url.clone(),
         )
         .context("failed to create Hyperliquid HTTP client")?;

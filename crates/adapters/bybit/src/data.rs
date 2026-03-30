@@ -123,21 +123,21 @@ impl BybitDataClient {
                 api_key,
                 api_secret,
                 Some(config.http_base_url()),
-                Some(config.http_timeout_secs),
-                Some(config.max_retries),
-                Some(config.retry_delay_initial_ms),
-                Some(config.retry_delay_max_ms),
-                Some(config.recv_window_ms),
+                config.http_timeout_secs,
+                config.max_retries,
+                config.retry_delay_initial_ms,
+                config.retry_delay_max_ms,
+                config.recv_window_ms,
                 config.http_proxy_url.clone(),
             )?
         } else {
             BybitHttpClient::new(
                 Some(config.http_base_url()),
-                Some(config.http_timeout_secs),
-                Some(config.max_retries),
-                Some(config.retry_delay_initial_ms),
-                Some(config.retry_delay_max_ms),
-                Some(config.recv_window_ms),
+                config.http_timeout_secs,
+                config.max_retries,
+                config.retry_delay_initial_ms,
+                config.retry_delay_max_ms,
+                config.recv_window_ms,
                 config.http_proxy_url.clone(),
             )?
         };
@@ -156,7 +156,7 @@ impl BybitDataClient {
                     *product_type,
                     config.environment,
                     Some(config.ws_public_url_for(*product_type)),
-                    Some(config.heartbeat_interval_secs),
+                    config.heartbeat_interval_secs,
                 )
             })
             .collect();

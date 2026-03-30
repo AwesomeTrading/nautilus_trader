@@ -69,7 +69,7 @@ pub const KRAKEN_FUTURES_WS_TOPIC_DELIMITER: char = ':';
 )]
 pub struct KrakenFuturesWebSocketClient {
     url: String,
-    heartbeat_secs: Option<u64>,
+    heartbeat_secs: u64,
     signal: Arc<AtomicBool>,
     connection_mode: Arc<ArcSwap<AtomicU8>>,
     cmd_tx: Arc<tokio::sync::RwLock<tokio::sync::mpsc::UnboundedSender<FuturesHandlerCommand>>>,
@@ -116,7 +116,7 @@ impl Clone for KrakenFuturesWebSocketClient {
 impl KrakenFuturesWebSocketClient {
     /// Creates a new client with the given URL.
     #[must_use]
-    pub fn new(url: String, heartbeat_secs: Option<u64>) -> Self {
+    pub fn new(url: String, heartbeat_secs: u64) -> Self {
         Self::with_credentials(url, heartbeat_secs, None)
     }
 
@@ -124,7 +124,7 @@ impl KrakenFuturesWebSocketClient {
     #[must_use]
     pub fn with_credentials(
         url: String,
-        heartbeat_secs: Option<u64>,
+        heartbeat_secs: u64,
         credential: Option<KrakenCredential>,
     ) -> Self {
         let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::unbounded_channel::<FuturesHandlerCommand>();
@@ -257,7 +257,7 @@ impl KrakenFuturesWebSocketClient {
         let ws_config = WebSocketConfig {
             url: self.url.clone(),
             headers: vec![],
-            heartbeat: self.heartbeat_secs,
+            heartbeat: Some(self.heartbeat_secs),
             heartbeat_msg: None, // Use WebSocket ping frames, not text messages
             reconnect_timeout_ms: Some(5_000),
             reconnect_delay_initial_ms: Some(500),

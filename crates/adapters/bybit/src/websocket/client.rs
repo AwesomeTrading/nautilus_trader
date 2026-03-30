@@ -78,7 +78,6 @@ use crate::{
     },
 };
 
-const DEFAULT_HEARTBEAT_SECS: u64 = 20;
 const WEBSOCKET_AUTH_WINDOW_MS: i64 = 5_000;
 pub const BATCH_PROCESSING_LIMIT: usize = 20;
 
@@ -169,7 +168,7 @@ impl Clone for BybitWebSocketClient {
 impl BybitWebSocketClient {
     /// Creates a new Bybit public WebSocket client.
     #[must_use]
-    pub fn new_public(url: Option<String>, heartbeat: Option<u64>) -> Self {
+    pub fn new_public(url: Option<String>, heartbeat: u64) -> Self {
         Self::new_public_with(
             BybitProductType::Linear,
             BybitEnvironment::Mainnet,
@@ -184,7 +183,7 @@ impl BybitWebSocketClient {
         product_type: BybitProductType,
         environment: BybitEnvironment,
         url: Option<String>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
     ) -> Self {
         let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::unbounded_channel::<HandlerCommand>();
 
@@ -198,7 +197,7 @@ impl BybitWebSocketClient {
             credential: None,
             requires_auth: false,
             auth_tracker: AuthTracker::new(),
-            heartbeat: heartbeat.or(Some(DEFAULT_HEARTBEAT_SECS)),
+            heartbeat: Some(heartbeat),
             connection_mode,
             cmd_tx: Arc::new(tokio::sync::RwLock::new(cmd_tx)),
             out_rx: None,
@@ -230,7 +229,7 @@ impl BybitWebSocketClient {
         api_key: Option<String>,
         api_secret: Option<String>,
         url: Option<String>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
     ) -> Self {
         let credential = Credential::resolve(api_key, api_secret, environment);
 
@@ -246,7 +245,7 @@ impl BybitWebSocketClient {
             credential,
             requires_auth: true,
             auth_tracker: AuthTracker::new(),
-            heartbeat: heartbeat.or(Some(DEFAULT_HEARTBEAT_SECS)),
+            heartbeat: Some(heartbeat),
             connection_mode,
             cmd_tx: Arc::new(tokio::sync::RwLock::new(cmd_tx)),
             out_rx: None,
@@ -278,7 +277,7 @@ impl BybitWebSocketClient {
         api_key: Option<String>,
         api_secret: Option<String>,
         url: Option<String>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
     ) -> Self {
         let credential = Credential::resolve(api_key, api_secret, environment);
 
@@ -294,7 +293,7 @@ impl BybitWebSocketClient {
             credential,
             requires_auth: true,
             auth_tracker: AuthTracker::new(),
-            heartbeat: heartbeat.or(Some(DEFAULT_HEARTBEAT_SECS)),
+            heartbeat: Some(heartbeat),
             connection_mode,
             cmd_tx: Arc::new(tokio::sync::RwLock::new(cmd_tx)),
             out_rx: None,
@@ -2024,7 +2023,7 @@ mod tests {
             Some("test-key".to_string()),
             Some("test-secret".to_string()),
             None,
-            Some(20),
+            20,
         );
 
         let params = client
@@ -2079,7 +2078,7 @@ mod tests {
             Some("test-key".to_string()),
             Some("test-secret".to_string()),
             None,
-            Some(20),
+            20,
         );
 
         let params = client

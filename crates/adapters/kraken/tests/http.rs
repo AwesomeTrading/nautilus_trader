@@ -539,12 +539,12 @@ async fn test_spot_raw_get_server_time() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -574,12 +574,12 @@ async fn test_spot_raw_get_system_status() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -608,12 +608,12 @@ async fn test_spot_raw_get_asset_pairs() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -643,12 +643,12 @@ async fn test_spot_raw_get_asset_pairs_tokenized() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -681,12 +681,12 @@ async fn test_spot_domain_request_instruments() {
     let client = KrakenSpotHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -725,12 +725,12 @@ async fn test_spot_raw_get_ticker() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -759,12 +759,12 @@ async fn test_spot_raw_get_book_depth() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -793,12 +793,12 @@ async fn test_spot_raw_get_trades() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -827,12 +827,12 @@ async fn test_spot_raw_get_ohlc() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -861,12 +861,12 @@ async fn test_spot_raw_get_trades_with_since() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -901,12 +901,12 @@ async fn test_spot_raw_get_ohlc_with_interval() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -941,12 +941,12 @@ async fn test_spot_raw_get_websockets_token_requires_credentials() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -979,12 +979,12 @@ async fn test_spot_raw_get_websockets_token_with_credentials() {
         "dGVzdF9hcGlfc2VjcmV0X2Jhc2U2NA==".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1014,12 +1014,12 @@ async fn test_spot_domain_request_trades() {
     let client = KrakenSpotHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1055,12 +1055,12 @@ async fn test_spot_domain_request_bars() {
     let client = KrakenSpotHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1096,12 +1096,12 @@ async fn test_futures_raw_get_instruments() {
     let client = KrakenFuturesRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1137,12 +1137,12 @@ async fn test_futures_raw_get_tickers() {
     let client = KrakenFuturesRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1179,12 +1179,12 @@ async fn test_futures_raw_get_ohlc_trade() {
     let client = KrakenFuturesRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1224,12 +1224,12 @@ async fn test_futures_raw_get_ohlc_mark() {
     let client = KrakenFuturesRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1266,12 +1266,12 @@ async fn test_futures_raw_get_ohlc_spot() {
     let client = KrakenFuturesRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1308,12 +1308,12 @@ async fn test_futures_raw_get_public_executions() {
     let client = KrakenFuturesRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1356,12 +1356,12 @@ async fn test_spot_raw_get_open_orders() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1399,12 +1399,12 @@ async fn test_spot_raw_get_closed_orders() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1443,12 +1443,12 @@ async fn test_spot_raw_get_trades_history() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1481,12 +1481,12 @@ async fn test_futures_raw_get_open_orders() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1525,12 +1525,12 @@ async fn test_futures_raw_get_order_events() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1574,12 +1574,12 @@ async fn test_futures_raw_get_fills() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1616,12 +1616,12 @@ async fn test_futures_raw_get_open_positions() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1660,12 +1660,12 @@ async fn test_spot_raw_add_order() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1706,12 +1706,12 @@ async fn test_spot_raw_cancel_order() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1747,12 +1747,12 @@ async fn test_futures_raw_send_order() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1791,12 +1791,12 @@ async fn test_futures_raw_cancel_order() {
         "test".to_string(),
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1837,12 +1837,12 @@ async fn test_spot_raw_rate_limit_error() {
         api_secret,
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1885,12 +1885,12 @@ async fn test_spot_raw_api_error_response() {
     let client = KrakenSpotRawHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1922,12 +1922,12 @@ async fn test_futures_domain_request_trades() {
     let client = KrakenFuturesHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -1963,12 +1963,12 @@ async fn test_futures_domain_request_bars() {
     let client = KrakenFuturesHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -2002,12 +2002,12 @@ async fn test_spot_domain_request_book_snapshot() {
     let client = KrakenSpotHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -2044,12 +2044,12 @@ async fn test_futures_domain_request_book_snapshot() {
     let client = KrakenFuturesHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 
@@ -2086,12 +2086,12 @@ async fn test_futures_domain_request_funding_rates() {
     let client = KrakenFuturesHttpClient::new(
         KrakenEnvironment::Mainnet,
         Some(base_url),
-        Some(10),
+        10,
         None,
         None,
         None,
         None,
-        None,
+        5,
     )
     .unwrap();
 

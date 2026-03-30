@@ -101,12 +101,12 @@ impl Default for KrakenFuturesRawHttpClient {
         Self::new(
             KrakenEnvironment::Mainnet,
             None,
-            Some(60),
+            60,
             None,
             None,
             None,
             None,
-            None,
+            KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND,
         )
         .expect("Failed to create default KrakenFuturesRawHttpClient")
     }
@@ -127,12 +127,12 @@ impl KrakenFuturesRawHttpClient {
     pub fn new(
         environment: KrakenEnvironment,
         base_url_override: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         max_retries: Option<u32>,
         retry_delay_ms: Option<u64>,
         retry_delay_max_ms: Option<u64>,
         proxy_url: Option<String>,
-        max_requests_per_second: Option<u32>,
+        max_requests_per_second: u32,
     ) -> anyhow::Result<Self> {
         let retry_config = RetryConfig {
             max_retries: max_retries.unwrap_or(3),
@@ -150,17 +150,14 @@ impl KrakenFuturesRawHttpClient {
             get_kraken_http_base_url(KrakenProductType::Futures, environment).to_string()
         });
 
-        let rate_limit =
-            max_requests_per_second.unwrap_or(KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND);
-
         Ok(Self {
             base_url,
             client: HttpClient::new(
                 Self::default_headers(),
                 vec![],
-                Self::rate_limiter_quotas(rate_limit)?,
-                Some(Self::default_quota(rate_limit)?),
-                timeout_secs,
+                Self::rate_limiter_quotas(max_requests_per_second)?,
+                Some(Self::default_quota(max_requests_per_second)?),
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?,
@@ -179,12 +176,12 @@ impl KrakenFuturesRawHttpClient {
         api_secret: String,
         environment: KrakenEnvironment,
         base_url_override: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         max_retries: Option<u32>,
         retry_delay_ms: Option<u64>,
         retry_delay_max_ms: Option<u64>,
         proxy_url: Option<String>,
-        max_requests_per_second: Option<u32>,
+        max_requests_per_second: u32,
     ) -> anyhow::Result<Self> {
         let retry_config = RetryConfig {
             max_retries: max_retries.unwrap_or(3),
@@ -202,17 +199,14 @@ impl KrakenFuturesRawHttpClient {
             get_kraken_http_base_url(KrakenProductType::Futures, environment).to_string()
         });
 
-        let rate_limit =
-            max_requests_per_second.unwrap_or(KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND);
-
         Ok(Self {
             base_url,
             client: HttpClient::new(
                 Self::default_headers(),
                 vec![],
-                Self::rate_limiter_quotas(rate_limit)?,
-                Some(Self::default_quota(rate_limit)?),
-                timeout_secs,
+                Self::rate_limiter_quotas(max_requests_per_second)?,
+                Some(Self::default_quota(max_requests_per_second)?),
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?,
@@ -1000,12 +994,12 @@ impl Default for KrakenFuturesHttpClient {
         Self::new(
             KrakenEnvironment::Mainnet,
             None,
-            Some(60),
+            60,
             None,
             None,
             None,
             None,
-            None,
+            KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND,
         )
         .expect("Failed to create default KrakenFuturesHttpClient")
     }
@@ -1025,12 +1019,12 @@ impl KrakenFuturesHttpClient {
     pub fn new(
         environment: KrakenEnvironment,
         base_url_override: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         max_retries: Option<u32>,
         retry_delay_ms: Option<u64>,
         retry_delay_max_ms: Option<u64>,
         proxy_url: Option<String>,
-        max_requests_per_second: Option<u32>,
+        max_requests_per_second: u32,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             inner: Arc::new(KrakenFuturesRawHttpClient::new(
@@ -1056,12 +1050,12 @@ impl KrakenFuturesHttpClient {
         api_secret: String,
         environment: KrakenEnvironment,
         base_url_override: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         max_retries: Option<u32>,
         retry_delay_ms: Option<u64>,
         retry_delay_max_ms: Option<u64>,
         proxy_url: Option<String>,
-        max_requests_per_second: Option<u32>,
+        max_requests_per_second: u32,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             inner: Arc::new(KrakenFuturesRawHttpClient::with_credentials(
@@ -1092,12 +1086,12 @@ impl KrakenFuturesHttpClient {
     pub fn from_env(
         environment: KrakenEnvironment,
         base_url_override: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         max_retries: Option<u32>,
         retry_delay_ms: Option<u64>,
         retry_delay_max_ms: Option<u64>,
         proxy_url: Option<String>,
-        max_requests_per_second: Option<u32>,
+        max_requests_per_second: u32,
     ) -> anyhow::Result<Self> {
         let demo = environment == KrakenEnvironment::Demo;
 
@@ -2472,12 +2466,12 @@ mod tests {
             "test_secret".to_string(),
             KrakenEnvironment::Mainnet,
             None,
+            60,
             None,
             None,
             None,
             None,
-            None,
-            None,
+            KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND,
         )
         .unwrap();
         assert!(client.credential.is_some());
@@ -2496,12 +2490,12 @@ mod tests {
             "test_secret".to_string(),
             KrakenEnvironment::Mainnet,
             None,
+            60,
             None,
             None,
             None,
             None,
-            None,
-            None,
+            KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND,
         )
         .unwrap();
         assert!(client.instruments_cache.is_empty());

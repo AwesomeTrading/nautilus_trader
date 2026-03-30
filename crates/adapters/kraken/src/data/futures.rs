@@ -62,7 +62,9 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     common::consts::KRAKEN_VENUE,
     config::KrakenDataClientConfig,
-    http::KrakenFuturesHttpClient,
+    http::{
+        KrakenFuturesHttpClient, futures::client::KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND,
+    },
     websocket::futures::{
         client::KrakenFuturesWebSocketClient,
         messages::KrakenFuturesWsMessage,
@@ -102,17 +104,19 @@ impl KrakenFuturesDataClient {
         let http = KrakenFuturesHttpClient::new(
             config.environment,
             config.base_url.clone(),
-            Some(config.timeout_secs),
+            config.timeout_secs,
             None,
             None,
             None,
             config.http_proxy.clone(),
-            config.max_requests_per_second,
+            config
+                .max_requests_per_second
+                .unwrap_or(KRAKEN_FUTURES_DEFAULT_RATE_LIMIT_PER_SECOND),
         )?;
 
         let ws = KrakenFuturesWebSocketClient::new(
             config.ws_public_url(),
-            Some(config.heartbeat_interval_secs),
+            config.heartbeat_interval_secs,
         );
 
         Ok(Self {

@@ -131,12 +131,12 @@ impl BybitWebSocketClient {
     /// Creates a new Bybit public WebSocket client.
     #[staticmethod]
     #[pyo3(name = "new_public")]
-    #[pyo3(signature = (product_type, environment, url=None, heartbeat=None))]
+    #[pyo3(signature = (product_type, environment, url=None, heartbeat=20))]
     fn py_new_public(
         product_type: BybitProductType,
         environment: BybitEnvironment,
         url: Option<String>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
     ) -> Self {
         Self::new_public_with(product_type, environment, url, heartbeat)
     }
@@ -150,13 +150,13 @@ impl BybitWebSocketClient {
     /// - Mainnet: `BYBIT_API_KEY`, `BYBIT_API_SECRET`
     #[staticmethod]
     #[pyo3(name = "new_private")]
-    #[pyo3(signature = (environment, api_key=None, api_secret=None, url=None, heartbeat=None))]
+    #[pyo3(signature = (environment, api_key=None, api_secret=None, url=None, heartbeat=20))]
     fn py_new_private(
         environment: BybitEnvironment,
         api_key: Option<String>,
         api_secret: Option<String>,
         url: Option<String>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
     ) -> Self {
         Self::new_private(environment, api_key, api_secret, url, heartbeat)
     }
@@ -170,13 +170,13 @@ impl BybitWebSocketClient {
     /// - Mainnet: `BYBIT_API_KEY`, `BYBIT_API_SECRET`
     #[staticmethod]
     #[pyo3(name = "new_trade")]
-    #[pyo3(signature = (environment, api_key=None, api_secret=None, url=None, heartbeat=None))]
+    #[pyo3(signature = (environment, api_key=None, api_secret=None, url=None, heartbeat=20))]
     fn py_new_trade(
         environment: BybitEnvironment,
         api_key: Option<String>,
         api_secret: Option<String>,
         url: Option<String>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
     ) -> Self {
         Self::new_trade(environment, api_key, api_secret, url, heartbeat)
     }

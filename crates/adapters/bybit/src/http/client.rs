@@ -145,7 +145,7 @@ pub struct BybitRawHttpClient {
 
 impl Default for BybitRawHttpClient {
     fn default() -> Self {
-        Self::new(None, Some(60), None, None, None, None, None)
+        Self::new(None, 60, 3, 1000, 10_000, DEFAULT_RECV_WINDOW_MS, None)
             .expect("Failed to create default BybitRawHttpClient")
     }
 }
@@ -198,17 +198,17 @@ impl BybitRawHttpClient {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, BybitHttpError> {
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -226,14 +226,14 @@ impl BybitRawHttpClient {
                 vec![],
                 Self::rate_limiter_quotas(),
                 Some(*BYBIT_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| {
                 BybitHttpError::NetworkError(format!("Failed to create HTTP client: {e}"))
             })?,
             credential: None,
-            recv_window_ms: recv_window_ms.unwrap_or(DEFAULT_RECV_WINDOW_MS),
+            recv_window_ms,
             retry_manager,
             cancellation_token: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
         })
@@ -249,17 +249,17 @@ impl BybitRawHttpClient {
         api_key: String,
         api_secret: String,
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, BybitHttpError> {
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -277,14 +277,14 @@ impl BybitRawHttpClient {
                 vec![],
                 Self::rate_limiter_quotas(),
                 Some(*BYBIT_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| {
                 BybitHttpError::NetworkError(format!("Failed to create HTTP client: {e}"))
             })?,
             credential: Some(Credential::new(api_key, api_secret)),
-            recv_window_ms: recv_window_ms.unwrap_or(DEFAULT_RECV_WINDOW_MS),
+            recv_window_ms,
             retry_manager,
             cancellation_token: Arc::new(std::sync::Mutex::new(CancellationToken::new())),
         })
@@ -308,11 +308,11 @@ impl BybitRawHttpClient {
         base_url: Option<String>,
         demo: bool,
         testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, BybitHttpError> {
         let environment = if demo {
@@ -1250,7 +1250,7 @@ impl Clone for BybitHttpClient {
 
 impl Default for BybitHttpClient {
     fn default() -> Self {
-        Self::new(None, Some(60), None, None, None, None, None)
+        Self::new(None, 60, 3, 1000, 10_000, DEFAULT_RECV_WINDOW_MS, None)
             .expect("Failed to create default BybitHttpClient")
     }
 }
@@ -1272,11 +1272,11 @@ impl BybitHttpClient {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, BybitHttpError> {
         Ok(Self {
@@ -1306,11 +1306,11 @@ impl BybitHttpClient {
         api_key: String,
         api_secret: String,
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, BybitHttpError> {
         Ok(Self {
@@ -1351,11 +1351,11 @@ impl BybitHttpClient {
         base_url: Option<String>,
         demo: bool,
         testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, BybitHttpError> {
         let environment = if demo {
@@ -4096,7 +4096,7 @@ mod tests {
 
     #[rstest]
     fn test_client_creation() {
-        let client = BybitHttpClient::new(None, Some(60), None, None, None, None, None);
+        let client = BybitHttpClient::new(None, 60, 3, 1000, 10_000, 5_000, None);
         assert!(client.is_ok());
 
         let client = client.unwrap();
@@ -4110,11 +4110,11 @@ mod tests {
             "test_key".to_string(),
             "test_secret".to_string(),
             Some("https://api-testnet.bybit.com".to_string()),
-            Some(60),
-            None,
-            None,
-            None,
-            None,
+            60,
+            3,
+            1000,
+            10_000,
+            5_000,
             None,
         );
         assert!(client.is_ok());

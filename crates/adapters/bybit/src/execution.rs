@@ -108,11 +108,11 @@ impl BybitExecutionClient {
             api_key.clone(),
             api_secret.clone(),
             Some(config.http_base_url()),
-            Some(config.http_timeout_secs),
-            Some(config.max_retries),
-            Some(config.retry_delay_initial_ms),
-            Some(config.retry_delay_max_ms),
-            Some(config.recv_window_ms),
+            config.http_timeout_secs,
+            config.max_retries,
+            config.retry_delay_initial_ms,
+            config.retry_delay_max_ms,
+            config.recv_window_ms,
             config.http_proxy_url.clone(),
         )?;
 
@@ -121,7 +121,7 @@ impl BybitExecutionClient {
             Some(api_key.clone()),
             Some(api_secret.clone()),
             Some(config.ws_private_url()),
-            Some(config.heartbeat_interval_secs),
+            config.heartbeat_interval_secs,
         );
 
         let ws_trade = BybitWebSocketClient::new_trade(
@@ -129,7 +129,7 @@ impl BybitExecutionClient {
             Some(api_key),
             Some(api_secret),
             Some(config.ws_trade_url()),
-            Some(config.heartbeat_interval_secs),
+            config.heartbeat_interval_secs,
         );
 
         let clock = get_atomic_clock_realtime();

@@ -57,17 +57,14 @@ impl PolymarketGammaRawHttpClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP client cannot be created.
-    pub fn new(
-        base_url: Option<String>,
-        timeout_secs: Option<u64>,
-    ) -> StdResult<Self, HttpClientError> {
+    pub fn new(base_url: Option<String>, timeout_secs: u64) -> StdResult<Self, HttpClientError> {
         Ok(Self {
             client: HttpClient::new(
                 Self::default_headers(),
                 vec![],
                 vec![],
                 Some(*POLYMARKET_GAMMA_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 None,
             )?,
             base_url: base_url
@@ -216,7 +213,7 @@ impl PolymarketGammaHttpClient {
     /// Returns an error if the underlying HTTP client cannot be created.
     pub fn new(
         gamma_base_url: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         retry_config: RetryConfig,
     ) -> StdResult<Self, HttpClientError> {
         Ok(Self {

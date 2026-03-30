@@ -6304,10 +6304,10 @@ class AxHttpClient:
         self,
         base_url: str | None = None,
         orders_base_url: str | None = None,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
+        timeout_secs: int = 60,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
         proxy_url: str | None = None,
     ) -> None: ...
     @staticmethod
@@ -6316,10 +6316,10 @@ class AxHttpClient:
         api_secret: str,
         base_url: str | None = None,
         orders_base_url: str | None = None,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
+        timeout_secs: int = 60,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
         proxy_url: str | None = None,
     ) -> AxHttpClient: ...
     @property
@@ -6397,10 +6397,10 @@ class AxMdWebSocketClient:
         self,
         url: str,
         auth_token: str,
-        heartbeat: int | None = None,
+        heartbeat: int = 30,
     ) -> None: ...
     @staticmethod
-    def without_auth(url: str, heartbeat: int | None = None) -> AxMdWebSocketClient: ...
+    def without_auth(url: str, heartbeat: int = 30) -> AxMdWebSocketClient: ...
     @property
     def url(self) -> str: ...
     def is_active(self) -> bool: ...
@@ -6428,7 +6428,7 @@ class AxOrdersWebSocketClient:
         url: str,
         account_id: AccountId,
         trader_id: TraderId,
-        heartbeat: int | None = None,
+        heartbeat: int = 30,
     ) -> None: ...
     @property
     def url(self) -> str: ...
@@ -6843,11 +6843,11 @@ class BybitRawHttpClient:
         base_url: str | None = None,
         demo: bool = False,
         testnet: bool = False,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
-        recv_window_ms: int | None = None,
+        timeout_secs: int = 60,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
+        recv_window_ms: int = 5_000,
         proxy_url: str | None = None,
     ) -> None: ...
     @property
@@ -6880,11 +6880,11 @@ class BybitHttpClient:
         base_url: str | None = None,
         demo: bool = False,
         testnet: bool = False,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
-        recv_window_ms: int | None = None,
+        timeout_secs: int = 60,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
+        recv_window_ms: int = 5_000,
         proxy_url: str | None = None,
     ) -> None: ...
     @property
@@ -7059,7 +7059,7 @@ class BybitWebSocketClient:
         product_type: BybitProductType,
         environment: BybitEnvironment,
         url: str | None = None,
-        heartbeat: int | None = None,
+        heartbeat: int = 20,
     ) -> BybitWebSocketClient: ...
     @staticmethod
     def new_private(
@@ -7067,7 +7067,7 @@ class BybitWebSocketClient:
         api_key: str | None = None,
         api_secret: str | None = None,
         url: str | None = None,
-        heartbeat: int | None = None,
+        heartbeat: int = 20,
     ) -> BybitWebSocketClient: ...
     @staticmethod
     def new_trade(
@@ -7075,7 +7075,7 @@ class BybitWebSocketClient:
         api_key: str | None = None,
         api_secret: str | None = None,
         url: str | None = None,
-        heartbeat: int | None = None,
+        heartbeat: int = 20,
     ) -> BybitWebSocketClient: ...
     @property
     def api_key_masked(self) -> str | None: ...
@@ -7635,10 +7635,10 @@ class DeribitHttpClient:
         api_secret: str | None = None,
         base_url: str | None = None,
         is_testnet: bool = False,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
+        timeout_secs: int = 10,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
         proxy_url: str | None = None,
     ) -> None: ...
     @property
@@ -7699,7 +7699,7 @@ class DeribitWebSocketClient:
         url: str | None = None,
         api_key: str | None = None,
         api_secret: str | None = None,
-        heartbeat_interval: int | None = None,
+        heartbeat_interval: int = 30,
         is_testnet: bool = False,
     ) -> None: ...
     @staticmethod
@@ -8081,10 +8081,10 @@ class OKXHttpClient:
         api_secret: str | None = None,
         api_passphrase: str | None = None,
         base_url: str | None = None,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
+        timeout_secs: int = 60,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
         is_demo: bool = False,
         proxy_url: str | None = None,
     ) -> None: ...
@@ -8483,13 +8483,13 @@ class BitmexHttpClient:
         api_secret: str | None = None,
         base_url: str | None = None,
         testnet: bool = False,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
-        recv_window_ms: int | None = None,
-        max_requests_per_second: int | None = None,
-        max_requests_per_minute: int | None = None,
+        timeout_secs: int = 60,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1_000,
+        retry_delay_max_ms: int = 10_000,
+        recv_window_ms: int = 10_000,
+        max_requests_per_second: int = 10,
+        max_requests_per_minute: int = 120,
         proxy_url: str | None = None,
     ) -> None: ...
     @staticmethod
@@ -8610,7 +8610,7 @@ class BitmexWebSocketClient:
         api_key: str | None = None,
         api_secret: str | None = None,
         account_id: AccountId | None = None,
-        heartbeat: int | None = None,
+        heartbeat: int = 5,
         testnet: bool = False,
     ) -> None: ...
     @property
@@ -8814,7 +8814,7 @@ class HyperliquidHttpClient:
         vault_address: str | None = None,
         account_address: str | None = None,
         is_testnet: bool = False,
-        timeout_secs: int | None = None,
+        timeout_secs: int = 60,
         proxy_url: str | None = None,
         normalize_prices: bool = True,
     ) -> None: ...
@@ -8825,7 +8825,7 @@ class HyperliquidHttpClient:
         private_key: str,
         vault_address: str | None = None,
         is_testnet: bool = False,
-        timeout_secs: int | None = None,
+        timeout_secs: int = 60,
         proxy_url: str | None = None,
     ) -> HyperliquidHttpClient: ...
     def cache_instrument(self, instrument: Instrument) -> None: ...
@@ -8981,12 +8981,12 @@ class KrakenSpotHttpClient:
         api_secret: str | None = None,
         base_url: str | None = None,
         demo: bool = False,
-        timeout_secs: int | None = None,
+        timeout_secs: int = 60,
         max_retries: int | None = None,
         retry_delay_ms: int | None = None,
         retry_delay_max_ms: int | None = None,
         proxy_url: str | None = None,
-        max_requests_per_second: int | None = None,
+        max_requests_per_second: int = 5,
     ) -> None: ...
     @property
     def base_url(self) -> str: ...
@@ -9082,12 +9082,12 @@ class KrakenFuturesHttpClient:
         api_secret: str | None = None,
         base_url: str | None = None,
         demo: bool = False,
-        timeout_secs: int | None = None,
+        timeout_secs: int = 60,
         max_retries: int | None = None,
         retry_delay_ms: int | None = None,
         retry_delay_max_ms: int | None = None,
         proxy_url: str | None = None,
-        max_requests_per_second: int | None = None,
+        max_requests_per_second: int = 5,
     ) -> None: ...
     @property
     def base_url(self) -> str: ...
@@ -9252,7 +9252,7 @@ class KrakenFuturesWebSocketClient:
         self,
         environment: KrakenEnvironment | None = None,
         base_url: str | None = None,
-        heartbeat_secs: int | None = None,
+        heartbeat_secs: int = 60,
         api_key: str | None = None,
         api_secret: str | None = None,
     ) -> None: ...

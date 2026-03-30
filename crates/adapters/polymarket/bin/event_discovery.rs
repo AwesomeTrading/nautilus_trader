@@ -44,7 +44,7 @@ use nautilus_polymarket::{
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     nautilus_common::logging::ensure_logging_initialized();
 
-    let http_client = PolymarketGammaHttpClient::new(None, None, RetryConfig::default())?;
+    let http_client = PolymarketGammaHttpClient::new(None, 60, RetryConfig::default())?;
     let provider = PolymarketInstrumentProvider::new(http_client.clone());
 
     // ---- Step 1: List available tags ----

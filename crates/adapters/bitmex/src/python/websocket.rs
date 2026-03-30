@@ -100,13 +100,13 @@ impl Debug for PyBitmexWebSocketClient {
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PyBitmexWebSocketClient {
     #[new]
-    #[pyo3(signature = (url=None, api_key=None, api_secret=None, account_id=None, heartbeat=None, testnet=false))]
+    #[pyo3(signature = (url=None, api_key=None, api_secret=None, account_id=None, heartbeat=5, testnet=false))]
     fn py_new(
         url: Option<String>,
         api_key: Option<String>,
         api_secret: Option<String>,
         account_id: Option<AccountId>,
-        heartbeat: Option<u64>,
+        heartbeat: u64,
         testnet: bool,
     ) -> PyResult<Self> {
         let inner = BitmexWebSocketClient::new_with_env(

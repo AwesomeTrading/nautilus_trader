@@ -39,7 +39,9 @@ behavior and Ctrl+C (SIGINT) support.
 
 ## TradingNodeConfig
 
-`TradingNodeConfig` inherits from `NautilusKernelConfig` and adds live-specific options:
+`TradingNodeConfig` inherits from `NautilusKernelConfig` and adds live-specific options.
+For background on how config structs handle defaults and `Option<T>` semantics, see
+the [Configuration](../concepts/configuration.md) concept guide.
 
 ```python
 from nautilus_trader.config import TradingNodeConfig

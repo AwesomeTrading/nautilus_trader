@@ -234,7 +234,7 @@ pub struct OKXRawHttpClient {
 
 impl Default for OKXRawHttpClient {
     fn default() -> Self {
-        Self::new(None, Some(60), None, None, None, false, None)
+        Self::new(None, 60, 3, 1000, 10_000, false, None)
             .expect("Failed to create default OKXRawHttpClient")
     }
 }
@@ -332,17 +332,17 @@ impl OKXRawHttpClient {
     /// Returns an error if the retry manager cannot be created.
     pub fn new(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         is_demo: bool,
         proxy_url: Option<String>,
     ) -> Result<Self, OKXHttpError> {
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -359,7 +359,7 @@ impl OKXRawHttpClient {
                 vec![],
                 Self::rate_limiter_quotas(),
                 Some(*OKX_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| {
@@ -384,17 +384,17 @@ impl OKXRawHttpClient {
         api_secret: String,
         api_passphrase: String,
         base_url: String,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         is_demo: bool,
         proxy_url: Option<String>,
     ) -> Result<Self, OKXHttpError> {
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -411,7 +411,7 @@ impl OKXRawHttpClient {
                 vec![],
                 Self::rate_limiter_quotas(),
                 Some(*OKX_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| {
@@ -1146,7 +1146,7 @@ impl Clone for OKXHttpClient {
 
 impl Default for OKXHttpClient {
     fn default() -> Self {
-        Self::new(None, Some(60), None, None, None, false, None)
+        Self::new(None, 60, 3, 1000, 10_000, false, None)
             .expect("Failed to create default OKXHttpClient")
     }
 }
@@ -1163,10 +1163,10 @@ impl OKXHttpClient {
     /// Returns an error if the retry manager cannot be created.
     pub fn new(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         is_demo: bool,
         proxy_url: Option<String>,
     ) -> anyhow::Result<Self> {
@@ -1198,7 +1198,7 @@ impl OKXHttpClient {
     ///
     /// Returns an error if the operation fails.
     pub fn from_env() -> anyhow::Result<Self> {
-        Self::with_credentials(None, None, None, None, None, None, None, None, false, None)
+        Self::with_credentials(None, None, None, None, 60, 3, 1000, 10_000, false, None)
     }
 
     /// Creates a new [`OKXHttpClient`] configured with credentials
@@ -1213,10 +1213,10 @@ impl OKXHttpClient {
         api_secret: Option<String>,
         api_passphrase: Option<String>,
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         is_demo: bool,
         proxy_url: Option<String>,
     ) -> anyhow::Result<Self> {

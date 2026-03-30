@@ -70,11 +70,11 @@ use crate::{
 impl KrakenFuturesWebSocketClient {
     /// WebSocket client for the Kraken Futures v1 streaming API.
     #[new]
-    #[pyo3(signature = (environment=None, base_url=None, heartbeat_secs=None, api_key=None, api_secret=None))]
+    #[pyo3(signature = (environment=None, base_url=None, heartbeat_secs=60, api_key=None, api_secret=None))]
     fn py_new(
         environment: Option<KrakenEnvironment>,
         base_url: Option<String>,
-        heartbeat_secs: Option<u64>,
+        heartbeat_secs: u64,
         api_key: Option<String>,
         api_secret: Option<String>,
     ) -> Self {

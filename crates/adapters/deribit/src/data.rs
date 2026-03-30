@@ -111,20 +111,20 @@ impl DeribitDataClient {
                 config.api_secret.clone(),
                 config.base_url_http.clone(),
                 config.use_testnet,
-                Some(config.http_timeout_secs),
-                Some(config.max_retries),
-                Some(config.retry_delay_initial_ms),
-                Some(config.retry_delay_max_ms),
+                config.http_timeout_secs,
+                config.max_retries,
+                config.retry_delay_initial_ms,
+                config.retry_delay_max_ms,
                 None, // proxy_url
             )?
         } else {
             DeribitHttpClient::new(
                 config.base_url_http.clone(),
                 config.use_testnet,
-                Some(config.http_timeout_secs),
-                Some(config.max_retries),
-                Some(config.retry_delay_initial_ms),
-                Some(config.retry_delay_max_ms),
+                config.http_timeout_secs,
+                config.max_retries,
+                config.retry_delay_initial_ms,
+                config.retry_delay_max_ms,
                 None, // proxy_url
             )?
         };
@@ -133,7 +133,7 @@ impl DeribitDataClient {
             Some(config.ws_url()),
             config.api_key.clone(),
             config.api_secret.clone(),
-            Some(config.heartbeat_interval_secs),
+            config.heartbeat_interval_secs,
             config.use_testnet,
         )?;
 

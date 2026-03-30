@@ -37,7 +37,7 @@ def get_cached_hyperliquid_http_client(
     private_key: str | None = None,
     vault_address: str | None = None,
     account_address: str | None = None,
-    timeout_secs: int = 10,
+    timeout_secs: int | None = None,
     testnet: bool = False,
     proxy_url: str | None = None,
     normalize_prices: bool = True,
@@ -62,7 +62,7 @@ def get_cached_hyperliquid_http_client(
     account_address : str, optional
         The main account address when using an agent wallet (API sub-key).
         If ``None`` then will source the `HYPERLIQUID_ACCOUNT_ADDRESS` env var.
-    timeout_secs : int, default 10
+    timeout_secs : int, optional
         The timeout (seconds) for HTTP requests to Hyperliquid.
     testnet : bool, default False
         If the client is connecting to the testnet API.
@@ -77,15 +77,19 @@ def get_cached_hyperliquid_http_client(
         The Hyperliquid HTTP client instance.
 
     """
-    return nautilus_pyo3.HyperliquidHttpClient(
-        private_key=private_key,
-        vault_address=vault_address,
-        account_address=account_address,
-        is_testnet=testnet,
-        timeout_secs=timeout_secs,
-        proxy_url=proxy_url,
-        normalize_prices=normalize_prices,
-    )
+    kwargs: dict = {
+        "private_key": private_key,
+        "vault_address": vault_address,
+        "account_address": account_address,
+        "is_testnet": testnet,
+        "proxy_url": proxy_url,
+        "normalize_prices": normalize_prices,
+    }
+
+    if timeout_secs is not None:
+        kwargs["timeout_secs"] = timeout_secs
+
+    return nautilus_pyo3.HyperliquidHttpClient(**kwargs)
 
 
 @lru_cache(1)

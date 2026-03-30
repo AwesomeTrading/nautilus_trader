@@ -42,13 +42,13 @@ impl HyperliquidHttpClient {
     /// with Nautilus domain types. It maintains an instrument cache and handles conversions
     /// between Hyperliquid API responses and Nautilus domain models.
     #[new]
-    #[pyo3(signature = (private_key=None, vault_address=None, account_address=None, is_testnet=false, timeout_secs=None, proxy_url=None, normalize_prices=true))]
+    #[pyo3(signature = (private_key=None, vault_address=None, account_address=None, is_testnet=false, timeout_secs=60, proxy_url=None, normalize_prices=true))]
     fn py_new(
         private_key: Option<String>,
         vault_address: Option<String>,
         account_address: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
         normalize_prices: bool,
     ) -> PyResult<Self> {
@@ -78,12 +78,12 @@ impl HyperliquidHttpClient {
 
     /// Creates a new `HyperliquidHttpClient` configured with explicit credentials.
     #[staticmethod]
-    #[pyo3(name = "from_credentials", signature = (private_key, vault_address=None, is_testnet=false, timeout_secs=None, proxy_url=None))]
+    #[pyo3(name = "from_credentials", signature = (private_key, vault_address=None, is_testnet=false, timeout_secs=60, proxy_url=None))]
     fn py_from_credentials(
         private_key: &str,
         vault_address: Option<&str>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> PyResult<Self> {
         Self::from_credentials(

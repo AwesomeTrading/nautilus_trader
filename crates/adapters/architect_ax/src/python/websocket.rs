@@ -87,8 +87,8 @@ impl Debug for PyAxMdWebSocketClient {
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PyAxMdWebSocketClient {
     #[new]
-    #[pyo3(signature = (url, auth_token, heartbeat=None))]
-    fn py_new(url: String, auth_token: String, heartbeat: Option<u64>) -> Self {
+    #[pyo3(signature = (url, auth_token, heartbeat=30))]
+    fn py_new(url: String, auth_token: String, heartbeat: u64) -> Self {
         Self {
             inner: AxMdWebSocketClient::new(url, auth_token, heartbeat),
             instruments_cache: Arc::new(AtomicMap::new()),
@@ -97,8 +97,8 @@ impl PyAxMdWebSocketClient {
 
     #[staticmethod]
     #[pyo3(name = "without_auth")]
-    #[pyo3(signature = (url, heartbeat=None))]
-    fn py_without_auth(url: String, heartbeat: Option<u64>) -> Self {
+    #[pyo3(signature = (url, heartbeat=30))]
+    fn py_without_auth(url: String, heartbeat: u64) -> Self {
         Self {
             inner: AxMdWebSocketClient::without_auth(url, heartbeat),
             instruments_cache: Arc::new(AtomicMap::new()),
@@ -384,13 +384,8 @@ impl Debug for PyAxOrdersWebSocketClient {
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PyAxOrdersWebSocketClient {
     #[new]
-    #[pyo3(signature = (url, account_id, trader_id, heartbeat=None))]
-    fn py_new(
-        url: String,
-        account_id: AccountId,
-        trader_id: TraderId,
-        heartbeat: Option<u64>,
-    ) -> Self {
+    #[pyo3(signature = (url, account_id, trader_id, heartbeat=30))]
+    fn py_new(url: String, account_id: AccountId, trader_id: TraderId, heartbeat: u64) -> Self {
         Self {
             inner: AxOrdersWebSocketClient::new(url, account_id, trader_id, heartbeat),
         }

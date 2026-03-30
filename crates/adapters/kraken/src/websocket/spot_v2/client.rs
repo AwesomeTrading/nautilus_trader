@@ -52,8 +52,10 @@ use super::{
     messages::{KrakenSpotWsMessage, KrakenWsParams, KrakenWsRequest},
 };
 use crate::{
-    common::parse::normalize_spot_symbol, config::KrakenDataClientConfig,
-    http::KrakenSpotHttpClient, websocket::error::KrakenWsError,
+    common::parse::normalize_spot_symbol,
+    config::KrakenDataClientConfig,
+    http::{KrakenSpotHttpClient, spot::client::KRAKEN_SPOT_DEFAULT_RATE_LIMIT_PER_SECOND},
+    websocket::error::KrakenWsError,
 };
 
 const WS_PING_MSG: &str = r#"{"method":"ping"}"#;
@@ -414,12 +416,14 @@ impl KrakenSpotWebSocketClient {
             api_secret,
             self.config.environment,
             Some(self.config.http_base_url()),
-            Some(self.config.timeout_secs),
+            self.config.timeout_secs,
             None,
             None,
             None,
             self.config.http_proxy.clone(),
-            self.config.max_requests_per_second,
+            self.config
+                .max_requests_per_second
+                .unwrap_or(KRAKEN_SPOT_DEFAULT_RATE_LIMIT_PER_SECOND),
         )
         .map_err(|e| {
             KrakenWsError::AuthenticationError(format!("Failed to create HTTP client: {e}"))
@@ -1028,12 +1032,14 @@ async fn refresh_auth_token(config: &KrakenDataClientConfig) -> Result<String, K
         api_secret,
         config.environment,
         Some(config.http_base_url()),
-        Some(config.timeout_secs),
+        config.timeout_secs,
         None,
         None,
         None,
         config.http_proxy.clone(),
-        config.max_requests_per_second,
+        config
+            .max_requests_per_second
+            .unwrap_or(KRAKEN_SPOT_DEFAULT_RATE_LIMIT_PER_SECOND),
     )
     .map_err(|e| {
         KrakenWsError::AuthenticationError(format!("Failed to create HTTP client: {e}"))

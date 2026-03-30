@@ -49,10 +49,7 @@ impl PolymarketDataApiHttpClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP client cannot be created.
-    pub fn new(
-        base_url: Option<String>,
-        timeout_secs: Option<u64>,
-    ) -> StdResult<Self, HttpClientError> {
+    pub fn new(base_url: Option<String>, timeout_secs: u64) -> StdResult<Self, HttpClientError> {
         Ok(Self {
             client: HttpClient::new(
                 HashMap::from([
@@ -62,7 +59,7 @@ impl PolymarketDataApiHttpClient {
                 vec![],
                 vec![],
                 None,
-                timeout_secs,
+                Some(timeout_secs),
                 None,
             )?,
             base_url: base_url

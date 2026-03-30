@@ -99,7 +99,7 @@ impl PolymarketClobHttpClient {
         credential: Credential,
         address: String,
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
     ) -> StdResult<Self, HttpClientError> {
         Ok(Self {
             client: HttpClient::new(
@@ -107,7 +107,7 @@ impl PolymarketClobHttpClient {
                 vec![],
                 vec![],
                 Some(*POLYMARKET_CLOB_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 None,
             )?,
             base_url: base_url
@@ -458,10 +458,7 @@ impl PolymarketClobPublicClient {
     /// # Errors
     ///
     /// Returns an error if the HTTP client cannot be created.
-    pub fn new(
-        base_url: Option<String>,
-        timeout_secs: Option<u64>,
-    ) -> StdResult<Self, HttpClientError> {
+    pub fn new(base_url: Option<String>, timeout_secs: u64) -> StdResult<Self, HttpClientError> {
         Ok(Self {
             client: HttpClient::new(
                 HashMap::from([
@@ -471,7 +468,7 @@ impl PolymarketClobPublicClient {
                 vec![],
                 vec![],
                 Some(*POLYMARKET_CLOB_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 None,
             )?,
             base_url: base_url

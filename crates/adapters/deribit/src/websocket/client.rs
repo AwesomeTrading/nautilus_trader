@@ -137,7 +137,7 @@ impl DeribitWebSocketClient {
         url: Option<String>,
         api_key: Option<String>,
         api_secret: Option<String>,
-        heartbeat_interval: Option<u64>,
+        heartbeat_interval: u64,
         is_testnet: bool,
     ) -> anyhow::Result<Self> {
         Self::new_inner(
@@ -155,7 +155,7 @@ impl DeribitWebSocketClient {
         url: Option<String>,
         api_key: Option<String>,
         api_secret: Option<String>,
-        heartbeat_interval: Option<u64>,
+        heartbeat_interval: u64,
         is_testnet: bool,
         env_fallback: bool,
     ) -> anyhow::Result<Self> {
@@ -183,7 +183,7 @@ impl DeribitWebSocketClient {
         Ok(Self {
             url,
             is_testnet,
-            heartbeat_interval,
+            heartbeat_interval: Some(heartbeat_interval),
             credential,
             auth_state: Arc::new(tokio::sync::RwLock::new(None)),
             signal,
@@ -217,12 +217,11 @@ impl DeribitWebSocketClient {
     ///
     /// Returns an error if initialization fails.
     pub fn new_public(is_testnet: bool) -> anyhow::Result<Self> {
-        let heartbeat_interval = DERIBIT_WS_HEARTBEAT_SECS;
         Self::new_inner(
             None,
             None,
             None,
-            Some(heartbeat_interval),
+            DERIBIT_WS_HEARTBEAT_SECS,
             is_testnet,
             false,
         )
@@ -238,7 +237,7 @@ impl DeribitWebSocketClient {
     /// Returns an error if initialization fails.
     pub fn new_unauthenticated(
         url: Option<String>,
-        heartbeat_interval: Option<u64>,
+        heartbeat_interval: u64,
         is_testnet: bool,
     ) -> anyhow::Result<Self> {
         Self::new_inner(url, None, None, heartbeat_interval, is_testnet, false)
@@ -265,12 +264,11 @@ impl DeribitWebSocketClient {
         let api_secret = get_or_env_var_opt(None, secret_env)
             .ok_or_else(|| anyhow::anyhow!("Missing environment variable: {secret_env}"))?;
 
-        let heartbeat_interval = DERIBIT_WS_HEARTBEAT_SECS;
         Self::new(
             None,
             Some(api_key),
             Some(api_secret),
-            Some(heartbeat_interval),
+            DERIBIT_WS_HEARTBEAT_SECS,
             is_testnet,
         )
     }

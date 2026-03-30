@@ -244,6 +244,8 @@ to these defaults when unset.
 Expose typed config structs in `src/config.rs` so Python callers toggle venue-specific behaviour
 (see how OKX wires demo URLs, retries, and channel flags).
 Keep defaults minimal and delegate URL selection to helpers in `common::urls`.
+For the user-facing design rationale, see the [Configuration](../concepts/configuration.md)
+concept guide.
 
 #### Builder and Default
 

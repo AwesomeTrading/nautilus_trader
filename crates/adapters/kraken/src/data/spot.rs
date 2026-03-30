@@ -64,7 +64,7 @@ type OhlcBuffer = Arc<Mutex<AHashMap<OhlcBufferKey, (Bar, UnixNanos)>>>;
 use crate::{
     common::consts::KRAKEN_VENUE,
     config::KrakenDataClientConfig,
-    http::KrakenSpotHttpClient,
+    http::{KrakenSpotHttpClient, spot::client::KRAKEN_SPOT_DEFAULT_RATE_LIMIT_PER_SECOND},
     websocket::spot_v2::{
         client::KrakenSpotWebSocketClient,
         messages::KrakenSpotWsMessage,
@@ -98,12 +98,14 @@ impl KrakenSpotDataClient {
         let http = KrakenSpotHttpClient::new(
             config.environment,
             config.base_url.clone(),
-            Some(config.timeout_secs),
+            config.timeout_secs,
             None,
             None,
             None,
             config.http_proxy.clone(),
-            config.max_requests_per_second,
+            config
+                .max_requests_per_second
+                .unwrap_or(KRAKEN_SPOT_DEFAULT_RATE_LIMIT_PER_SECOND),
         )?;
 
         let ws = KrakenSpotWebSocketClient::new(config.clone(), cancellation_token.clone());

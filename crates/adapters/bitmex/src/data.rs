@@ -115,13 +115,13 @@ impl BitmexDataClient {
             config.api_key.clone(),
             config.api_secret.clone(),
             config.use_testnet,
-            Some(config.http_timeout_secs),
-            Some(config.max_retries),
-            Some(config.retry_delay_initial_ms),
-            Some(config.retry_delay_max_ms),
-            Some(config.recv_window_ms),
-            Some(config.max_requests_per_second),
-            Some(config.max_requests_per_minute),
+            config.http_timeout_secs,
+            config.max_retries,
+            config.retry_delay_initial_ms,
+            config.retry_delay_max_ms,
+            config.recv_window_ms,
+            config.max_requests_per_second,
+            config.max_requests_per_minute,
             config.http_proxy_url.clone(),
         )
         .context("failed to construct BitMEX HTTP client")?;
@@ -638,7 +638,7 @@ impl DataClient for BitmexDataClient {
                 self.config.api_key.clone(),
                 self.config.api_secret.clone(),
                 None,
-                self.config.heartbeat_interval_secs,
+                self.config.heartbeat_interval_secs.unwrap_or(5),
                 self.config.use_testnet,
             )
             .context("failed to construct BitMEX websocket client")?;

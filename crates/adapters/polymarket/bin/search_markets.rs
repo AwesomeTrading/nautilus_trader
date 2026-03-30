@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "bitcoin".to_string());
 
-    let http_client = PolymarketGammaHttpClient::new(None, None, RetryConfig::default())?;
+    let http_client = PolymarketGammaHttpClient::new(None, 60, RetryConfig::default())?;
 
     let filter = SearchFilter::from_query(&query);
     let mut provider = PolymarketInstrumentProvider::with_filter(http_client, Arc::new(filter));

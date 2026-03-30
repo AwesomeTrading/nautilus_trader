@@ -190,18 +190,18 @@ impl DeribitRawHttpClient {
     pub fn new(
         base_url: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, DeribitHttpError> {
         let base_url = base_url
             .unwrap_or_else(|| format!("{}{}", get_http_base_url(is_testnet), DERIBIT_API_PATH));
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -218,7 +218,7 @@ impl DeribitRawHttpClient {
                 Vec::new(),
                 Self::rate_limiter_quotas(),
                 Some(*DERIBIT_HTTP_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?,
@@ -325,18 +325,18 @@ impl DeribitRawHttpClient {
         api_secret: String,
         base_url: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, DeribitHttpError> {
         let base_url = base_url
             .unwrap_or_else(|| format!("{}{}", get_http_base_url(is_testnet), DERIBIT_API_PATH));
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -354,7 +354,7 @@ impl DeribitRawHttpClient {
                 Vec::new(),
                 Self::rate_limiter_quotas(),
                 Some(*DERIBIT_HTTP_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| anyhow::anyhow!("Failed to create HTTP client: {e}"))?,
@@ -382,10 +382,10 @@ impl DeribitRawHttpClient {
         api_secret: Option<String>,
         base_url: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, DeribitHttpError> {
         // Determine environment variable names based on environment
@@ -892,10 +892,10 @@ impl DeribitHttpClient {
     pub fn new(
         base_url: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> anyhow::Result<Self> {
         let raw_client = Arc::new(DeribitRawHttpClient::new(
@@ -933,10 +933,10 @@ impl DeribitHttpClient {
         api_secret: Option<String>,
         base_url: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> anyhow::Result<Self> {
         let raw_client = Arc::new(DeribitRawHttpClient::new_with_env(

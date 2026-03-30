@@ -107,13 +107,13 @@ impl HyperliquidDataClient {
             let secrets = Secrets::resolve(config.private_key.as_deref(), None, config.is_testnet)?;
             HyperliquidHttpClient::with_secrets(
                 &secrets,
-                Some(config.http_timeout_secs),
+                config.http_timeout_secs,
                 config.http_proxy_url.clone(),
             )?
         } else {
             HyperliquidHttpClient::new(
                 config.is_testnet,
-                Some(config.http_timeout_secs),
+                config.http_timeout_secs,
                 config.http_proxy_url.clone(),
             )?
         };

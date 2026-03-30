@@ -70,7 +70,7 @@ fn build_updown_slugs() -> Vec<String> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     nautilus_common::logging::ensure_logging_initialized();
 
-    let http_client = PolymarketGammaHttpClient::new(None, None, RetryConfig::default())?;
+    let http_client = PolymarketGammaHttpClient::new(None, 60, RetryConfig::default())?;
     let filter = MarketSlugFilter::new(build_updown_slugs);
     let mut provider = PolymarketInstrumentProvider::with_filter(http_client, Arc::new(filter));
     provider.load_all(None).await?;

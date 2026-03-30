@@ -134,7 +134,7 @@ impl PolymarketExecutionClient {
             secrets.credential.clone(),
             secrets.address.clone(),
             config.base_url_http.clone(),
-            Some(config.http_timeout_secs),
+            config.http_timeout_secs,
         )
         .map_err(|e| anyhow::anyhow!("{e}"))
         .context("failed to create CLOB HTTP client")?;

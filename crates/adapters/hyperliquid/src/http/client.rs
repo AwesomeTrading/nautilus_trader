@@ -140,7 +140,7 @@ impl HyperliquidRawHttpClient {
     /// Returns an error if the HTTP client cannot be created.
     pub fn new(
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> std::result::Result<Self, HttpClientError> {
         Ok(Self {
@@ -149,7 +149,7 @@ impl HyperliquidRawHttpClient {
                 vec![],
                 vec![],
                 Some(*HYPERLIQUID_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )?,
             is_testnet,
@@ -173,7 +173,7 @@ impl HyperliquidRawHttpClient {
     /// Returns an error if the HTTP client cannot be created.
     pub fn with_credentials(
         secrets: &Secrets,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> std::result::Result<Self, HttpClientError> {
         let signer = HyperliquidEip712Signer::new(secrets.private_key.clone());
@@ -185,7 +185,7 @@ impl HyperliquidRawHttpClient {
                 vec![],
                 vec![],
                 Some(*HYPERLIQUID_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )?,
             is_testnet: secrets.is_testnet,
@@ -219,7 +219,7 @@ impl HyperliquidRawHttpClient {
     pub fn from_env(is_testnet: bool) -> Result<Self> {
         let secrets = Secrets::from_env(is_testnet)
             .map_err(|e| Error::auth(format!("missing credentials in environment: {e}")))?;
-        Self::with_credentials(&secrets, None, None)
+        Self::with_credentials(&secrets, 60, None)
             .map_err(|e| Error::auth(format!("Failed to create HTTP client: {e}")))
     }
 
@@ -232,7 +232,7 @@ impl HyperliquidRawHttpClient {
         private_key: &str,
         vault_address: Option<&str>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> Result<Self> {
         let secrets = Secrets::from_private_key(private_key, vault_address, is_testnet)
@@ -775,7 +775,7 @@ pub struct HyperliquidHttpClient {
 
 impl Default for HyperliquidHttpClient {
     fn default() -> Self {
-        Self::new(true, None, None).expect("Failed to create default Hyperliquid HTTP client")
+        Self::new(true, 60, None).expect("Failed to create default Hyperliquid HTTP client")
     }
 }
 
@@ -787,7 +787,7 @@ impl HyperliquidHttpClient {
     /// Returns an error if the HTTP client cannot be created.
     pub fn new(
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> std::result::Result<Self, HttpClientError> {
         let raw_client = HyperliquidRawHttpClient::new(is_testnet, timeout_secs, proxy_url)?;
@@ -801,7 +801,7 @@ impl HyperliquidHttpClient {
     /// Returns an error if the HTTP client cannot be created.
     pub fn with_secrets(
         secrets: &Secrets,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> std::result::Result<Self, HttpClientError> {
         let raw_client =
@@ -882,7 +882,7 @@ impl HyperliquidHttpClient {
         vault_address: Option<String>,
         account_address: Option<String>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> Result<Self> {
         // Determine which env vars to use based on is_testnet
@@ -953,7 +953,7 @@ impl HyperliquidHttpClient {
         private_key: &str,
         vault_address: Option<&str>,
         is_testnet: bool,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
     ) -> Result<Self> {
         let raw_client = HyperliquidRawHttpClient::from_credentials(
@@ -2454,7 +2454,7 @@ mod tests {
 
     #[rstest]
     fn test_cache_instrument_by_raw_symbol() {
-        let client = HyperliquidHttpClient::new(true, None, None).unwrap();
+        let client = HyperliquidHttpClient::new(true, 60, None).unwrap();
 
         // Create a test instrument with base currency "vntls:vCURSOR"
         let base_code = "vntls:vCURSOR";

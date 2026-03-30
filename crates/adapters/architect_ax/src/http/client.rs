@@ -107,7 +107,7 @@ pub struct AxRawHttpClient {
 
 impl Default for AxRawHttpClient {
     fn default() -> Self {
-        Self::new(None, None, Some(60), None, None, None, None)
+        Self::new(None, None, 60, 3, 1000, 10_000, None)
             .expect("Failed to create default AxRawHttpClient")
     }
 }
@@ -181,16 +181,16 @@ impl AxRawHttpClient {
     pub fn new(
         base_url: Option<String>,
         orders_base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, AxHttpError> {
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -208,7 +208,7 @@ impl AxRawHttpClient {
                 vec![],
                 Self::rate_limiter_quotas(),
                 Some(*AX_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| AxHttpError::NetworkError(format!("Failed to create HTTP client: {e}")))?,
@@ -230,16 +230,16 @@ impl AxRawHttpClient {
         api_secret: String,
         base_url: Option<String>,
         orders_base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, AxHttpError> {
         let retry_config = RetryConfig {
-            max_retries: max_retries.unwrap_or(3),
-            initial_delay_ms: retry_delay_ms.unwrap_or(1000),
-            max_delay_ms: retry_delay_max_ms.unwrap_or(10_000),
+            max_retries,
+            initial_delay_ms: retry_delay_ms,
+            max_delay_ms: retry_delay_max_ms,
             backoff_factor: 2.0,
             jitter_ms: 1000,
             operation_timeout_ms: Some(60_000),
@@ -257,7 +257,7 @@ impl AxRawHttpClient {
                 vec![],
                 Self::rate_limiter_quotas(),
                 Some(*AX_REST_QUOTA),
-                timeout_secs,
+                Some(timeout_secs),
                 proxy_url,
             )
             .map_err(|e| AxHttpError::NetworkError(format!("Failed to create HTTP client: {e}")))?,
@@ -1073,7 +1073,7 @@ impl Clone for AxHttpClient {
 
 impl Default for AxHttpClient {
     fn default() -> Self {
-        Self::new(None, None, None, None, None, None, None)
+        Self::new(None, None, 60, 3, 1000, 10_000, None)
             .expect("Failed to create default AxHttpClient")
     }
 }
@@ -1088,10 +1088,10 @@ impl AxHttpClient {
     pub fn new(
         base_url: Option<String>,
         orders_base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, AxHttpError> {
         Ok(Self {
@@ -1121,10 +1121,10 @@ impl AxHttpClient {
         api_secret: String,
         base_url: Option<String>,
         orders_base_url: Option<String>,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
         proxy_url: Option<String>,
     ) -> Result<Self, AxHttpError> {
         Ok(Self {

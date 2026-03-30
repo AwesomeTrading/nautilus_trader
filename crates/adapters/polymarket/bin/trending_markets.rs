@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     log::info!("Creating HTTP client");
-    let http_client = PolymarketGammaHttpClient::new(None, None, RetryConfig::default())?;
+    let http_client = PolymarketGammaHttpClient::new(None, 60, RetryConfig::default())?;
 
     log::info!("Building filter and provider");
     let filter = GammaQueryFilter::new(params);

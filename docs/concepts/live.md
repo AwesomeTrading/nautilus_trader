@@ -10,6 +10,8 @@ between backtesting and live trading.**
 
 ## Configuration
 
+For how config structs handle defaults, `T` vs `Option<T>` semantics, and
+builder patterns, see the [Configuration](configuration.md) concept guide.
 For step-by-step setup of `TradingNodeConfig`, execution engine options, strategy
 configuration, and multi-venue wiring, see the
 [Configure a live trading node](../how_to/configure_live_trading.md) how-to guide.

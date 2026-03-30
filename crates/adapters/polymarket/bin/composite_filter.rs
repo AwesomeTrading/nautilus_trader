@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let predicate = PredicateFilter::outcome("Yes");
 
-    let http_client = PolymarketGammaHttpClient::new(None, None, RetryConfig::default())?;
+    let http_client = PolymarketGammaHttpClient::new(None, 60, RetryConfig::default())?;
     let mut provider = PolymarketInstrumentProvider::with_filters(
         http_client,
         vec![Arc::new(event_query), Arc::new(predicate)],

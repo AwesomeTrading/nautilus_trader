@@ -104,6 +104,11 @@ Running simulated trading on historical data using a specific system implementat
 Interactive tearsheets for analyzing backtest results, including charts, themes,
 customization options, and custom visualizations via the extensible chart registry.
 
+## Configuration
+
+How config structs work across Python and Rust: default resolution, the `T` vs `Option<T>`
+convention, builder patterns, and common fields shared across adapters and engines.
+
 ## Live trading
 
 Deploying backtested strategies in real-time without code changes, and the key differences

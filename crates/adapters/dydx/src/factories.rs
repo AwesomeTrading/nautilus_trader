@@ -120,7 +120,7 @@ impl DataClientFactory for DydxDataClientFactory {
 
         let http_client = DydxHttpClient::new(
             Some(http_url),
-            Some(dydx_config.http_timeout_secs),
+            dydx_config.http_timeout_secs,
             dydx_config.http_proxy_url.clone(),
             dydx_config.is_testnet,
             retry_config,

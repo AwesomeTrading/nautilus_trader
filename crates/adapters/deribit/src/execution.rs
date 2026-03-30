@@ -86,20 +86,20 @@ impl DeribitExecutionClient {
                 config.api_secret.clone(),
                 config.base_url_http.clone(),
                 config.use_testnet,
-                Some(config.http_timeout_secs),
-                Some(config.max_retries),
-                Some(config.retry_delay_initial_ms),
-                Some(config.retry_delay_max_ms),
+                config.http_timeout_secs,
+                config.max_retries,
+                config.retry_delay_initial_ms,
+                config.retry_delay_max_ms,
                 None, // proxy_url
             )?
         } else {
             DeribitHttpClient::new(
                 config.base_url_http.clone(),
                 config.use_testnet,
-                Some(config.http_timeout_secs),
-                Some(config.max_retries),
-                Some(config.retry_delay_initial_ms),
-                Some(config.retry_delay_max_ms),
+                config.http_timeout_secs,
+                config.max_retries,
+                config.retry_delay_initial_ms,
+                config.retry_delay_max_ms,
                 None, // proxy_url
             )?
         };
@@ -108,7 +108,7 @@ impl DeribitExecutionClient {
             config.base_url_ws.clone(),
             config.api_key.clone(),
             config.api_secret.clone(),
-            Some(DERIBIT_WS_HEARTBEAT_SECS),
+            DERIBIT_WS_HEARTBEAT_SECS,
             config.use_testnet,
         )
         .context("failed to create WebSocket client for execution")?;
