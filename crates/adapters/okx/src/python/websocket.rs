@@ -1435,6 +1435,7 @@ fn handle_book_data(
 ) {
     let Some(inst_id) = inst_id else { return };
     let Some(instrument) = instruments_by_symbol.get(&inst_id) else {
+        log::warn!("No cached instrument for book data: {inst_id}");
         return;
     };
     let ts_init = clock.get_time_ns();
@@ -1535,6 +1536,7 @@ fn handle_channel_data(
     }
 
     let Some(instrument) = instruments_by_symbol.get(&inst_id) else {
+        log::warn!("No cached instrument for {channel:?}: {inst_id}");
         return;
     };
     let instrument_id = instrument.id();
