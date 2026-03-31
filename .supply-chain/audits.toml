@@ -159,6 +159,30 @@ criteria = "safe-to-deploy"
 delta = "0.43.0 -> 0.44.0"
 notes = "Adds optional progress field (Option<u8>) to BatchJob response struct"
 
+[[audits.databento]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.44.0 -> 0.45.0"
+notes = "Adds HeartbeatTimeout error variant with tokio::time timeout on next_record/fill_buf, SlowReaderBehavior::Skip sends 'skip' instead of 'drop'"
+
+[[audits.dbn]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.51.0 -> 0.52.1"
+notes = "Venue/publisher renames (Nasdaq BX -> Nasdaq Texas), __index__ methods on PyO3 enums, removes dict from pyclass attrs"
+
+[[audits.dbn-macros]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.51.0 -> 0.52.1"
+notes = "Version bump only"
+
+[[audits.hyper]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.8.1 -> 1.9.0"
+notes = "Bug fixes, refactoring (StepArgs struct, case-insensitive trailers, HashSet), new H2 stream count APIs, FFI null-ptr validation. No new unsafe."
+
 [[audits.hypersync-client]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
@@ -205,6 +229,12 @@ who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "0.103.9 -> 0.103.10"
 notes = "CRL authoritative_for() fix for multiple distribution point URIs, Rust 1.94 import compatibility. No new unsafe or dependency changes."
+
+[[audits.serde_spanned]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.1.0 -> 1.1.1"
+notes = "Version bump only: serde_core dep 1.0.225 -> 1.0.228"
 
 [[audits.sysinfo]]
 who = "Nautech Systems <info@nautechsystems.io>"

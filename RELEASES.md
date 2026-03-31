@@ -258,7 +258,7 @@ Released on TBD (UTC).
 - Upgraded Rust (MSRV) to 1.94.1
 - Upgraded `capnp` crate to v0.25.3
 - Upgraded `capnpc` crate to v0.25.2 (regenerated schemas with 4-space indents and version headers)
-- Upgraded `databento` crate to v0.44.0
+- Upgraded `databento` crate to v0.45.0
 - Upgraded `datafusion` crate to v53.0.0
 - Upgraded `redis` crate to v1.1.0
 - Upgraded `tokio` crate to v1.50.0
