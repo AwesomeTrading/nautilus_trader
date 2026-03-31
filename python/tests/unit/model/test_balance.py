@@ -13,7 +13,6 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-import pytest
 
 from nautilus_trader.model import AccountBalance
 from nautilus_trader.model import Currency
@@ -92,7 +91,6 @@ def test_margin_balance_to_from_dict():
     }
 
 
-@pytest.mark.xfail(reason="pyo3 AccountBalance missing __hash__")
 def test_account_balance_hash():
     b1 = _account_balance()
     b2 = _account_balance()
@@ -100,7 +98,6 @@ def test_account_balance_hash():
     assert hash(b1) == hash(b2)
 
 
-@pytest.mark.xfail(reason="pyo3 AccountBalance missing __hash__")
 def test_account_balance_hash_differs():
     b1 = _account_balance()
     b2 = AccountBalance(
@@ -112,7 +109,6 @@ def test_account_balance_hash_differs():
     assert hash(b1) != hash(b2)
 
 
-@pytest.mark.xfail(reason="pyo3 MarginBalance missing __hash__")
 def test_margin_balance_hash():
     m1 = _margin_balance()
     m2 = _margin_balance()
@@ -120,7 +116,6 @@ def test_margin_balance_hash():
     assert hash(m1) == hash(m2)
 
 
-@pytest.mark.xfail(reason="pyo3 AccountBalance missing copy")
 def test_account_balance_copy():
     bal = _account_balance()
     copy = bal.copy()
@@ -129,7 +124,6 @@ def test_account_balance_copy():
     assert copy is not bal
 
 
-@pytest.mark.xfail(reason="pyo3 MarginBalance missing copy")
 def test_margin_balance_copy():
     bal = _margin_balance()
     copy = bal.copy()

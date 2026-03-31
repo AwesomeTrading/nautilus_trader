@@ -15,8 +15,6 @@
 
 from decimal import Decimal
 
-import pytest
-
 from nautilus_trader.model import DataType
 from nautilus_trader.model import FundingRateUpdate
 from nautilus_trader.model import InstrumentClose
@@ -34,7 +32,6 @@ def test_data_type_construction():
     assert dt.metadata == {"instrument_id": "AUD/USD.SIM"}
 
 
-@pytest.mark.xfail(reason="pyo3 DataType equality not implemented")
 def test_data_type_equality():
     dt1 = DataType("QuoteTick", metadata={"instrument_id": "AUD/USD.SIM"})
     dt2 = DataType("QuoteTick", metadata={"instrument_id": "AUD/USD.SIM"})
@@ -44,7 +41,6 @@ def test_data_type_equality():
     assert dt1 != dt3
 
 
-@pytest.mark.xfail(reason="pyo3 DataType hash not stable")
 def test_data_type_hash():
     dt1 = DataType("QuoteTick", metadata={"instrument_id": "AUD/USD.SIM"})
     dt2 = DataType("QuoteTick", metadata={"instrument_id": "AUD/USD.SIM"})

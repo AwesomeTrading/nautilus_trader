@@ -776,7 +776,6 @@ def test_different_instruments_have_different_hashes():
         ("ethusdt_binance", "CurrencyPair", "ETHUSDT.BINANCE"),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 instruments missing __repr__")
 def test_instrument_repr(factory, expected_type_name, expected_id_substr):
     instrument = getattr(TestInstrumentProvider, factory)()
     r = repr(instrument)
@@ -817,7 +816,6 @@ def test_crypto_perpetual_roundtrip_all_fields():
     assert restored.size_increment == original.size_increment
 
 
-@pytest.mark.xfail(reason="pyo3 instruments missing make_price")
 def test_make_price_uses_instrument_precision():
     audusd = TestInstrumentProvider.audusd_sim()
     price = audusd.make_price(1.234567890)
@@ -826,7 +824,6 @@ def test_make_price_uses_instrument_precision():
     assert price == Price.from_str("1.23457")
 
 
-@pytest.mark.xfail(reason="pyo3 instruments missing make_qty")
 def test_make_qty_uses_instrument_precision():
     audusd = TestInstrumentProvider.audusd_sim()
     qty = audusd.make_qty(1000)
@@ -835,7 +832,6 @@ def test_make_qty_uses_instrument_precision():
     assert qty == Quantity.from_int(1000)
 
 
-@pytest.mark.xfail(reason="pyo3 instruments missing make_qty")
 def test_make_qty_round_down():
     ethusdt = TestInstrumentProvider.ethusdt_binance()
     qty = ethusdt.make_qty(1.999999, round_down=True)
@@ -844,7 +840,6 @@ def test_make_qty_round_down():
     assert qty == Quantity.from_str("1.99999")
 
 
-@pytest.mark.xfail(reason="pyo3 instruments missing notional_value")
 def test_notional_value_currency_pair():
     audusd = TestInstrumentProvider.audusd_sim()
     notional = audusd.notional_value(

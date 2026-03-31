@@ -389,7 +389,6 @@ def test_bar_from_dict_roundtrip(audusd_1_min_bid):
     assert restored == bar
 
 
-@pytest.mark.xfail(reason="pyo3 BarSpecification does not support pickle yet")
 def test_bar_spec_pickle_roundtrip():
     spec = BarSpecification(1, BarAggregation.MINUTE, PriceType.BID)
     restored = pickle.loads(pickle.dumps(spec))  # noqa: S301
@@ -417,7 +416,6 @@ def test_bar_spec_pickle_roundtrip():
         (BarAggregation.TICK_RUNS, False),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing is_time_aggregated")
 def test_bar_spec_is_time_aggregated(aggregation, expected):
     spec = BarSpecification(1, aggregation, PriceType.LAST)
     assert spec.is_time_aggregated() == expected
@@ -427,14 +425,15 @@ def test_bar_spec_is_time_aggregated(aggregation, expected):
     ("aggregation", "expected"),
     [
         (BarAggregation.TICK, True),
+        (BarAggregation.TICK_IMBALANCE, True),
         (BarAggregation.VOLUME, True),
+        (BarAggregation.VOLUME_IMBALANCE, True),
         (BarAggregation.VALUE, True),
+        (BarAggregation.VALUE_IMBALANCE, True),
         (BarAggregation.MINUTE, False),
-        (BarAggregation.TICK_IMBALANCE, False),
         (BarAggregation.TICK_RUNS, False),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing is_threshold_aggregated")
 def test_bar_spec_is_threshold_aggregated(aggregation, expected):
     spec = BarSpecification(1, aggregation, PriceType.LAST)
     assert spec.is_threshold_aggregated() == expected
@@ -443,18 +442,15 @@ def test_bar_spec_is_threshold_aggregated(aggregation, expected):
 @pytest.mark.parametrize(
     ("aggregation", "expected"),
     [
-        (BarAggregation.TICK_IMBALANCE, True),
         (BarAggregation.TICK_RUNS, True),
-        (BarAggregation.VOLUME_IMBALANCE, True),
         (BarAggregation.VOLUME_RUNS, True),
-        (BarAggregation.VALUE_IMBALANCE, True),
         (BarAggregation.VALUE_RUNS, True),
         (BarAggregation.MINUTE, False),
         (BarAggregation.TICK, False),
         (BarAggregation.VOLUME, False),
+        (BarAggregation.TICK_IMBALANCE, False),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing is_information_aggregated")
 def test_bar_spec_is_information_aggregated(aggregation, expected):
     spec = BarSpecification(1, aggregation, PriceType.LAST)
     assert spec.is_information_aggregated() == expected
@@ -470,13 +466,11 @@ def test_bar_spec_is_information_aggregated(aggregation, expected):
         (1, BarAggregation.DAY, 86_400_000_000_000),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing get_interval_ns")
 def test_bar_spec_get_interval_ns(step, aggregation, expected_ns):
     spec = BarSpecification(step, aggregation, PriceType.LAST)
     assert spec.get_interval_ns() == expected_ns
 
 
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing from_timedelta")
 def test_bar_spec_from_timedelta():
     spec = BarSpecification.from_timedelta(timedelta(minutes=5), PriceType.MID)
 
@@ -494,7 +488,6 @@ def test_bar_spec_from_timedelta():
         (timedelta(days=1), 1, BarAggregation.DAY),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing from_timedelta")
 def test_bar_spec_from_timedelta_various(duration, expected_step, expected_agg):
     spec = BarSpecification.from_timedelta(duration, PriceType.LAST)
 
@@ -511,7 +504,6 @@ def test_bar_spec_from_timedelta_various(duration, expected_step, expected_agg):
         (BarAggregation.VOLUME, False),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing check_time_aggregated")
 def test_bar_spec_check_time_aggregated(aggregation, expected):
     assert BarSpecification.check_time_aggregated(aggregation) == expected
 
@@ -525,7 +517,6 @@ def test_bar_spec_check_time_aggregated(aggregation, expected):
         (BarAggregation.MINUTE, False),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing check_threshold_aggregated")
 def test_bar_spec_check_threshold_aggregated(aggregation, expected):
     assert BarSpecification.check_threshold_aggregated(aggregation) == expected
 
@@ -540,12 +531,10 @@ def test_bar_spec_check_threshold_aggregated(aggregation, expected):
         (BarAggregation.MINUTE, False),
     ],
 )
-@pytest.mark.xfail(reason="pyo3 BarSpecification missing check_information_aggregated")
 def test_bar_spec_check_information_aggregated(aggregation, expected):
     assert BarSpecification.check_information_aggregated(aggregation) == expected
 
 
-@pytest.mark.xfail(reason="pyo3 BarType does not support pickle yet")
 def test_bar_type_pickle_roundtrip(audusd_id, one_min_bid):
     bar_type = BarType(audusd_id, one_min_bid)
     restored = pickle.loads(pickle.dumps(bar_type))  # noqa: S301
@@ -556,7 +545,6 @@ def test_bar_type_pickle_roundtrip(audusd_id, one_min_bid):
     assert restored.spec == one_min_bid
 
 
-@pytest.mark.xfail(reason="pyo3 BarType does not support pickle yet")
 def test_bar_type_composite_pickle_roundtrip():
     bar_type = BarType.from_str(
         "BTCUSDT-PERP.BINANCE-2-MINUTE-LAST-INTERNAL@1-MINUTE-EXTERNAL",
@@ -582,7 +570,6 @@ def test_bar_type_is_composite_from_str():
     assert bar_type.is_standard() is False
 
 
-@pytest.mark.xfail(reason="pyo3 BarType missing is_externally_aggregated")
 def test_bar_type_is_externally_aggregated(audusd_id, one_min_bid):
     external = BarType(audusd_id, one_min_bid, AggregationSource.EXTERNAL)
     internal = BarType(audusd_id, one_min_bid, AggregationSource.INTERNAL)
@@ -635,7 +622,6 @@ def test_bar_type_new_composite(audusd_id):
     assert bar_type.composite().spec.step == 1
 
 
-@pytest.mark.xfail(reason="pyo3 Bar does not support pickle yet")
 def test_bar_pickle_roundtrip(audusd_1_min_bid):
     bar = Bar(
         bar_type=audusd_1_min_bid,
@@ -661,7 +647,6 @@ def test_bar_pickle_roundtrip(audusd_1_min_bid):
     assert restored.ts_init == 2
 
 
-@pytest.mark.xfail(reason="pyo3 Bar does not support pickle yet")
 def test_bar_pickle_composite_bar_type():
     bar_type = BarType.from_str(
         "BTCUSDT-PERP.BINANCE-2-MINUTE-LAST-INTERNAL@1-MINUTE-EXTERNAL",

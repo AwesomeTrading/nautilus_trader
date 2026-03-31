@@ -90,7 +90,6 @@ def test_book_order_signed_size():
     assert sell.signed_size() == pytest.approx(-10.0)
 
 
-@pytest.mark.xfail(reason="pyo3 BookOrder does not support pickle yet")
 def test_book_order_pickle_roundtrip(bid_order):
     restored = pickle.loads(pickle.dumps(bid_order))  # noqa: S301
 
@@ -149,7 +148,6 @@ def test_order_book_delta_repr(delta):
     assert "AUD/USD.SIM" in r
 
 
-@pytest.mark.xfail(reason="pyo3 OrderBookDelta does not support pickle yet")
 def test_order_book_delta_pickle_roundtrip(delta):
     restored = pickle.loads(pickle.dumps(delta))  # noqa: S301
 
@@ -198,7 +196,6 @@ def test_order_book_deltas_construction(audusd_id, bid_order, ask_order):
     assert deltas.deltas[1].action == BookAction.ADD
 
 
-@pytest.mark.xfail(reason="pyo3 OrderBookDeltas does not support pickle yet")
 def test_order_book_deltas_pickle_roundtrip(audusd_id, bid_order, ask_order):
     d1 = OrderBookDelta(audusd_id, BookAction.ADD, bid_order, 0, 1, 0, 0)
     d2 = OrderBookDelta(audusd_id, BookAction.ADD, ask_order, 0, 2, 0, 0)
