@@ -146,3 +146,25 @@ def test_trade_from_dict_roundtrip(audusd_id):
     restored = TradeTick.from_dict(trade.to_dict())
 
     assert restored == trade
+
+
+@pytest.mark.xfail(reason="pyo3 TradeTick missing from_raw")
+def test_trade_from_raw(audusd_id):
+    trade = TradeTick.from_raw(
+        instrument_id=audusd_id,
+        price_raw=1_000_010_000_000_000,
+        price_prec=5,
+        size_raw=10_000_000_000_000_000_000,
+        size_prec=0,
+        aggressor_side=AggressorSide.BUYER,
+        trade_id=TradeId("RAW-001"),
+        ts_event=1,
+        ts_init=2,
+    )
+
+    assert trade.instrument_id == audusd_id
+    assert trade.price == Price.from_str("1.00001")
+    assert trade.aggressor_side == AggressorSide.BUYER
+    assert trade.trade_id == TradeId("RAW-001")
+    assert trade.ts_event == 1
+    assert trade.ts_init == 2

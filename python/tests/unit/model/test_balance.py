@@ -13,6 +13,8 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+import pytest
+
 from nautilus_trader.model import AccountBalance
 from nautilus_trader.model import Currency
 from nautilus_trader.model import InstrumentId
@@ -88,3 +90,59 @@ def test_margin_balance_to_from_dict():
         "instrument_id": "AUD/USD.SIM",
         "currency": "USD",
     }
+
+
+@pytest.mark.xfail(reason="pyo3 AccountBalance missing __hash__")
+def test_account_balance_hash():
+    b1 = _account_balance()
+    b2 = _account_balance()
+
+    assert hash(b1) == hash(b2)
+
+
+@pytest.mark.xfail(reason="pyo3 AccountBalance missing __hash__")
+def test_account_balance_hash_differs():
+    b1 = _account_balance()
+    b2 = AccountBalance(
+        total=Money(100.00, USD),
+        locked=Money(0.00, USD),
+        free=Money(100.00, USD),
+    )
+
+    assert hash(b1) != hash(b2)
+
+
+@pytest.mark.xfail(reason="pyo3 MarginBalance missing __hash__")
+def test_margin_balance_hash():
+    m1 = _margin_balance()
+    m2 = _margin_balance()
+
+    assert hash(m1) == hash(m2)
+
+
+@pytest.mark.xfail(reason="pyo3 AccountBalance missing copy")
+def test_account_balance_copy():
+    bal = _account_balance()
+    copy = bal.copy()
+
+    assert copy == bal
+    assert copy is not bal
+
+
+@pytest.mark.xfail(reason="pyo3 MarginBalance missing copy")
+def test_margin_balance_copy():
+    bal = _margin_balance()
+    copy = bal.copy()
+
+    assert copy == bal
+    assert copy is not bal
+
+
+def test_account_balance_not_equal_to_none():
+    bal = _account_balance()
+    assert (bal == None) is False  # noqa: E711
+
+
+def test_margin_balance_not_equal_to_none():
+    bal = _margin_balance()
+    assert (bal == None) is False  # noqa: E711

@@ -161,6 +161,7 @@ pub fn model(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Orders
     m.add_class::<crate::orders::LimitOrder>()?;
     m.add_class::<crate::orders::LimitIfTouchedOrder>()?;
+    m.add_class::<crate::orders::MarketIfTouchedOrder>()?;
     m.add_class::<crate::orders::MarketOrder>()?;
     m.add_class::<crate::orders::MarketToLimitOrder>()?;
     m.add_class::<crate::orders::StopLimitOrder>()?;

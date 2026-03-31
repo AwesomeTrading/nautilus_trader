@@ -159,3 +159,25 @@ def test_quote_from_dict_roundtrip(audusd_id):
     restored = QuoteTick.from_dict(quote.to_dict())
 
     assert restored == quote
+
+
+def test_quote_from_raw(audusd_id):
+    quote = QuoteTick.from_raw(
+        instrument_id=audusd_id,
+        bid_price_raw=10_000_000_000_000_000,
+        ask_price_raw=10_000_100_000_000_000,
+        bid_price_prec=5,
+        ask_price_prec=5,
+        bid_size_raw=5_000_000_000_000_000_000_000,
+        ask_size_raw=8_000_000_000_000_000_000_000,
+        bid_size_prec=0,
+        ask_size_prec=0,
+        ts_event=1,
+        ts_init=2,
+    )
+
+    assert quote.instrument_id == audusd_id
+    assert quote.bid_price == Price.from_str("1.00000")
+    assert quote.ask_price == Price.from_str("1.00001")
+    assert quote.ts_event == 1
+    assert quote.ts_init == 2

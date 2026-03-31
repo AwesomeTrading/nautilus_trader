@@ -15,12 +15,15 @@
 
 from decimal import Decimal
 
+import pytest
+
 from nautilus_trader.model import AssetClass
 from nautilus_trader.model import BettingInstrument
 from nautilus_trader.model import BinaryOption
 from nautilus_trader.model import Cfd
 from nautilus_trader.model import Commodity
 from nautilus_trader.model import CryptoFuture
+from nautilus_trader.model import CryptoOption
 from nautilus_trader.model import CryptoPerpetual
 from nautilus_trader.model import Currency
 from nautilus_trader.model import CurrencyPair
@@ -677,3 +680,177 @@ def test_betting_instrument_construction_and_roundtrip():
     assert restored.id == bi.id
     assert restored.market_type == bi.market_type
     assert restored.selection_name == bi.selection_name
+
+
+def test_crypto_option_construction():
+    co = CryptoOption(
+        instrument_id=InstrumentId(Symbol("BTC-20240329-50000-C"), Venue("DERIBIT")),
+        raw_symbol=Symbol("BTC-20240329-50000-C"),
+        underlying=Currency.from_str("BTC"),
+        quote_currency=Currency.from_str("USD"),
+        settlement_currency=Currency.from_str("BTC"),
+        is_inverse=False,
+        option_kind=OptionKind.CALL,
+        strike_price=Price.from_str("50000.0"),
+        activation_ns=1640390400000000000,
+        expiration_ns=1711670400000000000,
+        price_precision=4,
+        size_precision=1,
+        price_increment=Price.from_str("0.0001"),
+        size_increment=Quantity.from_str("0.1"),
+        ts_event=0,
+        ts_init=0,
+    )
+
+    assert co.id == InstrumentId(Symbol("BTC-20240329-50000-C"), Venue("DERIBIT"))
+    assert co.type_name == "CryptoOption"
+    assert co.option_kind == OptionKind.CALL
+    assert co.strike_price == Price.from_str("50000.0")
+    assert co.is_inverse is False
+    assert co.price_precision == 4
+    assert co.size_precision == 1
+
+
+def test_crypto_option_to_dict_and_from_dict_roundtrip():
+    co = CryptoOption(
+        instrument_id=InstrumentId(Symbol("BTC-20240329-50000-C"), Venue("DERIBIT")),
+        raw_symbol=Symbol("BTC-20240329-50000-C"),
+        underlying=Currency.from_str("BTC"),
+        quote_currency=Currency.from_str("USD"),
+        settlement_currency=Currency.from_str("BTC"),
+        is_inverse=False,
+        option_kind=OptionKind.CALL,
+        strike_price=Price.from_str("50000.0"),
+        activation_ns=1640390400000000000,
+        expiration_ns=1711670400000000000,
+        price_precision=4,
+        size_precision=1,
+        price_increment=Price.from_str("0.0001"),
+        size_increment=Quantity.from_str("0.1"),
+        ts_event=0,
+        ts_init=0,
+    )
+
+    d = co.to_dict()
+    restored = CryptoOption.from_dict(d)
+
+    assert restored.id == co.id
+    assert restored.option_kind == co.option_kind
+    assert restored.strike_price == co.strike_price
+    assert restored.is_inverse == co.is_inverse
+
+
+def test_instruments_equal_by_id():
+    audusd1 = TestInstrumentProvider.audusd_sim()
+    audusd2 = TestInstrumentProvider.audusd_sim()
+    btcusdt = TestInstrumentProvider.btcusdt_binance()
+
+    assert audusd1 == audusd2
+    assert audusd1 != btcusdt
+
+
+def test_instrument_not_equal_to_none():
+    audusd = TestInstrumentProvider.audusd_sim()
+    assert (audusd == None) is False  # noqa: E711
+
+
+def test_equal_instruments_have_equal_hashes():
+    audusd1 = TestInstrumentProvider.audusd_sim()
+    audusd2 = TestInstrumentProvider.audusd_sim()
+
+    assert hash(audusd1) == hash(audusd2)
+
+
+def test_different_instruments_have_different_hashes():
+    audusd = TestInstrumentProvider.audusd_sim()
+    btcusdt = TestInstrumentProvider.btcusdt_binance()
+
+    assert hash(audusd) != hash(btcusdt)
+
+
+@pytest.mark.parametrize(
+    ("factory", "expected_type_name", "expected_id_substr"),
+    [
+        ("audusd_sim", "CurrencyPair", "AUD/USD.SIM"),
+        ("btcusdt_perp_binance", "CryptoPerpetual", "BTCUSDT-PERP.BINANCE"),
+        ("ethusdt_binance", "CurrencyPair", "ETHUSDT.BINANCE"),
+    ],
+)
+@pytest.mark.xfail(reason="pyo3 instruments missing __repr__")
+def test_instrument_repr(factory, expected_type_name, expected_id_substr):
+    instrument = getattr(TestInstrumentProvider, factory)()
+    r = repr(instrument)
+
+    assert r.startswith(expected_type_name + "(")
+    assert expected_id_substr in r
+
+
+def test_currency_pair_roundtrip_all_fields():
+    original = TestInstrumentProvider.audusd_sim()
+    restored = CurrencyPair.from_dict(original.to_dict())
+
+    assert restored == original
+    assert restored.base_currency == original.base_currency
+    assert restored.quote_currency == original.quote_currency
+    assert restored.price_precision == original.price_precision
+    assert restored.size_precision == original.size_precision
+    assert restored.price_increment == original.price_increment
+    assert restored.size_increment == original.size_increment
+    assert restored.lot_size == original.lot_size
+    assert restored.margin_init == original.margin_init
+    assert restored.margin_maint == original.margin_maint
+    assert restored.maker_fee == original.maker_fee
+    assert restored.taker_fee == original.taker_fee
+
+
+def test_crypto_perpetual_roundtrip_all_fields():
+    original = TestInstrumentProvider.btcusdt_perp_binance()
+    restored = CryptoPerpetual.from_dict(original.to_dict())
+
+    assert restored == original
+    assert restored.base_currency == original.base_currency
+    assert restored.settlement_currency == original.settlement_currency
+    assert restored.is_inverse == original.is_inverse
+    assert restored.price_precision == original.price_precision
+    assert restored.size_precision == original.size_precision
+    assert restored.price_increment == original.price_increment
+    assert restored.size_increment == original.size_increment
+
+
+@pytest.mark.xfail(reason="pyo3 instruments missing make_price")
+def test_make_price_uses_instrument_precision():
+    audusd = TestInstrumentProvider.audusd_sim()
+    price = audusd.make_price(1.234567890)
+
+    assert price.precision == audusd.price_precision
+    assert price == Price.from_str("1.23457")
+
+
+@pytest.mark.xfail(reason="pyo3 instruments missing make_qty")
+def test_make_qty_uses_instrument_precision():
+    audusd = TestInstrumentProvider.audusd_sim()
+    qty = audusd.make_qty(1000)
+
+    assert qty.precision == audusd.size_precision
+    assert qty == Quantity.from_int(1000)
+
+
+@pytest.mark.xfail(reason="pyo3 instruments missing make_qty")
+def test_make_qty_round_down():
+    ethusdt = TestInstrumentProvider.ethusdt_binance()
+    qty = ethusdt.make_qty(1.999999, round_down=True)
+
+    assert qty.precision == ethusdt.size_precision
+    assert qty == Quantity.from_str("1.99999")
+
+
+@pytest.mark.xfail(reason="pyo3 instruments missing notional_value")
+def test_notional_value_currency_pair():
+    audusd = TestInstrumentProvider.audusd_sim()
+    notional = audusd.notional_value(
+        quantity=Quantity.from_str("100000"),
+        price=Price.from_str("0.75000"),
+    )
+
+    assert notional.currency == audusd.quote_currency
+    assert notional.as_double() == pytest.approx(75_000.0)
