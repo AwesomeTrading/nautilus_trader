@@ -59,7 +59,9 @@ use ustr::Ustr;
 
 use crate::{
     common::{
-        consts::{OKX_VENUE, resolve_book_depth},
+        consts::{
+            OKX_VENUE, OKX_WS_HEARTBEAT_SECS, resolve_book_depth, resolve_instrument_families,
+        },
         enums::{
             OKXBookChannel, OKXContractType, OKXInstrumentStatus, OKXInstrumentType, OKXVipLevel,
         },
@@ -142,7 +144,7 @@ impl OKXDataClient {
             None,
             None,
             None,
-            Some(20), // Heartbeat
+            Some(OKX_WS_HEARTBEAT_SECS),
             None,
         )
         .context("failed to construct OKX public websocket client")?;
@@ -155,7 +157,7 @@ impl OKXDataClient {
                     None,
                     None,
                     None,
-                    Some(20), // Heartbeat
+                    Some(OKX_WS_HEARTBEAT_SECS),
                     None,
                 )
                 .context("failed to construct OKX business websocket client")?,
@@ -670,18 +672,10 @@ impl DataClient for OKXDataClient {
         let mut all_instruments = Vec::new();
 
         for inst_type in &instrument_types {
-            let families: Vec<String> = match (&self.config.instrument_families, inst_type) {
-                (Some(families), OKXInstrumentType::Option) => families.clone(),
-                (Some(families), OKXInstrumentType::Futures | OKXInstrumentType::Swap) => {
-                    families.clone()
-                }
-                (None, OKXInstrumentType::Option) => {
-                    log::warn!(
-                        "Skipping OPTION type: instrument_families required but not configured"
-                    );
-                    continue;
-                }
-                _ => vec![],
+            let Some(families) =
+                resolve_instrument_families(&self.config.instrument_families, *inst_type)
+            else {
+                continue;
             };
 
             if families.is_empty() {
@@ -1349,23 +1343,10 @@ impl DataClient for OKXDataClient {
             let mut all_instruments = Vec::new();
 
             for inst_type in instrument_types {
-                let supports_family = matches!(
-                    inst_type,
-                    OKXInstrumentType::Futures
-                        | OKXInstrumentType::Swap
-                        | OKXInstrumentType::Option
-                );
-
-                let families = match (&instrument_families, inst_type, supports_family) {
-                    (Some(families), OKXInstrumentType::Option, true) => families.clone(),
-                    (Some(families), _, true) => families.clone(),
-                    (None, OKXInstrumentType::Option, _) => {
-                        log::warn!(
-                            "Skipping OPTION type: instrument_families required but not configured"
-                        );
-                        continue;
-                    }
-                    _ => vec![],
+                let Some(families) =
+                    resolve_instrument_families(&instrument_families, inst_type)
+                else {
+                    continue;
                 };
 
                 if families.is_empty() {

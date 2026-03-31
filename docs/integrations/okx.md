@@ -135,6 +135,14 @@ A: Check the `contract_types` parameter in the configuration:
 Below are the order types, execution instructions, and time-in-force options supported
 for linear perpetual swap products on OKX.
 
+### WebSocket order identification
+
+OKX WebSocket order operations use `instIdCode` (a numeric instrument identifier)
+instead of the string `instId` parameter. The adapter resolves `instIdCode` values
+from the instrument definitions fetched during startup and caches them for the
+session lifetime. If the instrument cache is empty (e.g. because of a failed
+bootstrap), order submissions fail with a clear error.
+
 ### Client order ID requirements
 
 :::note

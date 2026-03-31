@@ -69,6 +69,7 @@ use ustr::Ustr;
 use super::{extract_optional_string, extract_optional_trigger_type};
 use crate::{
     common::{
+        consts::{OKX_FIELD_CLORDID, OKX_FIELD_SCODE, OKX_FIELD_SMSG, OKX_SUCCESS_CODE},
         enums::{OKXBookAction, OKXInstrumentStatus, OKXInstrumentType, OKXTradeMode, OKXVipLevel},
         models::OKXInstrument,
         parse::{
@@ -1787,11 +1788,20 @@ fn handle_order_response(
     callback: &Py<PyAny>,
 ) {
     for item in data {
-        let s_code = item.get("sCode").and_then(|v| v.as_str()).unwrap_or("");
-        let s_msg = item.get("sMsg").and_then(|v| v.as_str()).unwrap_or("");
-        let cl_ord_id = item.get("clOrdId").and_then(|v| v.as_str()).unwrap_or("");
+        let s_code = item
+            .get(OKX_FIELD_SCODE)
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let s_msg = item
+            .get(OKX_FIELD_SMSG)
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let cl_ord_id = item
+            .get(OKX_FIELD_CLORDID)
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
-        if s_code == "0" {
+        if s_code == OKX_SUCCESS_CODE {
             log::debug!("Order response ok: op={op:?} cl_ord_id={cl_ord_id}");
             match op {
                 OKXWsOperation::Order | OKXWsOperation::BatchOrders => {

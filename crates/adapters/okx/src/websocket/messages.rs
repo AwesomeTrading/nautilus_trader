@@ -1181,12 +1181,8 @@ pub struct WsPostOrderParams {
     #[builder(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inst_type: Option<OKXInstrumentType>,
-    /// Instrument ID, e.g. "BTC-USDT".
-    pub inst_id: Ustr,
-    /// Instrument ID code (numeric). Required for WebSocket order operations per OKX deprecation.
-    #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inst_id_code: Option<u64>,
+    /// Instrument ID code (numeric). Replaced `instId` for WebSocket order operations.
+    pub inst_id_code: u64,
     /// Trading mode: cash, isolated, cross.
     pub td_mode: OKXTradeMode,
     /// Margin currency (only for isolated margin).
@@ -1248,11 +1244,8 @@ pub struct WsPostOrderParams {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "camelCase")]
 pub struct WsCancelOrderParams {
-    /// Instrument ID, e.g. "BTC-USDT".
-    pub inst_id: Ustr,
-    /// Instrument ID code (numeric). Required for WebSocket order operations per OKX deprecation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inst_id_code: Option<u64>,
+    /// Instrument ID code (numeric). Replaced `instId` for WebSocket order operations.
+    pub inst_id_code: u64,
     /// Exchange-assigned order ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ord_id: Option<String>,
@@ -1279,11 +1272,8 @@ pub struct WsMassCancelParams {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "camelCase")]
 pub struct WsAmendOrderParams {
-    /// Instrument ID, e.g. "BTC-USDT".
-    pub inst_id: Ustr,
-    /// Instrument ID code (numeric). Required for WebSocket order operations per OKX deprecation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inst_id_code: Option<u64>,
+    /// Instrument ID code (numeric). Replaced `instId` for WebSocket order operations.
+    pub inst_id_code: u64,
     /// Exchange-assigned order ID (optional if using clOrdId).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ord_id: Option<String>,
@@ -1313,12 +1303,8 @@ pub struct WsAmendOrderParams {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "camelCase")]
 pub struct WsPostAlgoOrderParams {
-    /// Instrument ID, e.g. "BTC-USDT".
-    pub inst_id: Ustr,
-    /// Instrument ID code (numeric). Required for WebSocket order operations per OKX deprecation.
-    #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inst_id_code: Option<u64>,
+    /// Instrument ID code (numeric). Replaced `instId` for WebSocket order operations.
+    pub inst_id_code: u64,
     /// Trading mode: cash, isolated, cross.
     pub td_mode: OKXTradeMode,
     /// Order side: buy or sell.
@@ -1373,12 +1359,8 @@ pub struct WsPostAlgoOrderParams {
 #[builder(setter(into, strip_option))]
 #[serde(rename_all = "camelCase")]
 pub struct WsCancelAlgoOrderParams {
-    /// Instrument ID, e.g. "BTC-USDT".
-    pub inst_id: Ustr,
-    /// Instrument ID code (numeric). Required for WebSocket order operations per OKX deprecation.
-    #[builder(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inst_id_code: Option<u64>,
+    /// Instrument ID code (numeric). Replaced `instId` for WebSocket order operations.
+    pub inst_id_code: u64,
     /// Algo order ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub algo_id: Option<String>,
@@ -2051,12 +2033,11 @@ mod tests {
     }
 
     #[rstest]
-    fn test_ws_post_order_params_with_inst_id_code() {
+    fn test_ws_post_order_params_serializes_inst_id_code() {
         use super::WsPostOrderParamsBuilder;
         use crate::common::enums::{OKXOrderType, OKXSide, OKXTradeMode};
 
         let params = WsPostOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USDT-SWAP"))
             .inst_id_code(10459u64)
             .td_mode(OKXTradeMode::Cross)
             .side(OKXSide::Buy)
@@ -2068,30 +2049,8 @@ mod tests {
 
         let json = serde_json::to_string(&params).unwrap();
 
-        // Verify instIdCode is serialized correctly
         assert!(json.contains("\"instIdCode\":10459"));
-        assert!(json.contains("\"instId\":\"BTC-USDT-SWAP\""));
-    }
-
-    #[rstest]
-    fn test_ws_post_order_params_without_inst_id_code() {
-        use super::WsPostOrderParamsBuilder;
-        use crate::common::enums::{OKXOrderType, OKXSide, OKXTradeMode};
-
-        let params = WsPostOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USDT"))
-            .td_mode(OKXTradeMode::Cash)
-            .side(OKXSide::Buy)
-            .ord_type(OKXOrderType::Market)
-            .sz("0.01".to_string())
-            .build()
-            .unwrap();
-
-        let json = serde_json::to_string(&params).unwrap();
-
-        // Verify instIdCode is NOT included when None
-        assert!(!json.contains("instIdCode"));
-        assert!(json.contains("\"instId\":\"BTC-USDT\""));
+        assert!(!json.contains("\"instId\""));
     }
 
     #[rstest]
@@ -2100,7 +2059,6 @@ mod tests {
         use crate::common::enums::{OKXOrderType, OKXSide, OKXTradeMode, OKXTriggerType};
 
         let params = WsPostOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USDT-SWAP"))
             .inst_id_code(10459u64)
             .td_mode(OKXTradeMode::Cross)
             .side(OKXSide::Buy)
@@ -2138,11 +2096,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_ws_cancel_order_params_with_inst_id_code() {
+    fn test_ws_cancel_order_params_serializes_inst_id_code() {
         use super::WsCancelOrderParamsBuilder;
 
         let params = WsCancelOrderParamsBuilder::default()
-            .inst_id(Ustr::from("ETH-USDT-SWAP"))
             .inst_id_code(10461u64)
             .ord_id("12345678".to_string())
             .build()
@@ -2151,16 +2108,15 @@ mod tests {
         let json = serde_json::to_string(&params).unwrap();
 
         assert!(json.contains("\"instIdCode\":10461"));
-        assert!(json.contains("\"instId\":\"ETH-USDT-SWAP\""));
+        assert!(!json.contains("\"instId\""));
         assert!(json.contains("\"ordId\":\"12345678\""));
     }
 
     #[rstest]
-    fn test_ws_amend_order_params_with_inst_id_code() {
+    fn test_ws_amend_order_params_serializes_inst_id_code() {
         use super::WsAmendOrderParamsBuilder;
 
         let params = WsAmendOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USDT-SWAP"))
             .inst_id_code(10459u64)
             .cl_ord_id("client123".to_string())
             .new_px("51000".to_string())
@@ -2170,17 +2126,16 @@ mod tests {
         let json = serde_json::to_string(&params).unwrap();
 
         assert!(json.contains("\"instIdCode\":10459"));
-        assert!(json.contains("\"instId\":\"BTC-USDT-SWAP\""));
+        assert!(!json.contains("\"instId\""));
         assert!(json.contains("\"newPx\":\"51000\""));
     }
 
     #[rstest]
-    fn test_ws_post_algo_order_params_with_inst_id_code() {
+    fn test_ws_post_algo_order_params_serializes_inst_id_code() {
         use super::WsPostAlgoOrderParamsBuilder;
         use crate::common::enums::{OKXAlgoOrderType, OKXSide, OKXTradeMode, OKXTriggerType};
 
         let params = WsPostAlgoOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USDT-SWAP"))
             .inst_id_code(10459u64)
             .td_mode(OKXTradeMode::Cross)
             .side(OKXSide::Buy)
@@ -2194,16 +2149,14 @@ mod tests {
         let json = serde_json::to_string(&params).unwrap();
 
         assert!(json.contains("\"instIdCode\":10459"));
-        assert!(json.contains("\"instId\":\"BTC-USDT-SWAP\""));
+        assert!(!json.contains("\"instId\""));
         assert!(json.contains("\"triggerPx\":\"48000\""));
     }
 
     #[rstest]
-    fn test_ws_cancel_algo_order_params_with_inst_id_code() {
-        // Test using direct struct construction since builder requires both algo_id and algo_cl_ord_id
+    fn test_ws_cancel_algo_order_params_serializes_inst_id_code() {
         let params = WsCancelAlgoOrderParams {
-            inst_id: Ustr::from("BTC-USDT-SWAP"),
-            inst_id_code: Some(10459),
+            inst_id_code: 10459,
             algo_id: Some("987654321".to_string()),
             algo_cl_ord_id: None,
         };
@@ -2211,7 +2164,7 @@ mod tests {
         let json = serde_json::to_string(&params).unwrap();
 
         assert!(json.contains("\"instIdCode\":10459"));
-        assert!(json.contains("\"instId\":\"BTC-USDT-SWAP\""));
+        assert!(!json.contains("\"instId\""));
         assert!(json.contains("\"algoId\":\"987654321\""));
     }
 
@@ -2221,7 +2174,7 @@ mod tests {
         use crate::common::enums::{OKXOrderType, OKXSide, OKXTradeMode};
 
         let params = WsPostOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USD-250328-50000-C"))
+            .inst_id_code(10459u64)
             .td_mode(OKXTradeMode::Cross)
             .side(OKXSide::Buy)
             .ord_type(OKXOrderType::Limit)
@@ -2242,7 +2195,7 @@ mod tests {
         use crate::common::enums::{OKXOrderType, OKXSide, OKXTradeMode};
 
         let params = WsPostOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USD-250328-50000-C"))
+            .inst_id_code(10459u64)
             .td_mode(OKXTradeMode::Cross)
             .side(OKXSide::Buy)
             .ord_type(OKXOrderType::Limit)
@@ -2262,7 +2215,7 @@ mod tests {
         use super::WsAmendOrderParamsBuilder;
 
         let params = WsAmendOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USD-250328-50000-C"))
+            .inst_id_code(10459u64)
             .cl_ord_id("client123".to_string())
             .new_px_usd("105.0".to_string())
             .build()
@@ -2279,7 +2232,7 @@ mod tests {
         use super::WsAmendOrderParamsBuilder;
 
         let params = WsAmendOrderParamsBuilder::default()
-            .inst_id(Ustr::from("BTC-USD-250328-50000-C"))
+            .inst_id_code(10459u64)
             .cl_ord_id("client123".to_string())
             .new_px_vol("0.60".to_string())
             .build()

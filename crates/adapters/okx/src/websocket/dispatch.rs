@@ -43,6 +43,7 @@ use ustr::Ustr;
 
 use crate::{
     common::{
+        consts::{OKX_FIELD_CLORDID, OKX_FIELD_SCODE, OKX_FIELD_SMSG, OKX_SUCCESS_CODE},
         enums::OKXOrderStatus,
         parse::{
             is_market_price, parse_client_order_id, parse_millisecond_timestamp, parse_price,
@@ -276,11 +277,20 @@ pub fn dispatch_ws_message(
             let ts_init = clock.get_time_ns();
 
             for item in &data {
-                let s_code = item.get("sCode").and_then(|v| v.as_str()).unwrap_or("");
-                let s_msg = item.get("sMsg").and_then(|v| v.as_str()).unwrap_or("");
-                let cl_ord_id = item.get("clOrdId").and_then(|v| v.as_str()).unwrap_or("");
+                let s_code = item
+                    .get(OKX_FIELD_SCODE)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let s_msg = item
+                    .get(OKX_FIELD_SMSG)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let cl_ord_id = item
+                    .get(OKX_FIELD_CLORDID)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
 
-                if s_code == "0" {
+                if s_code == OKX_SUCCESS_CODE {
                     log::debug!("Order response ok: op={op:?} cl_ord_id={cl_ord_id}");
                     match op {
                         OKXWsOperation::Order
@@ -969,8 +979,8 @@ pub fn emit_algo_cancel_rejections(
     clock: &'static AtomicTime,
 ) {
     for (i, item) in responses.iter().enumerate() {
-        let code = item.s_code.as_deref().unwrap_or("0");
-        if code == "0" {
+        let code = item.s_code.as_deref().unwrap_or(OKX_SUCCESS_CODE);
+        if code == OKX_SUCCESS_CODE {
             continue;
         }
 

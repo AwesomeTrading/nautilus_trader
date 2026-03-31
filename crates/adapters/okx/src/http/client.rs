@@ -103,8 +103,8 @@ use super::{
 use crate::{
     common::{
         consts::{
-            OKX_HTTP_URL, OKX_NAUTILUS_BROKER_ID, OKX_SUPPORTED_ORDER_TYPES,
-            OKX_SUPPORTED_TIME_IN_FORCE, should_retry_error_code,
+            OKX_FIELD_SCODE, OKX_FIELD_SMSG, OKX_HTTP_URL, OKX_NAUTILUS_BROKER_ID,
+            OKX_SUPPORTED_ORDER_TYPES, OKX_SUPPORTED_TIME_IN_FORCE, should_retry_error_code,
         },
         credential::Credential,
         enums::{
@@ -143,14 +143,20 @@ fn resolve_okx_error_message(response_body: &[u8], top_level_msg: &str) -> Strin
             .and_then(serde_json::Value::as_array)
             .and_then(|items| items.first())
     {
-        if let Some(s_msg) = first_item.get("sMsg").and_then(serde_json::Value::as_str) {
+        if let Some(s_msg) = first_item
+            .get(OKX_FIELD_SMSG)
+            .and_then(serde_json::Value::as_str)
+        {
             let s_msg = s_msg.trim();
             if !s_msg.is_empty() {
                 return s_msg.to_string();
             }
         }
 
-        if let Some(s_code) = first_item.get("sCode").and_then(serde_json::Value::as_str) {
+        if let Some(s_code) = first_item
+            .get(OKX_FIELD_SCODE)
+            .and_then(serde_json::Value::as_str)
+        {
             let s_code = s_code.trim();
             if !s_code.is_empty() {
                 return s_code.to_string();
@@ -2019,11 +2025,11 @@ impl OKXHttpClient {
 
                 log::debug!("Received {} raw trades from API", raw.len());
 
-                if !raw.is_empty() {
-                    let first_id = &raw.first().unwrap().trade_id;
-                    let last_id = &raw.last().unwrap().trade_id;
+                if let (Some(first), Some(last)) = (raw.first(), raw.last()) {
                     log::debug!(
-                        "Raw response trade ID range: first={first_id} (newest), last={last_id} (oldest)"
+                        "Raw response trade ID range: first={} (newest), last={} (oldest)",
+                        first.trade_id,
+                        last.trade_id,
                     );
                 }
 
@@ -2603,14 +2609,14 @@ impl OKXHttpClient {
                 let tolerance_ns = slot_ns * 2; // Allow up to 2 bar periods before start
 
                 // Debug: log the page range
-                if !page.is_empty() {
+                if let (Some(first), Some(last)) = (page.first(), page.last()) {
                     log::debug!(
                         "Range mode bootstrap page: {} bars from {} to {}, filtering with start={:?} end={:?}",
                         page.len(),
-                        page.first().unwrap().ts_event.as_i64() / 1_000_000,
-                        page.last().unwrap().ts_event.as_i64() / 1_000_000,
+                        first.ts_event.as_i64() / 1_000_000,
+                        last.ts_event.as_i64() / 1_000_000,
                         start_ms,
-                        end_ms
+                        end_ms,
                     );
                 }
 

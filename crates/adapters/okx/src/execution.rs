@@ -58,7 +58,10 @@ use ustr::Ustr;
 
 use crate::{
     common::{
-        consts::{OKX_CONDITIONAL_ORDER_TYPES, OKX_VENUE},
+        consts::{
+            OKX_CONDITIONAL_ORDER_TYPES, OKX_SUCCESS_CODE, OKX_VENUE, OKX_WS_HEARTBEAT_SECS,
+            resolve_instrument_families,
+        },
         enums::{OKXInstrumentType, OKXMarginMode, OKXTradeMode, is_advance_algo_order},
         parse::{nanos_to_datetime, okx_instrument_type_from_symbol},
     },
@@ -128,7 +131,7 @@ impl OKXExecutionClient {
             config.api_secret.clone(),
             config.api_passphrase.clone(),
             Some(account_id),
-            Some(20), // Heartbeat
+            Some(OKX_WS_HEARTBEAT_SECS),
             None,
         )
         .context("failed to construct OKX private websocket client")?;
@@ -139,7 +142,7 @@ impl OKXExecutionClient {
             config.api_secret.clone(),
             config.api_passphrase.clone(),
             Some(account_id),
-            Some(20), // Heartbeat
+            Some(OKX_WS_HEARTBEAT_SECS),
             None,
         )
         .context("failed to construct OKX business websocket client")?;
@@ -488,7 +491,7 @@ impl OKXExecutionClient {
                     // Check per-order business status code
                     resps.first().and_then(|r| {
                         r.s_code.as_deref().and_then(|code| {
-                            if code == "0" {
+                            if code == OKX_SUCCESS_CODE {
                                 None
                             } else {
                                 let msg = r.s_msg.as_deref().unwrap_or("unknown");
@@ -722,27 +725,63 @@ impl ExecutionClient for OKXExecutionClient {
             let mut all_inst_id_codes = Vec::new();
 
             for instrument_type in &instrument_types {
-                let (instruments, inst_id_codes) = self
-                    .http_client
-                    .request_instruments(*instrument_type, None)
-                    .await
-                    .with_context(|| {
-                        format!("failed to request OKX instruments for {instrument_type:?}")
-                    })?;
-
-                if instruments.is_empty() {
-                    log::warn!("No instruments returned for {instrument_type:?}");
+                let Some(families) =
+                    resolve_instrument_families(&self.config.instrument_families, *instrument_type)
+                else {
                     continue;
+                };
+
+                if families.is_empty() {
+                    let (instruments, inst_id_codes) = self
+                        .http_client
+                        .request_instruments(*instrument_type, None)
+                        .await
+                        .with_context(|| {
+                            format!("failed to request OKX instruments for {instrument_type:?}")
+                        })?;
+
+                    if instruments.is_empty() {
+                        log::warn!("No instruments returned for {instrument_type:?}");
+                        continue;
+                    }
+
+                    log::info!(
+                        "Loaded {} {instrument_type:?} instruments",
+                        instruments.len()
+                    );
+
+                    self.http_client.cache_instruments(&instruments);
+                    all_instruments.extend(instruments);
+                    all_inst_id_codes.extend(inst_id_codes);
+                } else {
+                    for family in &families {
+                        let (instruments, inst_id_codes) = self
+                            .http_client
+                            .request_instruments(*instrument_type, Some(family.clone()))
+                            .await
+                            .with_context(|| {
+                                format!(
+                                    "failed to request OKX instruments for {instrument_type:?} family {family}"
+                                )
+                            })?;
+
+                        if instruments.is_empty() {
+                            log::warn!(
+                                "No instruments returned for {instrument_type:?} family {family}"
+                            );
+                            continue;
+                        }
+
+                        log::info!(
+                            "Loaded {} {instrument_type:?} instruments for family {family}",
+                            instruments.len()
+                        );
+
+                        self.http_client.cache_instruments(&instruments);
+                        all_instruments.extend(instruments);
+                        all_inst_id_codes.extend(inst_id_codes);
+                    }
                 }
-
-                log::info!(
-                    "Loaded {} {instrument_type:?} instruments",
-                    instruments.len()
-                );
-
-                self.http_client.cache_instruments(&instruments);
-                all_instruments.extend(instruments);
-                all_inst_id_codes.extend(inst_id_codes);
             }
 
             if all_instruments.is_empty() {
@@ -943,31 +982,66 @@ impl ExecutionClient for OKXExecutionClient {
         let ws_private = self.ws_private.clone();
         let ws_business = self.ws_business.clone();
         let instrument_types = self.config.instrument_types.clone();
+        let instrument_families = self.config.instrument_families.clone();
 
         get_runtime().spawn(async move {
             let mut all_instruments = Vec::new();
             let mut all_inst_id_codes = Vec::new();
 
             for instrument_type in instrument_types {
-                match http_client.request_instruments(instrument_type, None).await {
-                    Ok((instruments, inst_id_codes)) => {
-                        if instruments.is_empty() {
-                            log::warn!("No instruments returned for {instrument_type:?}");
-                            continue;
+                let Some(families) =
+                    resolve_instrument_families(&instrument_families, instrument_type)
+                else {
+                    continue;
+                };
+
+                if families.is_empty() {
+                    match http_client.request_instruments(instrument_type, None).await {
+                        Ok((instruments, inst_id_codes)) => {
+                            if instruments.is_empty() {
+                                log::warn!("No instruments returned for {instrument_type:?}");
+                                continue;
+                            }
+                            http_client.cache_instruments(&instruments);
+                            all_instruments.extend(instruments);
+                            all_inst_id_codes.extend(inst_id_codes);
                         }
-                        http_client.cache_instruments(&instruments);
-                        all_instruments.extend(instruments);
-                        all_inst_id_codes.extend(inst_id_codes);
+                        Err(e) => {
+                            log::error!(
+                                "Failed to request instruments for {instrument_type:?}: {e}"
+                            );
+                        }
                     }
-                    Err(e) => {
-                        log::error!("Failed to request instruments for {instrument_type:?}: {e}");
+                } else {
+                    for family in &families {
+                        match http_client
+                            .request_instruments(instrument_type, Some(family.clone()))
+                            .await
+                        {
+                            Ok((instruments, inst_id_codes)) => {
+                                if instruments.is_empty() {
+                                    log::warn!(
+                                        "No instruments returned for {instrument_type:?} family {family}"
+                                    );
+                                    continue;
+                                }
+                                http_client.cache_instruments(&instruments);
+                                all_instruments.extend(instruments);
+                                all_inst_id_codes.extend(inst_id_codes);
+                            }
+                            Err(e) => {
+                                log::error!(
+                                    "Failed to request instruments for {instrument_type:?} family {family}: {e}"
+                                );
+                            }
+                        }
                     }
                 }
             }
 
             if all_instruments.is_empty() {
-                log::warn!(
-                    "Instrument bootstrap yielded no instruments; WebSocket submissions may fail"
+                log::error!(
+                    "Instrument bootstrap yielded no instruments, order submissions will fail"
                 );
             } else {
                 ws_private.cache_instruments(&all_instruments);
