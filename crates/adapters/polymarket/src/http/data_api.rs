@@ -244,11 +244,19 @@ impl PolymarketDataApiHttpClient {
 
 #[cfg(test)]
 mod tests {
-    use nautilus_model::{enums::AggressorSide, identifiers::InstrumentId};
+    use nautilus_model::{
+        enums::AggressorSide,
+        identifiers::{AccountId, InstrumentId},
+    };
     use rstest::rstest;
+    use rust_decimal::Decimal;
 
     use super::*;
-    use crate::http::models::{DataApiPosition, DataApiTrade};
+    use crate::{
+        common::consts::USDC_DECIMALS,
+        execution::reconciliation::build_position_reports,
+        http::models::{DataApiPosition, DataApiTrade},
+    };
 
     fn load_positions() -> Vec<DataApiPosition> {
         let path = "test_data/data_api_positions_response.json";
@@ -266,8 +274,9 @@ mod tests {
     fn test_data_api_position_deserialization() {
         let positions = load_positions();
 
-        assert_eq!(positions.len(), 3);
+        assert_eq!(positions.len(), 4);
         assert_eq!(positions[0].size, 150.5);
+        assert_eq!(positions[0].avg_price, Some(0.55));
         assert_eq!(
             positions[0].condition_id,
             "0xc8f1cf5d4f26e0fd9c8fe89f2a7b3263b902cf14fde7bfccef525753bb492e47"
@@ -275,43 +284,67 @@ mod tests {
     }
 
     #[rstest]
-    fn test_build_position_reports_filters_zero_size() {
-        use nautilus_model::{
-            enums::PositionSideSpecified, identifiers::AccountId, reports::PositionStatusReport,
-            types::Quantity,
-        };
-
+    fn test_build_position_reports_filters_dust_and_zero() {
         let positions = load_positions();
         let account_id = AccountId::from("POLYMARKET-001");
+        let ts_now = nautilus_core::UnixNanos::from(1_000_000_000u64);
 
-        let reports: Vec<PositionStatusReport> = positions
-            .iter()
-            .filter(|p| p.size > 0.0)
-            .map(|p| {
-                let instrument_id = InstrumentId::from(
-                    format!("{}-{}.POLYMARKET", p.condition_id, p.asset).as_str(),
-                );
-                let quantity = Quantity::new(p.size, 2);
-                let ts = nautilus_core::UnixNanos::from(1_000_000_000u64);
+        let reports = build_position_reports(&positions, account_id, ts_now);
 
-                PositionStatusReport::new(
-                    account_id,
-                    instrument_id,
-                    PositionSideSpecified::Long,
-                    quantity,
-                    ts,
-                    ts,
-                    None,
-                    None,
-                    None,
-                )
-            })
-            .collect();
-
-        // Only 2 positions have size > 0 (150.5 and 42.0); zero-size is filtered out
+        // 4 positions: 150.5, 0.0, 42.0, 0.005 (dust)
+        // Only 150.5 and 42.0 pass the DUST_SNAP_THRESHOLD (0.01)
         assert_eq!(reports.len(), 2);
         assert!(reports[0].is_long());
         assert!(reports[1].is_long());
+    }
+
+    #[rstest]
+    fn test_build_position_reports_carries_avg_price() {
+        let positions = load_positions();
+        let account_id = AccountId::from("POLYMARKET-001");
+        let ts_now = nautilus_core::UnixNanos::from(1_000_000_000u64);
+
+        let reports = build_position_reports(&positions, account_id, ts_now);
+
+        assert_eq!(reports.len(), 2);
+        assert_eq!(
+            reports[0].avg_px_open,
+            Some(Decimal::try_from(0.55).unwrap())
+        );
+        assert_eq!(
+            reports[1].avg_px_open,
+            Some(Decimal::try_from(0.3).unwrap())
+        );
+    }
+
+    #[rstest]
+    fn test_build_position_reports_uses_usdc_precision() {
+        let positions = load_positions();
+        let account_id = AccountId::from("POLYMARKET-001");
+        let ts_now = nautilus_core::UnixNanos::from(1_000_000_000u64);
+
+        let reports = build_position_reports(&positions, account_id, ts_now);
+
+        assert_eq!(reports.len(), 2);
+        assert_eq!(reports[0].quantity.precision, USDC_DECIMALS as u8);
+        assert_eq!(reports[1].quantity.precision, USDC_DECIMALS as u8);
+    }
+
+    #[rstest]
+    fn test_build_position_reports_handles_missing_avg_price() {
+        let positions = vec![DataApiPosition {
+            asset: "123".to_string(),
+            condition_id: "0xabc".to_string(),
+            size: 10.0,
+            avg_price: None,
+        }];
+        let account_id = AccountId::from("POLYMARKET-001");
+        let ts_now = nautilus_core::UnixNanos::from(1_000_000_000u64);
+
+        let reports = build_position_reports(&positions, account_id, ts_now);
+
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].avg_px_open, None);
     }
 
     #[rstest]

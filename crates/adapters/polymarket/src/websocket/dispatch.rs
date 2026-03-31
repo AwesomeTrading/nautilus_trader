@@ -454,6 +454,10 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::http::{
+        models::GammaMarket,
+        parse::{create_instrument_from_def, parse_gamma_market},
+    };
 
     fn load<T: serde::de::DeserializeOwned>(filename: &str) -> T {
         let path = format!("test_data/{filename}");
@@ -462,8 +466,7 @@ mod tests {
     }
 
     fn test_instrument() -> InstrumentAny {
-        use crate::http::parse::{create_instrument_from_def, parse_gamma_market};
-        let market: crate::http::models::GammaMarket = load("gamma_market.json");
+        let market: GammaMarket = load("gamma_market.json");
         let defs = parse_gamma_market(&market).unwrap();
         create_instrument_from_def(&defs[0], UnixNanos::from(1_000_000_000u64)).unwrap()
     }

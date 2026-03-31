@@ -256,7 +256,7 @@ fn order_side_to_u8(side: PolymarketOrderSide) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::keccak256;
+    use alloy_primitives::{Signature, keccak256};
     use rstest::rstest;
     use rust_decimal_macros::dec;
     use ustr::Ustr;
@@ -419,8 +419,6 @@ mod tests {
 
     #[rstest]
     fn test_sign_order_recoverable() {
-        use alloy_primitives::Signature;
-
         let signer = test_signer();
         let order = test_order();
         let sig_hex = signer.sign_order(&order, false).unwrap();

@@ -326,6 +326,8 @@ pub struct DataApiPosition {
     #[serde(alias = "conditionId", alias = "condition_id")]
     pub condition_id: String,
     pub size: f64,
+    #[serde(alias = "avgPrice", alias = "avg_price")]
+    pub avg_price: Option<f64>,
 }
 
 /// A trade from the Polymarket Data API `GET /trades` endpoint.
@@ -648,7 +650,7 @@ mod tests {
     fn test_data_api_position_deserialization() {
         let positions: Vec<DataApiPosition> = load("data_api_positions_response.json");
 
-        assert_eq!(positions.len(), 3);
+        assert_eq!(positions.len(), 4);
         assert_eq!(
             positions[0].asset,
             "71321045863084981365469005770620412523470745398083994982746259498689308907982"
@@ -658,9 +660,11 @@ mod tests {
             "0xc8f1cf5d4f26e0fd9c8fe89f2a7b3263b902cf14fde7bfccef525753bb492e47"
         );
         assert_eq!(positions[0].size, 150.5);
+        assert_eq!(positions[0].avg_price, Some(0.55));
 
         // Zero-size position
         assert_eq!(positions[1].size, 0.0);
+        assert_eq!(positions[1].avg_price, Some(0.45));
 
         // Third position
         assert_eq!(
@@ -668,6 +672,11 @@ mod tests {
             "0xabc123def456789012345678901234567890abcdef1234567890abcdef123456"
         );
         assert_eq!(positions[2].size, 42.0);
+        assert_eq!(positions[2].avg_price, Some(0.3));
+
+        // Dust position (below DUST_SNAP_THRESHOLD)
+        assert_eq!(positions[3].size, 0.005);
+        assert_eq!(positions[3].avg_price, Some(0.7));
     }
 
     #[rstest]

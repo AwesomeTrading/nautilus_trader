@@ -125,6 +125,8 @@ class PolymarketExecClientConfig(LiveExecClientConfig, frozen=True):
         The HTTP client custom endpoint override.
     base_url_ws : str, optional
         The WebSocket client custom endpoint override.
+    base_url_data_api : str, optional
+        The Data API custom endpoint override (default https://data-api.polymarket.com).
     ws_max_subscriptions_per_connection : PositiveInt, default 200
         The maximum number of subscriptions per WebSocket connection (Polymarket limit is 500).
     max_retries : PositiveInt, optional
@@ -155,6 +157,7 @@ class PolymarketExecClientConfig(LiveExecClientConfig, frozen=True):
     passphrase: str | None = None
     base_url_http: str | None = None
     base_url_ws: str | None = None
+    base_url_data_api: str | None = None
     ws_max_subscriptions_per_connection: PositiveInt = 200
     max_retries: PositiveInt | None = None
     retry_delay_initial_ms: PositiveInt | None = None

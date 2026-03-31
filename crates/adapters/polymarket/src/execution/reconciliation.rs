@@ -24,6 +24,7 @@ use nautilus_model::{
     reports::{ExecutionMassStatus, FillReport, OrderStatusReport, PositionStatusReport},
     types::{Currency, Quantity},
 };
+use rust_decimal::Decimal;
 use ustr::Ustr;
 
 use super::parse::{
@@ -31,13 +32,13 @@ use super::parse::{
 };
 use crate::{
     common::{
-        consts::{DUST_SNAP_THRESHOLD, LOT_SIZE_SCALE},
+        consts::{DUST_SNAP_THRESHOLD, USDC_DECIMALS},
         enums::PolymarketLiquiditySide,
     },
     http::{
         clob::PolymarketClobHttpClient,
         data_api::PolymarketDataApiHttpClient,
-        models::{PolymarketOpenOrder, PolymarketTradeReport},
+        models::{DataApiPosition, PolymarketOpenOrder, PolymarketTradeReport},
         query::{GetOrdersParams, GetTradesParams},
     },
 };
@@ -204,6 +205,44 @@ pub(crate) fn apply_fill_filters(
     reports
 }
 
+/// Builds position status reports from Data API positions, filtering dust.
+pub(crate) fn build_position_reports(
+    positions: &[DataApiPosition],
+    account_id: AccountId,
+    ts: UnixNanos,
+) -> Vec<PositionStatusReport> {
+    positions
+        .iter()
+        .filter(|p| {
+            if p.size > 0.0 && p.size < DUST_SNAP_THRESHOLD {
+                log::debug!(
+                    "Filtering dust position: {}-{}, size={}",
+                    p.condition_id,
+                    p.asset,
+                    p.size
+                );
+            }
+            p.size >= DUST_SNAP_THRESHOLD
+        })
+        .map(|p| {
+            let instrument_id =
+                InstrumentId::from(format!("{}-{}.POLYMARKET", p.condition_id, p.asset).as_str());
+            let avg_px_open = p.avg_price.and_then(|px| Decimal::try_from(px).ok());
+            PositionStatusReport::new(
+                account_id,
+                instrument_id,
+                PositionSideSpecified::Long,
+                Quantity::new(p.size, USDC_DECIMALS as u8),
+                ts,
+                ts,
+                None,
+                None,
+                avg_px_open,
+            )
+        })
+        .collect()
+}
+
 /// Full reconciliation mass status generation.
 pub(crate) async fn generate_mass_status(
     http_client: &PolymarketClobHttpClient,
@@ -240,35 +279,7 @@ pub(crate) async fn generate_mass_status(
         .await
         .context("failed to fetch positions for mass status")?;
 
-    let position_reports: Vec<PositionStatusReport> = positions
-        .iter()
-        .filter(|p| {
-            if p.size > 0.0 && p.size < DUST_SNAP_THRESHOLD {
-                log::debug!(
-                    "Filtering dust position: {}-{}, size={}",
-                    p.condition_id,
-                    p.asset,
-                    p.size
-                );
-            }
-            p.size >= DUST_SNAP_THRESHOLD
-        })
-        .map(|p| {
-            let instrument_id =
-                InstrumentId::from(format!("{}-{}.POLYMARKET", p.condition_id, p.asset).as_str());
-            PositionStatusReport::new(
-                ctx.account_id,
-                instrument_id,
-                PositionSideSpecified::Long,
-                Quantity::new(p.size, LOT_SIZE_SCALE as u8),
-                ts_init,
-                ts_init,
-                None,
-                None,
-                None,
-            )
-        })
-        .collect();
+    let position_reports = build_position_reports(&positions, ctx.account_id, ts_init);
 
     // Apply lookback filter
     if let Some(mins) = lookback_mins {
@@ -296,11 +307,12 @@ pub(crate) async fn generate_mass_status(
         );
     } else {
         log::debug!(
-            "Generated mass status: {} orders ({} filtered), {} fills ({} filtered)",
+            "Generated mass status: {} orders ({} filtered), {} fills ({} filtered), {} positions",
             order_reports.len(),
             orders_filtered,
             fill_reports.len(),
             fills_filtered,
+            position_reports.len(),
         );
     }
 

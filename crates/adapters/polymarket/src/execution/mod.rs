@@ -48,10 +48,7 @@ use nautilus_core::{
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
-    enums::{
-        AccountType, CurrencyType, OmsType, OrderSide, OrderStatus, OrderType,
-        PositionSideSpecified, TimeInForce,
-    },
+    enums::{AccountType, CurrencyType, OmsType, OrderSide, OrderStatus, OrderType, TimeInForce},
     events::{OrderEventAny, OrderUpdated},
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, StrategyId, Venue, VenueOrderId,
@@ -69,13 +66,15 @@ use self::{
     order_builder::PolymarketOrderBuilder,
     order_fill_tracker::OrderFillTrackerMap,
     parse::{parse_balance_allowance, parse_order_status_report},
-    reconciliation::{FillContext, apply_fill_filters, build_fill_reports_from_trades},
+    reconciliation::{
+        FillContext, apply_fill_filters, build_fill_reports_from_trades, build_position_reports,
+    },
     submitter::OrderSubmitter,
     types::CancelOutcome,
 };
 use crate::{
     common::{
-        consts::{DUST_SNAP_THRESHOLD, LOT_SIZE_SCALE, POLYMARKET_VENUE, USDC},
+        consts::{POLYMARKET_VENUE, USDC},
         credential::Secrets,
         enums::SignatureType,
     },
@@ -1248,47 +1247,10 @@ impl ExecutionClient for PolymarketExecutionClient {
             .context("failed to fetch positions from Data API")?;
 
         let ts = self.clock.get_time_ns();
-        let mut reports = Vec::new();
+        let mut reports = build_position_reports(&positions, self.core.account_id, ts);
 
-        for pos in &positions {
-            if pos.size > 0.0 && pos.size < DUST_SNAP_THRESHOLD {
-                log::debug!(
-                    "Filtering dust position: {}-{}, size={}",
-                    pos.condition_id,
-                    pos.asset,
-                    pos.size
-                );
-            }
-
-            if pos.size < DUST_SNAP_THRESHOLD {
-                continue;
-            }
-
-            let instrument_id = InstrumentId::from(
-                format!("{}-{}.POLYMARKET", pos.condition_id, pos.asset).as_str(),
-            );
-
-            // Filter by requested instrument IDs
-            if let Some(ref filter_id) = cmd.instrument_id
-                && &instrument_id != filter_id
-            {
-                continue;
-            }
-
-            let quantity = Quantity::new(pos.size, LOT_SIZE_SCALE as u8);
-            let position_side = PositionSideSpecified::Long;
-
-            reports.push(PositionStatusReport::new(
-                self.core.account_id,
-                instrument_id,
-                position_side,
-                quantity,
-                ts,
-                ts,
-                None,
-                None,
-                None,
-            ));
+        if let Some(ref filter_id) = cmd.instrument_id {
+            reports.retain(|r| &r.instrument_id == filter_id);
         }
 
         log::info!("Generated {} position status reports", reports.len());

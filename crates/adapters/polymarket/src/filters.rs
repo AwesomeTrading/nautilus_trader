@@ -402,6 +402,7 @@ mod tests {
     use ustr::Ustr;
 
     use super::*;
+    use crate::websocket::messages::PolymarketNewMarketEvent;
 
     fn stub_binary_option_with_expiration(
         outcome: Option<&str>,
@@ -529,8 +530,6 @@ mod tests {
         tags: Vec<String>,
         event_slug: Option<&str>,
     ) -> PolymarketNewMarket {
-        use crate::websocket::messages::PolymarketNewMarketEvent;
-
         PolymarketNewMarket {
             id: "1".to_string(),
             question: "Test?".to_string(),

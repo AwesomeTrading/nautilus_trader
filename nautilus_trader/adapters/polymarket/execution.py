@@ -312,7 +312,8 @@ class PolymarketExecutionClient(LiveExecutionClient):
         request.
 
         """
-        base_url = "https://data-api.polymarket.com/positions"
+        base_url = (self._config.base_url_data_api or "https://data-api.polymarket.com").rstrip("/")
+        base_url = f"{base_url}/positions"
         results: list[dict[str, Any]] = []
         offset = 0
 
