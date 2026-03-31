@@ -102,11 +102,11 @@ The adapter automatically loads these when `testnet=True` in the configuration.
 Hyperliquid offers linear perpetual futures, HIP-3 builder-deployed perpetuals, and native
 spot markets.
 
-| Product Type      | Data Feed | Trading | Notes                                            |
-|-------------------|-----------|---------|--------------------------------------------------|
-| Perpetual Futures | ✓         | ✓       | USDC‑settled linear perps (validator‑operated).   |
-| HIP‑3 Perpetuals  | ✓         | ✓       | Builder‑deployed perps. Excluded by default.      |
-| Spot              | ✓         | ✓       | Native spot markets.                              |
+| Product Type      | Data Feed | Trading | Notes                                           |
+|-------------------|-----------|---------|-------------------------------------------------|
+| Perpetual Futures | ✓         | ✓       | USDC‑settled linear perps (validator‑operated). |
+| HIP‑3 Perpetuals  | ✓         | ✓       | Builder‑deployed perps. Excluded by default.    |
+| Spot              | ✓         | ✓       | Native spot markets.                            |
 
 :::note
 All perpetual futures on Hyperliquid are settled in USDC. Spot markets are standard
@@ -237,12 +237,12 @@ For full protocol details, see the Hyperliquid docs:
 The instrument provider supports filtering when loading instruments via
 `InstrumentProviderConfig(filters=...)`:
 
-| Filter key                  | Type        | Description                                    |
-|-----------------------------|-------------|------------------------------------------------|
-| `market_types` (or `kinds`) | `list[str]` | `"perp"`, `"perp_hip3"`, or `"spot"`.          |
-| `bases`                     | `list[str]` | Base currency codes, e.g. `["BTC", "ETH"]`.    |
-| `quotes`                    | `list[str]` | Quote currency codes, e.g. `["USDC"]`.         |
-| `symbols`                   | `list[str]` | Full symbols, e.g. `["BTC-USD-PERP"]`.         |
+| Filter key                  | Type        | Description                                 |
+|-----------------------------|-------------|---------------------------------------------|
+| `market_types` (or `kinds`) | `list[str]` | `"perp"`, `"perp_hip3"`, or `"spot"`.       |
+| `bases`                     | `list[str]` | Base currency codes, e.g. `["BTC", "ETH"]`. |
+| `quotes`                    | `list[str]` | Quote currency codes, e.g. `["USDC"]`.      |
+| `symbols`                   | `list[str]` | Full symbols, e.g. `["BTC-USD-PERP"]`.      |
 
 Example loading only perpetual instruments:
 
@@ -258,15 +258,15 @@ instrument_provider=InstrumentProviderConfig(
 The adapter supports the following data subscriptions. All perpetual data types
 (mark prices, index prices, funding rates) apply to both standard and HIP-3 perps.
 
-| Data type         | Subscription | Historical | Nautilus type      | Notes                                      |
-|-------------------|--------------|------------|--------------------|--------------------------------------------|
-| Trade ticks       | ✓            | -          | `TradeTick`        | Via WebSocket trades channel.              |
-| Quote ticks       | ✓            | -          | `QuoteTick`        | Best bid/offer from WebSocket.             |
-| Order book deltas | ✓            | -          | `OrderBookDelta`   | L2 depth. Each message is a full snapshot. |
-| Bars              | ✓            | ✓          | `Bar`              | See supported intervals below.             |
-| Mark prices       | ✓            | -          | `MarkPriceUpdate`  | Perpetual mark price ticks.                |
-| Index prices      | ✓            | -          | `IndexPriceUpdate` | Underlying index reference prices.         |
-| Funding rates     | ✓            | -          | `FundingRate`      | Perpetual funding rate updates.            |
+| Data type         | Subscription | Snapshot | Historical | Nautilus type        | Notes                                      |
+|-------------------|--------------|----------|------------|----------------------|--------------------------------------------|
+| Trade ticks       | ✓            | -        | -          | `TradeTick`          | Via WebSocket trades channel.              |
+| Quote ticks       | ✓            | -        | -          | `QuoteTick`          | Best bid/offer from WebSocket.             |
+| Order book deltas | ✓            | ✓        | -          | `OrderBookDelta`     | L2 depth. Each message is a full snapshot. |
+| Bars              | ✓            | -        | ✓          | `Bar`                | See supported intervals below.             |
+| Mark prices       | ✓            | -        | -          | `MarkPriceUpdate`    | Perpetual mark price ticks.                |
+| Index prices      | ✓            | -        | -          | `IndexPriceUpdate`   | Underlying index reference prices.         |
+| Funding rates     | ✓            | -        | -          | `FundingRateUpdate`  | Perpetual funding rate updates.            |
 
 :::note
 Historical quote tick and trade tick requests are not yet supported by this adapter.
@@ -496,20 +496,20 @@ backoff (full jitter) on rate limit (429) and server error (5xx) responses.
 
 ### Execution client configuration options
 
-| Option                   | Default | Description                                                                                |
-|--------------------------|---------|--------------------------------------------------------------------------------------------|
-| `private_key`            | `None`  | EVM private key; loaded from `HYPERLIQUID_PK` or `HYPERLIQUID_TESTNET_PK` when omitted.    |
-| `vault_address`          | `None`  | Vault address; loaded from `HYPERLIQUID_VAULT` or `HYPERLIQUID_TESTNET_VAULT` if omitted.  |
-| `account_address`        | `None`  | Main account address for agent wallet trading; loaded from `HYPERLIQUID_ACCOUNT_ADDRESS`.   |
-| `base_url_ws`            | `None`  | Override for the WebSocket base URL.                                                       |
-| `testnet`                | `False` | Connect to the Hyperliquid testnet when `True`.                                            |
-| `max_retries`            | `None`  | Maximum retry attempts for submit, cancel, or modify order requests.                       |
-| `retry_delay_initial_ms` | `None`  | Initial delay (milliseconds) between retries.                                              |
-| `retry_delay_max_ms`     | `None`  | Maximum delay (milliseconds) between retries.                                              |
-| `http_timeout_secs`      | `10`    | Timeout (seconds) applied to REST calls.                                                   |
-| `normalize_prices`       | `True`  | Normalize order prices to 5 significant figures before submission.                         |
-| `http_proxy_url`         | `None`  | Optional HTTP proxy URL.                                                                   |
-| `ws_proxy_url`           | `None`  | Reserved; WebSocket proxy not yet implemented.                                             |
+| Option                   | Default | Description                                                                               |
+|--------------------------|---------|-------------------------------------------------------------------------------------------|
+| `private_key`            | `None`  | EVM private key; loaded from `HYPERLIQUID_PK` or `HYPERLIQUID_TESTNET_PK` when omitted.   |
+| `vault_address`          | `None`  | Vault address; loaded from `HYPERLIQUID_VAULT` or `HYPERLIQUID_TESTNET_VAULT` if omitted. |
+| `account_address`        | `None`  | Main account address for agent wallet trading; loaded from `HYPERLIQUID_ACCOUNT_ADDRESS`. |
+| `base_url_ws`            | `None`  | Override for the WebSocket base URL.                                                      |
+| `testnet`                | `False` | Connect to the Hyperliquid testnet when `True`.                                           |
+| `max_retries`            | `None`  | Maximum retry attempts for submit, cancel, or modify order requests.                      |
+| `retry_delay_initial_ms` | `None`  | Initial delay (milliseconds) between retries.                                             |
+| `retry_delay_max_ms`     | `None`  | Maximum delay (milliseconds) between retries.                                             |
+| `http_timeout_secs`      | `10`    | Timeout (seconds) applied to REST calls.                                                  |
+| `normalize_prices`       | `True`  | Normalize order prices to 5 significant figures before submission.                        |
+| `http_proxy_url`         | `None`  | Optional HTTP proxy URL.                                                                  |
+| `ws_proxy_url`           | `None`  | Reserved; WebSocket proxy not yet implemented.                                            |
 
 ### Configuration example
 

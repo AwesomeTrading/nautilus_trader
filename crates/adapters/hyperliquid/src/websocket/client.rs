@@ -967,11 +967,11 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::common::enums::HyperliquidBarInterval;
+    use crate::{common::enums::HyperliquidBarInterval, websocket::handler::subscription_to_key};
 
     /// Generates a unique topic key for a subscription request.
     fn subscription_topic(sub: &SubscriptionRequest) -> String {
-        crate::websocket::handler::subscription_to_key(sub)
+        subscription_to_key(sub)
     }
 
     #[rstest]

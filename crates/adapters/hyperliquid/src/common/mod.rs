@@ -21,6 +21,9 @@ pub mod models;
 pub mod parse;
 pub mod types;
 
+#[cfg(test)]
+pub mod testing;
+
 pub use converters::{
     determine_tpsl_type, hyperliquid_conditional_to_nautilus, hyperliquid_order_type_to_nautilus,
     hyperliquid_time_in_force_to_nautilus, nautilus_order_type_to_hyperliquid,

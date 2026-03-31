@@ -861,22 +861,33 @@ impl ExecutionClient for HyperliquidExecutionClient {
         log::debug!("Cancelling order: {cmd:?}");
 
         let http_client = self.http_client.clone();
-        let client_order_id = cmd.client_order_id.to_string();
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
+        let client_order_id = cmd.client_order_id;
+        let client_order_id_str = cmd.client_order_id.to_string();
+        let strategy_id = cmd.strategy_id;
+        let instrument_id = cmd.instrument_id;
+        let venue_order_id = cmd.venue_order_id;
         let symbol = cmd.instrument_id.symbol.to_string();
 
         self.spawn_task("cancel_order", async move {
             let asset = match http_client.get_asset_index(&symbol) {
                 Some(a) => a,
                 None => {
-                    log::warn!(
-                        "Asset index not found for symbol {symbol}, ensure instruments are loaded"
+                    emitter.emit_order_cancel_rejected_event(
+                        strategy_id,
+                        instrument_id,
+                        client_order_id,
+                        venue_order_id,
+                        &format!("Asset index not found for symbol {symbol}"),
+                        clock.get_time_ns(),
                     );
                     return Ok(());
                 }
             };
 
             let cancel_request =
-                client_order_id_to_cancel_request_with_asset(&client_order_id, asset);
+                client_order_id_to_cancel_request_with_asset(&client_order_id_str, asset);
             let action = HyperliquidExecAction::CancelByCloid {
                 cancels: vec![cancel_request],
             };
@@ -885,17 +896,37 @@ impl ExecutionClient for HyperliquidExecutionClient {
                 Ok(response) => {
                     if response.is_ok() {
                         if let Some(inner_error) = extract_inner_error(&response) {
-                            log::warn!("Order cancellation rejected by exchange: {inner_error}");
+                            emitter.emit_order_cancel_rejected_event(
+                                strategy_id,
+                                instrument_id,
+                                client_order_id,
+                                venue_order_id,
+                                &inner_error,
+                                clock.get_time_ns(),
+                            );
                         } else {
                             log::info!("Order cancelled successfully: {response:?}");
                         }
                     } else {
-                        let error_msg = extract_error_message(&response);
-                        log::warn!("Order cancellation rejected by exchange: {error_msg}");
+                        emitter.emit_order_cancel_rejected_event(
+                            strategy_id,
+                            instrument_id,
+                            client_order_id,
+                            venue_order_id,
+                            &extract_error_message(&response),
+                            clock.get_time_ns(),
+                        );
                     }
                 }
                 Err(e) => {
-                    log::warn!("Order cancellation HTTP request failed: {e}");
+                    emitter.emit_order_cancel_rejected_event(
+                        strategy_id,
+                        instrument_id,
+                        client_order_id,
+                        venue_order_id,
+                        &format!("Cancel HTTP request failed: {e}"),
+                        clock.get_time_ns(),
+                    );
                 }
             }
 
@@ -934,9 +965,7 @@ impl ExecutionClient for HyperliquidExecutionClient {
             let asset = match http_client.get_asset_index(&symbol) {
                 Some(a) => a,
                 None => {
-                    log::warn!(
-                        "Asset index not found for symbol {symbol}, ensure instruments are loaded"
-                    );
+                    log::warn!("Asset index not found for symbol {symbol}");
                     return Ok(());
                 }
             };
@@ -947,7 +976,6 @@ impl ExecutionClient for HyperliquidExecutionClient {
                 .collect();
 
             if cancel_requests.is_empty() {
-                log::debug!("No valid cancel requests to send");
                 return Ok(());
             }
 
@@ -956,7 +984,7 @@ impl ExecutionClient for HyperliquidExecutionClient {
             };
 
             if let Err(e) = http_client.post_action_exec(&action).await {
-                log::warn!("Failed to send cancel all orders request: {e}");
+                log::warn!("Cancel all orders request failed: {e}");
             }
 
             Ok(())
@@ -1013,7 +1041,7 @@ impl ExecutionClient for HyperliquidExecutionClient {
             };
 
             if let Err(e) = http_client.post_action_exec(&action).await {
-                log::warn!("Failed to send batch cancel orders request: {e}");
+                log::warn!("Batch cancel request failed: {e}");
             }
 
             Ok(())
@@ -1137,12 +1165,76 @@ impl ExecutionClient for HyperliquidExecutionClient {
 
     async fn generate_order_status_report(
         &self,
-        _cmd: &GenerateOrderStatusReport,
+        cmd: &GenerateOrderStatusReport,
     ) -> anyhow::Result<Option<OrderStatusReport>> {
-        // NOTE: Single order status report generation requires instrument cache integration.
-        // The HTTP client methods and parsing functions are implemented and ready to use.
-        // When implemented: query via info_order_status(), parse with parse_order_status_report_from_basic().
-        log::warn!("generate_order_status_report not yet fully implemented");
+        let account_address = self.get_account_address()?;
+
+        if let Some(venue_order_id) = &cmd.venue_order_id {
+            let oid: u64 = venue_order_id
+                .as_str()
+                .parse()
+                .context("failed to parse venue_order_id as oid")?;
+
+            let report = self
+                .http_client
+                .request_order_status_report(&account_address, oid)
+                .await
+                .context("failed to generate order status report")?;
+
+            if let Some(mut report) = report {
+                if let Some(coid) = &cmd.client_order_id {
+                    report.client_order_id = Some(*coid);
+                }
+                log::info!("Generated order status report for oid {oid}");
+                return Ok(Some(report));
+            }
+
+            log::info!("No order status report found for oid {oid}");
+            return Ok(None);
+        }
+
+        if let Some(client_order_id) = &cmd.client_order_id {
+            // Copy venue_order_id out of cache before any await to avoid holding
+            // the RefCell borrow across an async suspension point
+            let cached_oid: Option<u64> = self
+                .core
+                .cache()
+                .venue_order_id(client_order_id)
+                .and_then(|v| v.as_str().parse::<u64>().ok());
+
+            // Try resolving via cached venue_order_id first (handles closed orders)
+            if let Some(oid) = cached_oid {
+                let report = self
+                    .http_client
+                    .request_order_status_report(&account_address, oid)
+                    .await
+                    .context("failed to generate order status report by cached venue_order_id")?;
+
+                if let Some(mut report) = report {
+                    report.client_order_id = Some(*client_order_id);
+                    log::info!(
+                        "Generated order status report for {client_order_id} via cached oid {oid}"
+                    );
+                    return Ok(Some(report));
+                }
+            }
+
+            // Fall back to searching open orders by cloid
+            let report = self
+                .http_client
+                .request_order_status_report_by_client_order_id(&account_address, client_order_id)
+                .await
+                .context("failed to generate order status report by client_order_id")?;
+
+            if report.is_some() {
+                log::info!("Generated order status report for {client_order_id}");
+            } else {
+                log::info!("No order status report found for {client_order_id}");
+            }
+            return Ok(report);
+        }
+
+        log::warn!("Cannot generate order status report without venue_order_id or client_order_id");
         Ok(None)
     }
 

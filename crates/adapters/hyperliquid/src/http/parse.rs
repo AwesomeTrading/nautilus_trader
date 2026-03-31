@@ -681,14 +681,7 @@ mod tests {
         assert!(!delist.active); // Delisted instruments are marked as inactive
     }
 
-    fn load_test_data<T>(filename: &str) -> T
-    where
-        T: serde::de::DeserializeOwned,
-    {
-        let path = format!("test_data/{filename}");
-        let content = std::fs::read_to_string(path).expect("Failed to read test data");
-        serde_json::from_str(&content).expect("Failed to parse test data")
-    }
+    use crate::common::testing::load_test_data;
 
     #[rstest]
     fn test_parse_perp_instruments_from_real_data() {

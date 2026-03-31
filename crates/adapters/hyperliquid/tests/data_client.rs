@@ -20,7 +20,10 @@
 //! and event emission.
 //! Note: WebSocket subscription tests are in websocket.rs (50+ tests).
 
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, net::SocketAddr, num::NonZeroUsize, path::PathBuf, sync::Arc,
+    time::Duration,
+};
 
 use axum::{
     Router,
@@ -38,8 +41,8 @@ use nautilus_common::{
     messages::{
         DataEvent, DataResponse,
         data::{
-            RequestInstrument, RequestInstruments, SubscribeBookDeltas, SubscribeQuotes,
-            SubscribeTrades,
+            RequestBookSnapshot, RequestInstrument, RequestInstruments, SubscribeBookDeltas,
+            SubscribeQuotes, SubscribeTrades,
         },
     },
     testing::wait_until_async,
@@ -783,6 +786,98 @@ async fn test_data_client_request_instrument() {
         matches!(event, DataEvent::Response(DataResponse::Instrument(_))),
         "Expected Instrument response, was: {event:?}"
     );
+
+    client.disconnect().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_data_client_request_book_snapshot() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state).await;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+    set_data_event_sender(tx);
+
+    let config = create_data_client_config(addr);
+    let mut client = HyperliquidDataClient::new(ClientId::new("HYPERLIQUID"), config).unwrap();
+    client.connect().await.unwrap();
+
+    // Drain instrument events from connect
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTC-USD-PERP.HYPERLIQUID");
+    let request = RequestBookSnapshot::new(
+        instrument_id,
+        None,
+        Some(ClientId::new("HYPERLIQUID")),
+        UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+    client.request_book_snapshot(request).unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("timeout waiting for book snapshot response")
+        .expect("channel closed");
+
+    match event {
+        DataEvent::Response(DataResponse::Book(book_response)) => {
+            assert_eq!(book_response.instrument_id, instrument_id);
+            let book = &book_response.data;
+            assert!(book.best_bid_price().is_some(), "book should have bids");
+            assert!(book.best_ask_price().is_some(), "book should have asks");
+        }
+        other => panic!("Expected Book response, was: {other:?}"),
+    }
+
+    client.disconnect().await.unwrap();
+}
+
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_data_client_request_book_snapshot_with_depth() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state).await;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DataEvent>();
+    set_data_event_sender(tx);
+
+    let config = create_data_client_config(addr);
+    let mut client = HyperliquidDataClient::new(ClientId::new("HYPERLIQUID"), config).unwrap();
+    client.connect().await.unwrap();
+
+    // Drain instrument events from connect
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    while rx.try_recv().is_ok() {}
+
+    let instrument_id = InstrumentId::from("BTC-USD-PERP.HYPERLIQUID");
+    let request = RequestBookSnapshot::new(
+        instrument_id,
+        Some(NonZeroUsize::new(2).unwrap()),
+        Some(ClientId::new("HYPERLIQUID")),
+        UUID4::new(),
+        UnixNanos::default(),
+        None,
+    );
+    client.request_book_snapshot(request).unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("timeout waiting for book snapshot response")
+        .expect("channel closed");
+
+    match event {
+        DataEvent::Response(DataResponse::Book(book_response)) => {
+            let book = &book_response.data;
+            // The fixture has 5 levels per side; depth=2 should limit to 2
+            let bid_count = book.bids(None).count();
+            let ask_count = book.asks(None).count();
+            assert_eq!(bid_count, 2, "should have 2 bid levels with depth=2");
+            assert_eq!(ask_count, 2, "should have 2 ask levels with depth=2");
+        }
+        other => panic!("Expected Book response, was: {other:?}"),
+    }
 
     client.disconnect().await.unwrap();
 }

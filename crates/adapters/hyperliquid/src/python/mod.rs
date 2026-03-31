@@ -36,12 +36,20 @@ use nautilus_system::{
 use pyo3::prelude::*;
 
 use crate::{
+    common::{
+        consts::HYPERLIQUID_POST_ONLY_WOULD_MATCH,
+        enums::{
+            HyperliquidConditionalOrderType, HyperliquidProductType, HyperliquidTpSl,
+            HyperliquidTrailingOffsetType,
+        },
+    },
     config::{HyperliquidDataClientConfig, HyperliquidExecClientConfig},
     factories::{
         HyperliquidDataClientFactory, HyperliquidExecFactoryConfig,
         HyperliquidExecutionClientFactory,
     },
-    http::models::Cloid,
+    http::{HyperliquidHttpClient, models::Cloid},
+    websocket::HyperliquidWebSocketClient,
 };
 
 /// Compute the cloid (hex hash) from a client_order_id.
@@ -63,10 +71,8 @@ fn py_hyperliquid_cloid_from_client_order_id(client_order_id: ClientOrderId) -> 
 #[pyfunction]
 #[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.hyperliquid")]
 #[pyo3(name = "hyperliquid_product_type_from_symbol")]
-fn py_hyperliquid_product_type_from_symbol(
-    symbol: &str,
-) -> PyResult<crate::common::HyperliquidProductType> {
-    crate::common::HyperliquidProductType::from_symbol(symbol).map_err(to_pyvalue_err)
+fn py_hyperliquid_product_type_from_symbol(symbol: &str) -> PyResult<HyperliquidProductType> {
+    HyperliquidProductType::from_symbol(symbol).map_err(to_pyvalue_err)
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -126,14 +132,14 @@ fn extract_hyperliquid_exec_config(
 pub fn hyperliquid(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add(
         "HYPERLIQUID_POST_ONLY_WOULD_MATCH",
-        crate::common::consts::HYPERLIQUID_POST_ONLY_WOULD_MATCH,
+        HYPERLIQUID_POST_ONLY_WOULD_MATCH,
     )?;
-    m.add_class::<crate::http::HyperliquidHttpClient>()?;
-    m.add_class::<crate::websocket::HyperliquidWebSocketClient>()?;
-    m.add_class::<crate::common::enums::HyperliquidProductType>()?;
-    m.add_class::<crate::common::enums::HyperliquidTpSl>()?;
-    m.add_class::<crate::common::enums::HyperliquidConditionalOrderType>()?;
-    m.add_class::<crate::common::enums::HyperliquidTrailingOffsetType>()?;
+    m.add_class::<HyperliquidHttpClient>()?;
+    m.add_class::<HyperliquidWebSocketClient>()?;
+    m.add_class::<HyperliquidProductType>()?;
+    m.add_class::<HyperliquidTpSl>()?;
+    m.add_class::<HyperliquidConditionalOrderType>()?;
+    m.add_class::<HyperliquidTrailingOffsetType>()?;
     m.add_function(wrap_pyfunction!(urls::py_get_hyperliquid_http_base_url, m)?)?;
     m.add_function(wrap_pyfunction!(urls::py_get_hyperliquid_ws_url, m)?)?;
     m.add_function(wrap_pyfunction!(

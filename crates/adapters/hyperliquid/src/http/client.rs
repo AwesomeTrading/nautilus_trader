@@ -70,10 +70,11 @@ use crate::{
             round_to_sig_figs, time_in_force_to_hyperliquid_tif,
         },
     },
+    data::candle_to_bar,
     http::{
         error::{Error, Result},
         models::{
-            Cloid, HyperliquidCandleSnapshot, HyperliquidExchangeRequest,
+            ClearinghouseState, Cloid, HyperliquidCandleSnapshot, HyperliquidExchangeRequest,
             HyperliquidExchangeResponse, HyperliquidExecAction, HyperliquidExecBuilderFee,
             HyperliquidExecCancelByCloidRequest, HyperliquidExecCancelOrderRequest,
             HyperliquidExecGrouping, HyperliquidExecLimitParams, HyperliquidExecModifyOrderRequest,
@@ -84,8 +85,9 @@ use crate::{
             SpotMetaAndCtxs,
         },
         parse::{
-            HyperliquidInstrumentDef, instruments_from_defs_owned, parse_perp_instruments,
-            parse_spot_instruments,
+            HyperliquidInstrumentDef, instruments_from_defs_owned, parse_fill_report,
+            parse_order_status_report_from_basic, parse_perp_instruments,
+            parse_position_status_report, parse_spot_instruments,
         },
         query::{ExchangeAction, InfoRequest},
         rate_limits::{
@@ -96,6 +98,7 @@ use crate::{
     signing::{
         HyperliquidActionType, HyperliquidEip712Signer, NonceManager, SignRequest, types::SignerId,
     },
+    websocket::messages::WsBasicOrderData,
 };
 
 // https://hyperliquid.xyz/docs/api#rate-limits
@@ -1641,14 +1644,13 @@ impl HyperliquidHttpClient {
 
         for order_value in orders {
             // Parse the order data
-            let order: crate::websocket::messages::WsBasicOrderData =
-                match serde_json::from_value(order_value.clone()) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        log::warn!("Failed to parse order: {e}");
-                        continue;
-                    }
-                };
+            let order: WsBasicOrderData = match serde_json::from_value(order_value.clone()) {
+                Ok(o) => o,
+                Err(e) => {
+                    log::warn!("Failed to parse order: {e}");
+                    continue;
+                }
+            };
 
             // Get instrument from cache or create synthetic for vault tokens
             let instrument = match self.get_or_create_instrument(&order.coin, None) {
@@ -1667,7 +1669,7 @@ impl HyperliquidHttpClient {
             let status = HyperliquidOrderStatusEnum::Open;
 
             // Parse to OrderStatusReport
-            match crate::http::parse::parse_order_status_report_from_basic(
+            match parse_order_status_report_from_basic(
                 &order,
                 &status,
                 &instrument,
@@ -1680,6 +1682,184 @@ impl HyperliquidHttpClient {
         }
 
         Ok(reports)
+    }
+
+    /// Request a single order status report by venue order ID.
+    ///
+    /// Queries `info_frontend_open_orders` and filters for the given oid so the
+    /// result includes trigger metadata (trigger_px, tpsl, trailing_stop, etc.).
+    /// Falls back to `info_order_status` when the order is no longer open.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request fails or parsing fails.
+    pub async fn request_order_status_report(
+        &self,
+        user: &str,
+        oid: u64,
+    ) -> Result<Option<OrderStatusReport>> {
+        let account_id = self
+            .account_id
+            .ok_or_else(|| Error::bad_request("Account ID not set"))?;
+
+        let ts_init = self.clock.get_time_ns();
+
+        // Try open orders first (returns full WsBasicOrderData with trigger fields)
+        let response = self.info_frontend_open_orders(user).await?;
+        let orders: Vec<WsBasicOrderData> = match serde_json::from_value(response) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("Failed to parse frontend open orders response: {e}");
+                Vec::new()
+            }
+        };
+
+        if let Some(order) = orders.into_iter().find(|o| o.oid == oid) {
+            let instrument = match self.get_or_create_instrument(&order.coin, None) {
+                Some(inst) => inst,
+                None => return Ok(None),
+            };
+
+            let status = if order.trigger_activated == Some(true) {
+                HyperliquidOrderStatusEnum::Triggered
+            } else {
+                HyperliquidOrderStatusEnum::Open
+            };
+
+            return match parse_order_status_report_from_basic(
+                &order,
+                &status,
+                &instrument,
+                account_id,
+                ts_init,
+            ) {
+                Ok(report) => Ok(Some(report)),
+                Err(e) => {
+                    log::error!("Failed to parse order status report for oid {oid}: {e}");
+                    Ok(None)
+                }
+            };
+        }
+
+        // Order not in open set: query by oid (returns limited HyperliquidOrderInfo)
+        let response = self.info_order_status(user, oid).await?;
+        let entry = match response.statuses.into_iter().next() {
+            Some(e) => e,
+            None => return Ok(None),
+        };
+
+        let instrument = match self.get_or_create_instrument(&entry.order.coin, None) {
+            Some(inst) => inst,
+            None => return Ok(None),
+        };
+
+        // The info_order_status endpoint returns limited HyperliquidOrderInfo
+        // without trigger fields (trigger_px, tpsl, is_market, trailing_stop).
+        // Closed trigger orders will report as Limit type. This is an exchange
+        // API limitation: trigger metadata is only available on open orders.
+        let basic = WsBasicOrderData {
+            coin: entry.order.coin,
+            side: entry.order.side,
+            limit_px: entry.order.limit_px,
+            sz: entry.order.sz,
+            oid: entry.order.oid,
+            timestamp: entry.order.timestamp,
+            orig_sz: entry.order.orig_sz,
+            cloid: None,
+            trigger_px: None,
+            is_market: None,
+            tpsl: None,
+            trigger_activated: None,
+            trailing_stop: None,
+        };
+
+        match parse_order_status_report_from_basic(
+            &basic,
+            &entry.status,
+            &instrument,
+            account_id,
+            ts_init,
+        ) {
+            Ok(mut report) => {
+                // Use status_timestamp for ts_last when available (more accurate
+                // than the order creation timestamp for filled/canceled orders)
+                if entry.status_timestamp > 0 {
+                    report.ts_last = UnixNanos::from(entry.status_timestamp * 1_000_000);
+                }
+                Ok(Some(report))
+            }
+            Err(e) => {
+                log::error!("Failed to parse order status report for oid {oid}: {e}");
+                Ok(None)
+            }
+        }
+    }
+
+    /// Request a single order status report by client order ID.
+    ///
+    /// Searches `info_frontend_open_orders` for an order whose cloid matches the
+    /// keccak256 hash of the given client order ID. Only finds open orders.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request fails or parsing fails.
+    pub async fn request_order_status_report_by_client_order_id(
+        &self,
+        user: &str,
+        client_order_id: &ClientOrderId,
+    ) -> Result<Option<OrderStatusReport>> {
+        let account_id = self
+            .account_id
+            .ok_or_else(|| Error::bad_request("Account ID not set"))?;
+
+        let ts_init = self.clock.get_time_ns();
+
+        let cloid_hex = Cloid::from_client_order_id(*client_order_id).to_hex();
+
+        let response = self.info_frontend_open_orders(user).await?;
+        let orders: Vec<WsBasicOrderData> = match serde_json::from_value(response) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("Failed to parse frontend open orders response: {e}");
+                return Ok(None);
+            }
+        };
+
+        let order = match orders
+            .into_iter()
+            .find(|o| o.cloid.as_ref().is_some_and(|c| c == &cloid_hex))
+        {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+
+        let instrument = match self.get_or_create_instrument(&order.coin, None) {
+            Some(inst) => inst,
+            None => return Ok(None),
+        };
+
+        let status = if order.trigger_activated == Some(true) {
+            HyperliquidOrderStatusEnum::Triggered
+        } else {
+            HyperliquidOrderStatusEnum::Open
+        };
+
+        match parse_order_status_report_from_basic(
+            &order,
+            &status,
+            &instrument,
+            account_id,
+            ts_init,
+        ) {
+            Ok(mut report) => {
+                report.client_order_id = Some(*client_order_id);
+                Ok(Some(report))
+            }
+            Err(e) => {
+                log::error!("Failed to parse order status report for cloid {cloid_hex}: {e}");
+                Ok(None)
+            }
+        }
     }
 
     /// Request fill reports for a user.
@@ -1723,7 +1903,7 @@ impl HyperliquidHttpClient {
             }
 
             // Parse to FillReport
-            match crate::http::parse::parse_fill_report(&fill, &instrument, account_id, ts_init) {
+            match parse_fill_report(&fill, &instrument, account_id, ts_init) {
                 Ok(report) => reports.push(report),
                 Err(e) => log::error!("Failed to parse fill report: {e}"),
             }
@@ -1788,12 +1968,7 @@ impl HyperliquidHttpClient {
             }
 
             // Parse to PositionStatusReport
-            match crate::http::parse::parse_position_status_report(
-                &position_value,
-                &instrument,
-                account_id,
-                ts_init,
-            ) {
+            match parse_position_status_report(&position_value, &instrument, account_id, ts_init) {
                 Ok(report) => reports.push(report),
                 Err(e) => log::error!("Failed to parse position status report: {e}"),
             }
@@ -1819,7 +1994,7 @@ impl HyperliquidHttpClient {
         log::trace!("Clearinghouse state response: {state_response}");
 
         // Parse clearinghouse state
-        let state: crate::http::models::ClearinghouseState =
+        let state: ClearinghouseState =
             serde_json::from_value(state_response.clone()).map_err(|e| {
                 log::error!("Failed to parse clearinghouse state: {e}");
                 log::debug!("Raw response: {state_response}");
@@ -1960,7 +2135,7 @@ impl HyperliquidHttpClient {
             .filter(|candle| candle.end_timestamp < now_ms)
             .enumerate()
             .filter_map(|(i, candle)| {
-                crate::data::candle_to_bar(candle, bar_type, price_precision, size_precision)
+                candle_to_bar(candle, bar_type, price_precision, size_precision)
                     .map_err(|e| {
                         log::error!("Failed to convert candle {i} to bar: {candle:?} error: {e}");
                         e
@@ -2491,7 +2666,10 @@ mod tests {
     use ustr::Ustr;
 
     use super::HyperliquidHttpClient;
-    use crate::{common::enums::HyperliquidProductType, http::query::InfoRequest};
+    use crate::{
+        common::{consts::HYPERLIQUID_VENUE, enums::HyperliquidProductType},
+        http::query::InfoRequest,
+    };
 
     #[rstest]
     fn stable_json_roundtrips() {
@@ -2537,7 +2715,7 @@ mod tests {
 
         // Nautilus symbol is "vntls:vCURSOR-USDC-SPOT"
         let symbol = Symbol::new("vntls:vCURSOR-USDC-SPOT");
-        let venue = *crate::common::consts::HYPERLIQUID_VENUE;
+        let venue = *HYPERLIQUID_VENUE;
         let instrument_id = InstrumentId::new(symbol, venue);
 
         // raw_symbol is set to the base currency "vntls:vCURSOR" (see parse.rs)

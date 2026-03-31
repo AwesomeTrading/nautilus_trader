@@ -27,12 +27,12 @@ use nautilus_common::{
     messages::{
         DataEvent,
         data::{
-            BarsResponse, DataResponse, InstrumentResponse, InstrumentsResponse, RequestBars,
-            RequestInstrument, RequestInstruments, RequestTrades, SubscribeBars,
-            SubscribeBookDeltas, SubscribeFundingRates, SubscribeIndexPrices, SubscribeInstrument,
-            SubscribeMarkPrices, SubscribeQuotes, SubscribeTrades, TradesResponse, UnsubscribeBars,
-            UnsubscribeBookDeltas, UnsubscribeFundingRates, UnsubscribeIndexPrices,
-            UnsubscribeMarkPrices, UnsubscribeQuotes, UnsubscribeTrades,
+            BarsResponse, BookResponse, DataResponse, InstrumentResponse, InstrumentsResponse,
+            RequestBars, RequestBookSnapshot, RequestInstrument, RequestInstruments, RequestTrades,
+            SubscribeBars, SubscribeBookDeltas, SubscribeFundingRates, SubscribeIndexPrices,
+            SubscribeInstrument, SubscribeMarkPrices, SubscribeQuotes, SubscribeTrades,
+            TradesResponse, UnsubscribeBars, UnsubscribeBookDeltas, UnsubscribeFundingRates,
+            UnsubscribeIndexPrices, UnsubscribeMarkPrices, UnsubscribeQuotes, UnsubscribeTrades,
         },
     },
 };
@@ -42,10 +42,11 @@ use nautilus_core::{
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_model::{
-    data::{Bar, BarType, Data, OrderBookDeltas_API},
-    enums::{BarAggregation, BookType},
+    data::{Bar, BarType, BookOrder, Data, OrderBookDeltas_API},
+    enums::{BarAggregation, BookType, OrderSide},
     identifiers::{ClientId, InstrumentId, Venue},
     instruments::{Instrument, InstrumentAny},
+    orderbook::OrderBook,
     types::{Price, Quantity},
 };
 use tokio::task::JoinHandle;
@@ -735,6 +736,115 @@ impl DataClient for HyperliquidDataClient {
         if let Err(e) = self.data_sender.send(DataEvent::Response(response)) {
             log::error!("Failed to send trades response: {e}");
         }
+
+        Ok(())
+    }
+
+    fn request_book_snapshot(&self, request: RequestBookSnapshot) -> anyhow::Result<()> {
+        let instrument_id = request.instrument_id;
+        let instruments = self.instruments.load();
+        let instrument = instruments
+            .get(&instrument_id)
+            .ok_or_else(|| anyhow::anyhow!("Instrument {instrument_id} not found"))?;
+
+        let raw_symbol = instrument.raw_symbol().to_string();
+        let price_precision = instrument.price_precision();
+        let size_precision = instrument.size_precision();
+        let depth = request.depth.map(|d| d.get());
+
+        let http = self.http_client.clone();
+        let sender = self.data_sender.clone();
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let request_id = request.request_id;
+        let params = request.params;
+        let clock = self.clock;
+
+        get_runtime().spawn(async move {
+            match http.info_l2_book(&raw_symbol).await {
+                Ok(l2_book) => {
+                    let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+                    let ts_event = UnixNanos::from(l2_book.time * 1_000_000);
+
+                    let all_bids = l2_book
+                        .levels
+                        .first()
+                        .map_or([].as_slice(), |v| v.as_slice());
+                    let all_asks = l2_book
+                        .levels
+                        .get(1)
+                        .map_or([].as_slice(), |v| v.as_slice());
+
+                    let bids = match depth {
+                        Some(d) if d < all_bids.len() => &all_bids[..d],
+                        _ => all_bids,
+                    };
+                    let asks = match depth {
+                        Some(d) if d < all_asks.len() => &all_asks[..d],
+                        _ => all_asks,
+                    };
+
+                    for (i, level) in bids.iter().enumerate() {
+                        let px: f64 = match level.px.parse() {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+                        let sz: f64 = match level.sz.parse() {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+
+                        if sz > 0.0 {
+                            let price = Price::new(px, price_precision);
+                            let size = Quantity::new(sz, size_precision);
+                            let order = BookOrder::new(OrderSide::Buy, price, size, i as u64);
+                            book.add(order, 0, i as u64, ts_event);
+                        }
+                    }
+
+                    let bids_len = bids.len();
+                    for (i, level) in asks.iter().enumerate() {
+                        let px: f64 = match level.px.parse() {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+                        let sz: f64 = match level.sz.parse() {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+
+                        if sz > 0.0 {
+                            let price = Price::new(px, price_precision);
+                            let size = Quantity::new(sz, size_precision);
+                            let order =
+                                BookOrder::new(OrderSide::Sell, price, size, (bids_len + i) as u64);
+                            book.add(order, 0, (bids_len + i) as u64, ts_event);
+                        }
+                    }
+
+                    log::info!(
+                        "Fetched order book for {instrument_id} with {} bids and {} asks",
+                        bids.len(),
+                        asks.len(),
+                    );
+
+                    let response = DataResponse::Book(BookResponse::new(
+                        request_id,
+                        client_id,
+                        instrument_id,
+                        book,
+                        None,
+                        None,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send book snapshot response: {e}");
+                    }
+                }
+                Err(e) => log::error!("Book snapshot request failed for {instrument_id}: {e:?}"),
+            }
+        });
 
         Ok(())
     }
