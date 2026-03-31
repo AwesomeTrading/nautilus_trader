@@ -125,10 +125,22 @@ who = "Chris Sellers <chris@cjdsellers.io>"
 criteria = "safe-to-deploy"
 delta = "0.23.2 -> 0.24.1"
 
+[[audits.capnp]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.25.2 -> 0.25.3"
+notes = "Iterator size_hint() fix, Into-to-From cleanup. No new unsafe."
+
 [[audits.capnpc]]
 who = "Chris Sellers <chris@cjdsellers.io>"
 criteria = "safe-to-deploy"
 delta = "0.23.3 -> 0.24.1"
+
+[[audits.capnpc]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.25.0 -> 0.25.2"
+notes = "4-space indents in codegen, version comment in generated files, TryFrom preference. No new unsafe."
 
 [[audits.cmake]]
 who = "Chris Sellers <chris@cjdsellers.io>"

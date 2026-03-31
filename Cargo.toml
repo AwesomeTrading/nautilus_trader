@@ -133,7 +133,7 @@ aws-lc-rs = { version = "1.16.2", default-features = false, features = [
 base64 = "0.22.1"
 bon = "3.9.1"
 bytes = { version = "1.11.1", features = ["serde"] }
-capnp = "0.25.2"
+capnp = "0.25.3"
 chrono = { version = "0.4.44", default-features = false, features = [
   "serde",
   "std",
@@ -178,7 +178,7 @@ log = { version = "0.4.29", features = [
   "release_max_level_debug",
 ] }
 memchr = "2.8.0"
-object_store = { version = "0.13.1", default-features = false, features = [
+object_store = { version = "0.13.2", default-features = false, features = [
   "fs",
 ] }
 parquet = { version = "58.1.0", default-features = false, features = [
@@ -359,7 +359,7 @@ turmoil = "0.7.1"
 # -----------------------------------------------------------------------------
 # Build dependencies
 # -----------------------------------------------------------------------------
-capnpc = "0.25.0"
+capnpc = "0.25.2"
 cbindgen = "0.29.2"
 walkdir = "2.5.0"
 
