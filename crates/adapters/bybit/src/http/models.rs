@@ -21,11 +21,11 @@ use ustr::Ustr;
 
 use crate::common::{
     enums::{
-        BybitAccountType, BybitCancelType, BybitContractType, BybitExecType, BybitInnovationFlag,
-        BybitInstrumentStatus, BybitMarginTrading, BybitOptionType, BybitOrderSide,
-        BybitOrderStatus, BybitOrderType, BybitPositionIdx, BybitPositionSide, BybitProductType,
-        BybitStopOrderType, BybitTimeInForce, BybitTpSlMode, BybitTriggerDirection,
-        BybitTriggerType,
+        BybitAccountType, BybitCancelType, BybitContractType, BybitCreateType, BybitExecType,
+        BybitInnovationFlag, BybitInstrumentStatus, BybitMarginTrading, BybitOptionType,
+        BybitOrderSide, BybitOrderStatus, BybitOrderType, BybitPositionIdx, BybitPositionSide,
+        BybitPositionStatus, BybitProductType, BybitSmpType, BybitStopOrderType, BybitTimeInForce,
+        BybitTpSlMode, BybitTriggerDirection, BybitTriggerType,
     },
     models::{
         BybitCursorList, BybitCursorListResponse, BybitListResponse, BybitResponse, LeverageFilter,
@@ -862,7 +862,7 @@ pub struct BybitOrder {
     pub last_price_on_created: String,
     pub reduce_only: bool,
     pub close_on_trigger: bool,
-    pub smp_type: Ustr,
+    pub smp_type: BybitSmpType,
     pub smp_group: i32,
     pub smp_order_id: Ustr,
     pub tpsl_mode: Option<BybitTpSlMode>,
@@ -1070,8 +1070,15 @@ impl BybitOrder {
 
     #[getter]
     #[must_use]
-    pub fn smp_type(&self) -> &str {
-        self.smp_type.as_str()
+    #[allow(
+        clippy::missing_panics_doc,
+        reason = "serialization of a simple enum cannot fail"
+    )]
+    pub fn smp_type(&self) -> String {
+        serde_json::to_string(&self.smp_type)
+            .expect("Failed to serialize BybitSmpType")
+            .trim_matches('"')
+            .to_string()
     }
 
     #[getter]
@@ -1182,7 +1189,7 @@ pub struct BybitExecution {
     pub order_price: String,
     pub order_qty: String,
     pub leaves_qty: String,
-    pub create_type: Option<String>,
+    pub create_type: Option<BybitCreateType>,
     pub order_type: BybitOrderType,
     pub stop_order_type: Option<BybitStopOrderType>,
     pub exec_fee: String,
@@ -1227,7 +1234,7 @@ pub struct BybitPosition {
     pub avg_price: String,
     pub position_value: String,
     pub trade_mode: i32,
-    pub position_status: String,
+    pub position_status: BybitPositionStatus,
     pub auto_add_margin: i32,
     pub adl_rank_indicator: i32,
     pub leverage: String,
@@ -1239,7 +1246,7 @@ pub struct BybitPosition {
     pub position_mm: String,
     #[serde(rename = "positionIM")]
     pub position_im: String,
-    pub tpsl_mode: String,
+    pub tpsl_mode: BybitTpSlMode,
     pub take_profit: String,
     pub stop_loss: String,
     pub trailing_stop: String,
@@ -1322,7 +1329,7 @@ pub type BybitSetTradingStopResponse = BybitResponse<BybitSetTradingStopResult>;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BybitBorrowResult {
-    pub coin: String,
+    pub coin: Ustr,
     pub amount: String,
 }
 
@@ -1592,6 +1599,7 @@ mod tests {
         assert_eq!(order.sl_trigger_by, BybitTriggerType::LastPrice);
         assert_eq!(order.tpsl_mode, Some(BybitTpSlMode::Full));
         assert_eq!(order.order_type, BybitOrderType::Limit);
+        assert_eq!(order.smp_type, BybitSmpType::None);
     }
 
     #[rstest]

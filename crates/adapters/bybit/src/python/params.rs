@@ -19,7 +19,8 @@ use ustr::Ustr;
 
 use crate::{
     common::enums::{
-        BybitOrderSide, BybitOrderType, BybitProductType, BybitTimeInForce, BybitTriggerType,
+        BybitMarketUnit, BybitOrderSide, BybitOrderType, BybitProductType, BybitTimeInForce,
+        BybitTpSlMode, BybitTriggerType,
     },
     websocket::{error::BybitWsError, messages},
 };
@@ -226,6 +227,23 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             })
             .transpose()?;
 
+        let tpsl_mode = params
+            .tpsl_mode
+            .map(|v| {
+                serde_json::from_str::<BybitTpSlMode>(&format!("\"{v}\""))
+                    .map_err(|e| BybitWsError::ClientError(format!("Invalid tpsl_mode '{v}': {e}")))
+            })
+            .transpose()?;
+
+        let market_unit = params
+            .market_unit
+            .map(|v| {
+                serde_json::from_str::<BybitMarketUnit>(&format!("\"{v}\"")).map_err(|e| {
+                    BybitWsError::ClientError(format!("Invalid market_unit '{v}': {e}"))
+                })
+            })
+            .transpose()?;
+
         Ok(Self {
             category: params.category,
             symbol: Ustr::from(&params.symbol),
@@ -233,7 +251,7 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             order_type,
             qty: params.qty,
             is_leverage: params.is_leverage,
-            market_unit: params.market_unit,
+            market_unit,
             price: params.price,
             time_in_force,
             order_link_id: params.order_link_id,
@@ -242,7 +260,7 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             trigger_price: params.trigger_price,
             trigger_by,
             trigger_direction: params.trigger_direction,
-            tpsl_mode: params.tpsl_mode,
+            tpsl_mode,
             take_profit: params.take_profit,
             stop_loss: params.stop_loss,
             tp_trigger_by,
@@ -306,6 +324,19 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
                 .to_string()
         });
 
+        let tpsl_mode = params.tpsl_mode.map(|v| {
+            serde_json::to_string(&v)
+                .expect("Failed to serialize BybitTpSlMode")
+                .trim_matches('"')
+                .to_string()
+        });
+        let market_unit = params.market_unit.map(|v| {
+            serde_json::to_string(&v)
+                .expect("Failed to serialize BybitMarketUnit")
+                .trim_matches('"')
+                .to_string()
+        });
+
         Self {
             category: params.category,
             symbol: params.symbol.to_string(),
@@ -313,7 +344,7 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
             order_type,
             qty: params.qty,
             is_leverage: params.is_leverage,
-            market_unit: params.market_unit,
+            market_unit,
             price: params.price,
             time_in_force,
             order_link_id: params.order_link_id,
@@ -322,7 +353,7 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
             trigger_price: params.trigger_price,
             trigger_by,
             trigger_direction: params.trigger_direction,
-            tpsl_mode: params.tpsl_mode,
+            tpsl_mode,
             take_profit: params.take_profit,
             stop_loss: params.stop_loss,
             tp_trigger_by,

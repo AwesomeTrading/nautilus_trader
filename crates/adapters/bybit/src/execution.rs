@@ -60,11 +60,11 @@ use crate::{
         credential::credential_env_vars,
         enums::{
             BybitAccountType, BybitEnvironment, BybitOrderSide, BybitOrderType, BybitProductType,
-            BybitTimeInForce, BybitTriggerType,
+            BybitTimeInForce, BybitTpSlMode, BybitTriggerType,
         },
         parse::{
             BybitTpSlParams, extract_raw_symbol, get_price_str, nanos_to_millis,
-            parse_bybit_tp_sl_params, spot_leverage, spot_market_unit,
+            parse_bybit_tp_sl_params, spot_leverage, spot_market_unit, trigger_direction,
         },
     },
     config::BybitExecClientConfig,
@@ -240,10 +240,14 @@ impl BybitExecutionClient {
         })
     }
 
-    fn map_order_type(order_type: OrderType) -> anyhow::Result<BybitOrderType> {
+    fn map_order_type(order_type: OrderType) -> anyhow::Result<(BybitOrderType, bool)> {
         match order_type {
-            OrderType::Market => Ok(BybitOrderType::Market),
-            OrderType::Limit => Ok(BybitOrderType::Limit),
+            OrderType::Market => Ok((BybitOrderType::Market, false)),
+            OrderType::Limit => Ok((BybitOrderType::Limit, false)),
+            OrderType::StopMarket | OrderType::MarketIfTouched => {
+                Ok((BybitOrderType::Market, true))
+            }
+            OrderType::StopLimit | OrderType::LimitIfTouched => Ok((BybitOrderType::Limit, true)),
             _ => anyhow::bail!("unsupported order type for Bybit: {order_type}"),
         }
     }
@@ -267,8 +271,9 @@ impl BybitExecutionClient {
         tp_sl: &BybitTpSlParams,
     ) -> anyhow::Result<BybitWsPlaceOrderParams> {
         let bybit_side = BybitOrderSide::try_from(order.order_side())?;
-        let bybit_order_type = Self::map_order_type(order.order_type())?;
+        let (bybit_order_type, is_conditional) = Self::map_order_type(order.order_type())?;
         let has_tp_sl = tp_sl.has_tp_sl();
+        let trigger_dir = trigger_direction(order.order_type(), order.order_side(), is_conditional);
 
         Ok(BybitWsPlaceOrderParams {
             category: product_type,
@@ -283,10 +288,14 @@ impl BybitExecutionClient {
                 order.is_quote_quantity(),
             ),
             price: order.price().map(|p: Price| p.to_string()),
-            time_in_force: Some(Self::map_time_in_force(
-                order.time_in_force(),
-                order.is_post_only(),
-            )),
+            time_in_force: if bybit_order_type == BybitOrderType::Market {
+                None
+            } else {
+                Some(Self::map_time_in_force(
+                    order.time_in_force(),
+                    order.is_post_only(),
+                ))
+            },
             order_link_id: Some(order.client_order_id().to_string()),
             reduce_only: if order.is_reduce_only() {
                 Some(true)
@@ -295,10 +304,14 @@ impl BybitExecutionClient {
             },
             close_on_trigger: tp_sl.close_on_trigger,
             trigger_price: order.trigger_price().map(|p: Price| p.to_string()),
-            trigger_by: None,
-            trigger_direction: None,
+            trigger_by: if is_conditional {
+                Some(BybitTriggerType::LastPrice)
+            } else {
+                None
+            },
+            trigger_direction: trigger_dir.map(|d| d as i32),
             tpsl_mode: if has_tp_sl {
-                Some("Full".to_string())
+                Some(BybitTpSlMode::Full)
             } else {
                 None
             },
@@ -1588,17 +1601,28 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::common::enums::BybitMarketUnit;
 
     #[rstest]
-    #[case::spot_market_base(BybitProductType::Spot, BybitOrderType::Market, false, Some("baseCoin".to_string()))]
-    #[case::spot_market_quote(BybitProductType::Spot, BybitOrderType::Market, true, Some("quoteCoin".to_string()))]
+    #[case::spot_market_base(
+        BybitProductType::Spot,
+        BybitOrderType::Market,
+        false,
+        Some(BybitMarketUnit::BaseCoin)
+    )]
+    #[case::spot_market_quote(
+        BybitProductType::Spot,
+        BybitOrderType::Market,
+        true,
+        Some(BybitMarketUnit::QuoteCoin)
+    )]
     #[case::spot_limit(BybitProductType::Spot, BybitOrderType::Limit, true, None)]
     #[case::linear_market(BybitProductType::Linear, BybitOrderType::Market, true, None)]
     fn test_ws_params_market_unit(
         #[case] product_type: BybitProductType,
         #[case] order_type: BybitOrderType,
         #[case] is_quote_quantity: bool,
-        #[case] expected: Option<String>,
+        #[case] expected: Option<BybitMarketUnit>,
     ) {
         let params = BybitWsPlaceOrderParams {
             category: product_type,
@@ -1632,5 +1656,27 @@ mod tests {
         };
 
         assert_eq!(params.market_unit, expected);
+    }
+
+    #[rstest]
+    #[case::market(OrderType::Market, BybitOrderType::Market, false)]
+    #[case::limit(OrderType::Limit, BybitOrderType::Limit, false)]
+    #[case::stop_market(OrderType::StopMarket, BybitOrderType::Market, true)]
+    #[case::stop_limit(OrderType::StopLimit, BybitOrderType::Limit, true)]
+    #[case::market_if_touched(OrderType::MarketIfTouched, BybitOrderType::Market, true)]
+    #[case::limit_if_touched(OrderType::LimitIfTouched, BybitOrderType::Limit, true)]
+    fn test_map_order_type(
+        #[case] input: OrderType,
+        #[case] expected_type: BybitOrderType,
+        #[case] expected_conditional: bool,
+    ) {
+        let (bybit_type, is_conditional) = BybitExecutionClient::map_order_type(input).unwrap();
+        assert_eq!(bybit_type, expected_type);
+        assert_eq!(is_conditional, expected_conditional);
+    }
+
+    #[rstest]
+    fn test_map_order_type_rejects_trailing_stop() {
+        assert!(BybitExecutionClient::map_order_type(OrderType::TrailingStopMarket).is_err());
     }
 }

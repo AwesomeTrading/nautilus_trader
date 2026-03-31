@@ -50,10 +50,9 @@ use ustr::Ustr;
 
 use crate::{
     common::{
-        consts::{BYBIT_BASE_COIN, BYBIT_QUOTE_COIN},
         enums::{
-            BybitContractType, BybitKlineInterval, BybitOptionType, BybitOrderSide,
-            BybitOrderStatus, BybitOrderType, BybitPositionSide, BybitProductType,
+            BybitContractType, BybitKlineInterval, BybitMarketUnit, BybitOptionType,
+            BybitOrderSide, BybitOrderStatus, BybitOrderType, BybitPositionSide, BybitProductType,
             BybitStopOrderType, BybitTimeInForce, BybitTriggerDirection, BybitTriggerType,
         },
         symbol::BybitSymbol,
@@ -1264,12 +1263,12 @@ pub fn spot_market_unit(
     product_type: BybitProductType,
     order_type: BybitOrderType,
     is_quote_quantity: bool,
-) -> Option<String> {
+) -> Option<BybitMarketUnit> {
     if product_type == BybitProductType::Spot && order_type == BybitOrderType::Market {
         if is_quote_quantity {
-            Some(BYBIT_QUOTE_COIN.to_string())
+            Some(BybitMarketUnit::QuoteCoin)
         } else {
-            Some(BYBIT_BASE_COIN.to_string())
+            Some(BybitMarketUnit::BaseCoin)
         }
     } else {
         None

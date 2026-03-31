@@ -1,7 +1,7 @@
 # Bybit
 
 Founded in 2018, Bybit is one of the largest cryptocurrency exchanges in terms
-of daily trading volume, and open interest of crypto assets and crypto
+of daily trading volume and open interest of crypto assets and crypto
 derivative products. This integration supports live market data ingest and order
 execution with Bybit.
 
@@ -418,7 +418,6 @@ Skipping borrow repayment for BTC due to Bybit blackout window (04:00-05:30 UTC 
 - Auto-repayment only triggers on **Spot BUY orders**, not derivatives.
 - Repayment uses the `no-convert-repay` endpoint which repays the full outstanding borrow by default.
 - The feature gracefully handles API errors and logs failures without crashing.
-- Bybit is planning to release an auto-repay mode at the venue level (end of month), which may make this feature redundant in the future.
 - Manual borrowing is still required before opening short positions unless auto-borrow is enabled on your Bybit account.
 
 ### Spot trading limitations

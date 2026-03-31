@@ -55,7 +55,7 @@ use crate::{
         credential::Credential,
         enums::{
             BybitEnvironment, BybitOrderSide, BybitOrderType, BybitProductType, BybitTimeInForce,
-            BybitTriggerType, BybitWsOrderRequestOp,
+            BybitTpSlMode, BybitTriggerType, BybitWsOrderRequestOp,
         },
         parse::{
             bar_spec_to_bybit_interval, extract_base_coin, extract_raw_symbol, map_time_in_force,
@@ -1651,7 +1651,7 @@ impl BybitWebSocketClient {
                 trigger_by: Some(BybitTriggerType::LastPrice),
                 trigger_direction: trigger_dir,
                 tpsl_mode: if take_profit.is_some() || stop_loss.is_some() {
-                    Some("Full".to_string())
+                    Some(BybitTpSlMode::Full)
                 } else {
                     None
                 },
@@ -1686,7 +1686,7 @@ impl BybitWebSocketClient {
                 trigger_by: None,
                 trigger_direction: None,
                 tpsl_mode: if take_profit.is_some() || stop_loss.is_some() {
-                    Some("Full".to_string())
+                    Some(BybitTpSlMode::Full)
                 } else {
                     None
                 },
@@ -1841,10 +1841,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        common::{
-            consts::{BYBIT_BASE_COIN, BYBIT_QUOTE_COIN},
-            testing::load_test_json,
-        },
+        common::{enums::BybitMarketUnit, testing::load_test_json},
         websocket::{messages::BybitWsFrame, parse_bybit_ws_frame},
     };
 
@@ -2057,8 +2054,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::spot_market_quote_quantity(BybitProductType::Spot, OrderType::Market, true, Some(BYBIT_QUOTE_COIN.to_string()))]
-    #[case::spot_market_base_quantity(BybitProductType::Spot, OrderType::Market, false, Some(BYBIT_BASE_COIN.to_string()))]
+    #[case::spot_market_quote_quantity(
+        BybitProductType::Spot,
+        OrderType::Market,
+        true,
+        Some(BybitMarketUnit::QuoteCoin)
+    )]
+    #[case::spot_market_base_quantity(
+        BybitProductType::Spot,
+        OrderType::Market,
+        false,
+        Some(BybitMarketUnit::BaseCoin)
+    )]
     #[case::spot_limit_no_unit(BybitProductType::Spot, OrderType::Limit, false, None)]
     #[case::spot_limit_quote(BybitProductType::Spot, OrderType::Limit, true, None)]
     #[case::linear_market_no_unit(BybitProductType::Linear, OrderType::Market, false, None)]
@@ -2067,7 +2074,7 @@ mod tests {
         #[case] product_type: BybitProductType,
         #[case] order_type: OrderType,
         #[case] is_quote_quantity: bool,
-        #[case] expected: Option<String>,
+        #[case] expected: Option<BybitMarketUnit>,
     ) {
         let symbol = match product_type {
             BybitProductType::Spot => "BTCUSDT-SPOT.BYBIT",

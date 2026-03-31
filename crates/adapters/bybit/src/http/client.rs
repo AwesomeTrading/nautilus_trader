@@ -20,7 +20,7 @@
 use std::{
     cmp::Reverse,
     collections::HashMap,
-    fmt::Debug,
+    fmt::{Debug, Display},
     num::NonZeroU32,
     sync::{
         Arc, LazyLock,
@@ -60,7 +60,7 @@ use super::{
         BybitFundingResponse, BybitInstrumentInverse, BybitInstrumentInverseResponse,
         BybitInstrumentLinear, BybitInstrumentLinearResponse, BybitInstrumentOption,
         BybitInstrumentOptionResponse, BybitInstrumentSpot, BybitInstrumentSpotResponse,
-        BybitKlinesResponse, BybitNoConvertRepayResponse, BybitOpenOrdersResponse,
+        BybitKlinesResponse, BybitNoConvertRepayResponse, BybitOpenOrdersResponse, BybitOrder,
         BybitOrderHistoryResponse, BybitOrderbookResponse, BybitPlaceOrderResponse,
         BybitPositionListResponse, BybitServerTimeResponse, BybitSetLeverageResponse,
         BybitSetMarginModeResponse, BybitSetTradingStopResponse, BybitSwitchModeResponse,
@@ -102,6 +102,19 @@ use crate::common::{
 };
 
 const DEFAULT_RECV_WINDOW_MS: u64 = 5_000;
+
+trait BuilderResultExt<T> {
+    fn build_anyhow(self) -> anyhow::Result<T>;
+}
+
+impl<T, E: Display> BuilderResultExt<T> for Result<T, E> {
+    fn build_anyhow(self) -> anyhow::Result<T> {
+        self.map_err(|e| anyhow::anyhow!("{e}"))
+    }
+}
+
+const BYBIT_ORDER_REALTIME: &str = "/v5/order/realtime";
+const BYBIT_ORDER_HISTORY: &str = "/v5/order/history";
 
 /// Default Bybit REST API rate limit.
 ///
@@ -816,7 +829,7 @@ impl BybitRawHttpClient {
             .build()
             .expect("Failed to build BybitOpenOrdersParams");
 
-        self.send_request(Method::GET, "/v5/order/realtime", Some(&params), None, true)
+        self.send_request(Method::GET, BYBIT_ORDER_REALTIME, Some(&params), None, true)
             .await
     }
 
@@ -2102,13 +2115,13 @@ impl BybitHttpClient {
 
         order_entry.is_leverage(spot_leverage(product_type, is_leverage));
 
-        let order_entry = order_entry.build().map_err(|e| anyhow::anyhow!(e))?;
+        let order_entry = order_entry.build().build_anyhow()?;
 
         let mut params = BybitPlaceOrderParamsBuilder::default();
         params.category(product_type);
         params.order(order_entry);
 
-        let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params.build().build_anyhow()?;
 
         let body = serde_json::to_value(&params)?;
         let response = self.inner.place_order(&body).await?;
@@ -2118,29 +2131,14 @@ impl BybitHttpClient {
             .order_id
             .ok_or_else(|| anyhow::anyhow!("No order_id in response"))?;
 
-        // Query the order to get full details
-        let mut query_params = BybitOpenOrdersParamsBuilder::default();
-        query_params.category(product_type);
-        query_params.order_id(order_id.as_str().to_string());
-
-        let query_params = query_params.build().map_err(|e| anyhow::anyhow!(e))?;
-        let order_response: BybitOpenOrdersResponse = self
-            .inner
-            .send_request(
-                Method::GET,
-                "/v5/order/realtime",
-                Some(&query_params),
-                None,
-                true,
+        let order = self
+            .query_order_by_id(
+                product_type,
+                order_id.as_str(),
+                BYBIT_ORDER_REALTIME,
+                "after submission",
             )
             .await?;
-
-        let order = order_response
-            .result
-            .list
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No order returned after submission"))?;
 
         // Only bail on rejection if there are no fills
         // If the order has fills (cum_exec_qty > 0), let the parser remap Rejected -> Canceled
@@ -2186,13 +2184,13 @@ impl BybitHttpClient {
             anyhow::bail!("Either client_order_id or venue_order_id must be provided");
         }
 
-        let cancel_entry = cancel_entry.build().map_err(|e| anyhow::anyhow!(e))?;
+        let cancel_entry = cancel_entry.build().build_anyhow()?;
 
         let mut params = BybitCancelOrderParamsBuilder::default();
         params.category(product_type);
         params.order(cancel_entry);
 
-        let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params.build().build_anyhow()?;
         let body = serde_json::to_vec(&params)?;
 
         let response: BybitPlaceOrderResponse = self
@@ -2205,29 +2203,14 @@ impl BybitHttpClient {
             .order_id
             .ok_or_else(|| anyhow::anyhow!("No order_id in cancel response"))?;
 
-        // Query the order to get full details after cancellation
-        let mut query_params = BybitOpenOrdersParamsBuilder::default();
-        query_params.category(product_type);
-        query_params.order_id(order_id.as_str().to_string());
-
-        let query_params = query_params.build().map_err(|e| anyhow::anyhow!(e))?;
-        let order_response: BybitOrderHistoryResponse = self
-            .inner
-            .send_request(
-                Method::GET,
-                "/v5/order/history",
-                Some(&query_params),
-                None,
-                true,
+        let order = self
+            .query_order_by_id(
+                product_type,
+                order_id.as_str(),
+                BYBIT_ORDER_HISTORY,
+                "after cancellation",
             )
             .await?;
-
-        let order = order_response
-            .result
-            .list
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No order returned in cancel response"))?;
 
         let ts_init = self.generate_ts_init();
 
@@ -2288,14 +2271,14 @@ impl BybitHttpClient {
                 );
             }
 
-            cancel_entries.push(cancel_entry.build().map_err(|e| anyhow::anyhow!(e))?);
+            cancel_entries.push(cancel_entry.build().build_anyhow()?);
         }
 
         let mut params = BybitBatchCancelOrderParamsBuilder::default();
         params.category(product_type);
         params.request(cancel_entries);
 
-        let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params.build().build_anyhow()?;
         let body = serde_json::to_vec(&params)?;
 
         let _response: BybitPlaceOrderResponse = self
@@ -2335,12 +2318,12 @@ impl BybitHttpClient {
                 query_params.order_link_id(client_order_id.to_string());
             }
 
-            let query_params = query_params.build().map_err(|e| anyhow::anyhow!(e))?;
+            let query_params = query_params.build().build_anyhow()?;
             let order_response: BybitOrderHistoryResponse = self
                 .inner
                 .send_request(
                     Method::GET,
-                    "/v5/order/history",
+                    BYBIT_ORDER_HISTORY,
                     Some(&query_params),
                     None,
                     true,
@@ -2378,7 +2361,7 @@ impl BybitHttpClient {
         params.category(product_type);
         params.symbol(bybit_symbol.raw_symbol().to_string());
 
-        let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params.build().build_anyhow()?;
         let body = serde_json::to_vec(&params)?;
 
         let _response: crate::common::models::BybitListResponse<serde_json::Value> = self
@@ -2392,12 +2375,12 @@ impl BybitHttpClient {
         query_params.symbol(bybit_symbol.raw_symbol().to_string());
         query_params.limit(50u32);
 
-        let query_params = query_params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let query_params = query_params.build().build_anyhow()?;
         let order_response: BybitOrderHistoryResponse = self
             .inner
             .send_request(
                 Method::GET,
-                "/v5/order/history",
+                BYBIT_ORDER_HISTORY,
                 Some(&query_params),
                 None,
                 true,
@@ -2460,13 +2443,13 @@ impl BybitHttpClient {
             amend_entry.price(Some(price.to_string()));
         }
 
-        let amend_entry = amend_entry.build().map_err(|e| anyhow::anyhow!(e))?;
+        let amend_entry = amend_entry.build().build_anyhow()?;
 
         let mut params = BybitAmendOrderParamsBuilder::default();
         params.category(product_type);
         params.order(amend_entry);
 
-        let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params.build().build_anyhow()?;
         let body = serde_json::to_vec(&params)?;
 
         let response: BybitPlaceOrderResponse = self
@@ -2479,29 +2462,14 @@ impl BybitHttpClient {
             .order_id
             .ok_or_else(|| anyhow::anyhow!("No order_id in amend response"))?;
 
-        // Query the order to get full details after amendment
-        let mut query_params = BybitOpenOrdersParamsBuilder::default();
-        query_params.category(product_type);
-        query_params.order_id(order_id.as_str().to_string());
-
-        let query_params = query_params.build().map_err(|e| anyhow::anyhow!(e))?;
-        let order_response: BybitOpenOrdersResponse = self
-            .inner
-            .send_request(
-                Method::GET,
-                "/v5/order/realtime",
-                Some(&query_params),
-                None,
-                true,
+        let order = self
+            .query_order_by_id(
+                product_type,
+                order_id.as_str(),
+                BYBIT_ORDER_REALTIME,
+                "after amendment",
             )
             .await?;
-
-        let order = order_response
-            .result
-            .list
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("No order returned after modification"))?;
 
         let ts_init = self.generate_ts_init();
 
@@ -2543,10 +2511,10 @@ impl BybitHttpClient {
             anyhow::bail!("Either client_order_id or venue_order_id must be provided");
         }
 
-        let params = params.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params.build().build_anyhow()?;
         let mut response: BybitOpenOrdersResponse = self
             .inner
-            .send_request(Method::GET, "/v5/order/realtime", Some(&params), None, true)
+            .send_request(Method::GET, BYBIT_ORDER_REALTIME, Some(&params), None, true)
             .await?;
 
         // Options do not support the StopOrder filter
@@ -2564,12 +2532,12 @@ impl BybitHttpClient {
                 stop_params.order_link_id(client_order_id.to_string());
             }
 
-            let stop_params = stop_params.build().map_err(|e| anyhow::anyhow!(e))?;
+            let stop_params = stop_params.build().build_anyhow()?;
             response = self
                 .inner
                 .send_request(
                     Method::GET,
-                    "/v5/order/realtime",
+                    BYBIT_ORDER_REALTIME,
                     Some(&stop_params),
                     None,
                     true,
@@ -2591,13 +2559,13 @@ impl BybitHttpClient {
                 history_params.order_link_id(client_order_id.to_string());
             }
 
-            let history_params = history_params.build().map_err(|e| anyhow::anyhow!(e))?;
+            let history_params = history_params.build().build_anyhow()?;
 
             let mut history_response: BybitOrderHistoryResponse = self
                 .inner
                 .send_request(
                     Method::GET,
-                    "/v5/order/history",
+                    BYBIT_ORDER_HISTORY,
                     Some(&history_params),
                     None,
                     true,
@@ -2632,7 +2600,7 @@ impl BybitHttpClient {
                     .inner
                     .send_request(
                         Method::GET,
-                        "/v5/order/history",
+                        BYBIT_ORDER_HISTORY,
                         Some(&stop_history_params),
                         None,
                         true,
@@ -2777,6 +2745,7 @@ impl BybitHttpClient {
     {
         let mut instruments = Vec::new();
         let mut cursor: Option<String> = None;
+        let mut prev_cursor: Option<String> = None;
 
         loop {
             let params = BybitInstrumentsInfoParams {
@@ -2797,9 +2766,10 @@ impl BybitHttpClient {
             }
 
             cursor = response.result.next_page_cursor;
-            if cursor.as_ref().is_none_or(|c| c.is_empty()) {
+            if cursor.as_ref().is_none_or(|c| c.is_empty()) || cursor == prev_cursor {
                 break;
             }
+            prev_cursor = cursor.clone();
         }
 
         Ok(instruments)
@@ -3072,7 +3042,7 @@ impl BybitHttpClient {
             params_builder.limit(limit_val);
         }
 
-        let params = params_builder.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params_builder.build().build_anyhow()?;
         let response = self.inner.get_recent_trades(&params).await?;
 
         let mut trades = Vec::new();
@@ -3134,7 +3104,7 @@ impl BybitHttpClient {
                 params_builder.end_time(end_val);
             }
 
-            let params = params_builder.build().map_err(|e| anyhow::anyhow!(e))?;
+            let params = params_builder.build().build_anyhow()?;
             let response = self.inner.get_funding_history(&params).await?;
 
             let funding_rates = response.result.list;
@@ -3254,7 +3224,7 @@ impl BybitHttpClient {
             params_builder.limit(clamped_limit);
         }
 
-        let params = params_builder.build().map_err(|e| anyhow::anyhow!(e))?;
+        let params = params_builder.build().build_anyhow()?;
         let response = self.inner.get_orderbook(&params).await?;
 
         let deltas = parse_orderbook(&response.result, &instrument, None)?;
@@ -3327,7 +3297,7 @@ impl BybitHttpClient {
                 params_builder.end(end_val);
             }
 
-            let params = params_builder.build().map_err(|e| anyhow::anyhow!(e))?;
+            let params = params_builder.build().build_anyhow()?;
             let response = self.inner.get_klines(&params).await?;
 
             let klines = response.result.list;
@@ -3595,12 +3565,12 @@ impl BybitHttpClient {
                         if let Some(c) = cursor {
                             p.cursor(c);
                         }
-                        let params = p.build().map_err(|e| anyhow::anyhow!(e))?;
+                        let params = p.build().build_anyhow()?;
                         let response: BybitOpenOrdersResponse = self
                             .inner
                             .send_request(
                                 Method::GET,
-                                "/v5/order/realtime",
+                                BYBIT_ORDER_REALTIME,
                                 Some(&params),
                                 None,
                                 true,
@@ -3673,12 +3643,12 @@ impl BybitHttpClient {
                         if let Some(c) = cursor {
                             open_params.cursor(c);
                         }
-                        let open_params = open_params.build().map_err(|e| anyhow::anyhow!(e))?;
+                        let open_params = open_params.build().build_anyhow()?;
                         let open_response: BybitOpenOrdersResponse = self
                             .inner
                             .send_request(
                                 Method::GET,
-                                "/v5/order/realtime",
+                                BYBIT_ORDER_REALTIME,
                                 Some(&open_params),
                                 None,
                                 true,
@@ -3751,13 +3721,12 @@ impl BybitHttpClient {
                         if let Some(c) = cursor {
                             history_params.cursor(c);
                         }
-                        let history_params =
-                            history_params.build().map_err(|e| anyhow::anyhow!(e))?;
+                        let history_params = history_params.build().build_anyhow()?;
                         let history_response: BybitOrderHistoryResponse = self
                             .inner
                             .send_request(
                                 Method::GET,
-                                "/v5/order/history",
+                                BYBIT_ORDER_HISTORY,
                                 Some(&history_params),
                                 None,
                                 true,
@@ -4086,6 +4055,31 @@ impl BybitHttpClient {
 
         Ok(reports)
     }
+
+    async fn query_order_by_id(
+        &self,
+        product_type: BybitProductType,
+        order_id: &str,
+        endpoint: &str,
+        context: &str,
+    ) -> anyhow::Result<BybitOrder> {
+        let mut query_params = BybitOpenOrdersParamsBuilder::default();
+        query_params.category(product_type);
+        query_params.order_id(order_id.to_string());
+
+        let query_params = query_params.build().build_anyhow()?;
+        let order_response: BybitOpenOrdersResponse = self
+            .inner
+            .send_request(Method::GET, endpoint, Some(&query_params), None, true)
+            .await?;
+
+        order_response
+            .result
+            .list
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No order returned {context}"))
+    }
 }
 
 #[cfg(test)]
@@ -4164,7 +4158,7 @@ mod tests {
         };
 
         // Old way: build_path serialized params
-        let old_path = BybitRawHttpClient::build_path("/v5/order/realtime", &params).unwrap();
+        let old_path = BybitRawHttpClient::build_path(BYBIT_ORDER_REALTIME, &params).unwrap();
         let old_query = old_path.split('?').nth(1).unwrap_or("");
 
         // New way: direct serialization

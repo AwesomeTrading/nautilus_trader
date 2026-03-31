@@ -48,7 +48,7 @@ use super::{
 };
 use crate::common::{
     consts::BYBIT_VENUE,
-    enums::{BybitOrderStatus, BybitTimeInForce},
+    enums::{BybitOrderStatus, BybitPositionSide, BybitTimeInForce},
     parse::{
         get_currency, parse_book_level, parse_bybit_order_type, parse_millis_timestamp,
         parse_price_with_precision, parse_quantity_with_precision,
@@ -928,13 +928,10 @@ pub fn parse_ws_position_status_report(
         "position.size",
     )?;
 
-    // Derive position side from the side field
-    let position_side = if position.side.eq_ignore_ascii_case("buy") {
-        PositionSideSpecified::Long
-    } else if position.side.eq_ignore_ascii_case("sell") {
-        PositionSideSpecified::Short
-    } else {
-        PositionSideSpecified::Flat
+    let position_side = match position.side {
+        BybitPositionSide::Buy => PositionSideSpecified::Long,
+        BybitPositionSide::Sell => PositionSideSpecified::Short,
+        BybitPositionSide::Flat => PositionSideSpecified::Flat,
     };
 
     let ts_last = parse_millis_timestamp(&position.updated_time, "position.updatedTime")?;

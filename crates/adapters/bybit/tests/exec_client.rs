@@ -57,13 +57,13 @@ use nautilus_core::{UUID4, UnixNanos};
 use nautilus_live::ExecutionClientCore;
 use nautilus_model::{
     accounts::{AccountAny, MarginAccount},
-    enums::{AccountType, OmsType, OrderSide, TimeInForce, TriggerType},
+    enums::{AccountType, OmsType, OrderSide, TimeInForce, TrailingOffsetType, TriggerType},
     events::AccountState,
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, OrderListId, StrategyId, Symbol,
         TraderId, Venue,
     },
-    orders::{MarketOrder, OrderAny, StopMarketOrder},
+    orders::{MarketOrder, OrderAny, TrailingStopMarketOrder},
     types::{AccountBalance, Money, Price, Quantity},
 };
 use nautilus_network::http::HttpClient;
@@ -986,7 +986,7 @@ async fn test_exec_client_submit_order_list_denies_all_on_invalid_leg() {
         .is_ok()
     {}
 
-    // Valid market order + invalid StopMarket order (unsupported by map_order_type)
+    // Valid market order + unsupported TrailingStopMarket order
     let cid1 = ClientOrderId::from("test-deny-order-1");
     let cid2 = ClientOrderId::from("test-deny-order-2");
 
@@ -1012,7 +1012,7 @@ async fn test_exec_client_submit_order_list_denies_all_on_invalid_leg() {
         None,
     ));
 
-    let order2 = OrderAny::StopMarket(StopMarketOrder::new(
+    let order2 = OrderAny::TrailingStopMarket(TrailingStopMarketOrder::new(
         trader_id,
         strategy_id,
         instrument_id,
@@ -1021,6 +1021,8 @@ async fn test_exec_client_submit_order_list_denies_all_on_invalid_leg() {
         Quantity::from("0.01"),
         Price::from("1500.00"),
         TriggerType::LastPrice,
+        rust_decimal::Decimal::new(100, 0),
+        TrailingOffsetType::BasisPoints,
         TimeInForce::Gtc,
         None,
         false,

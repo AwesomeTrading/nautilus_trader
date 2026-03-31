@@ -173,8 +173,11 @@ pub fn dispatch_ws_message(
         }
         BybitWsMessage::AccountWallet(msg) => {
             let ts_init = clock.get_time_ns();
-            let ts_event =
-                parse_millis_i64(msg.creation_time, "wallet.creation_time").unwrap_or(ts_init);
+            let ts_event = parse_millis_i64(msg.creation_time, "wallet.creation_time")
+                .unwrap_or_else(|e| {
+                    log::warn!("Failed to parse wallet creation_time, using ts_init: {e}");
+                    ts_init
+                });
             for wallet in &msg.data {
                 match parse_ws_account_state(wallet, account_id, ts_event, ts_init) {
                     Ok(state) => emitter.send_account_state(state),
@@ -609,7 +612,10 @@ fn dispatch_order_response(
         .as_ref()
         .map(|(_, _, op)| *op)
         .or_else(|| pending_op_from_str(resp.op.as_str()))
-        .unwrap_or(PendingOperation::Place);
+        .unwrap_or_else(|| {
+            log::warn!("Unknown order operation '{}', defaulting to Place", resp.op);
+            PendingOperation::Place
+        });
 
     // For batch rejections (ret_code != 0), emit rejections for ALL orders
     if let Some((cids, voids, _)) = &pending

@@ -22,8 +22,9 @@ use ustr::Ustr;
 use crate::{
     common::{
         enums::{
-            BybitCancelType, BybitCreateType, BybitExecType, BybitOrderSide, BybitOrderStatus,
-            BybitOrderType, BybitProductType, BybitStopOrderType, BybitTimeInForce, BybitTpSlMode,
+            BybitCancelType, BybitCreateType, BybitExecType, BybitMarketUnit, BybitOrderSide,
+            BybitOrderStatus, BybitOrderType, BybitPositionSide, BybitPositionStatus,
+            BybitProductType, BybitSmpType, BybitStopOrderType, BybitTimeInForce, BybitTpSlMode,
             BybitTriggerDirection, BybitTriggerType, BybitWsOrderRequestOp,
         },
         parse::{
@@ -254,7 +255,7 @@ pub struct BybitWsPlaceOrderParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_leverage: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub market_unit: Option<String>,
+    pub market_unit: Option<BybitMarketUnit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -272,7 +273,7 @@ pub struct BybitWsPlaceOrderParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trigger_direction: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tpsl_mode: Option<String>,
+    pub tpsl_mode: Option<BybitTpSlMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -368,7 +369,7 @@ pub struct BybitWsBatchPlaceItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_leverage: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub market_unit: Option<String>,
+    pub market_unit: Option<BybitMarketUnit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -386,7 +387,7 @@ pub struct BybitWsBatchPlaceItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trigger_direction: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tpsl_mode: Option<String>,
+    pub tpsl_mode: Option<BybitTpSlMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -773,7 +774,7 @@ pub struct BybitWsAccountOrder {
     pub sl_limit_price: String,
     pub close_on_trigger: bool,
     pub place_type: Ustr,
-    pub smp_type: Ustr,
+    pub smp_type: BybitSmpType,
     pub smp_group: i32,
     pub smp_order_id: Ustr,
     pub fee_currency: Ustr,
@@ -904,7 +905,7 @@ pub struct BybitWsAccountWalletMsg {
 pub struct BybitWsAccountPosition {
     pub category: BybitProductType,
     pub symbol: Ustr,
-    pub side: Ustr,
+    pub side: BybitPositionSide,
     pub size: String,
     pub position_idx: i32,
     pub trade_mode: i32,
@@ -927,7 +928,7 @@ pub struct BybitWsAccountPosition {
     pub position_mm_by_mp: String,
     pub liq_price: String,
     pub bust_price: String,
-    pub tpsl_mode: Ustr,
+    pub tpsl_mode: BybitTpSlMode,
     pub take_profit: String,
     pub stop_loss: String,
     pub trailing_stop: String,
@@ -935,7 +936,7 @@ pub struct BybitWsAccountPosition {
     pub session_avg_price: String,
     pub cur_realised_pnl: String,
     pub cum_realised_pnl: String,
-    pub position_status: Ustr,
+    pub position_status: BybitPositionStatus,
     pub adl_rank_indicator: i32,
     pub created_time: String,
     pub updated_time: String,
