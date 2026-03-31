@@ -95,6 +95,20 @@ else
 CARGO_FEATURES := $(BASE_FEATURES)
 endif
 
+# LOCAL_CARGO_FEATURES matches the default dev feature set but skips examples so
+# local targets avoid compiling workspace examples and example-only code paths.
+ifeq ($(DEFI),true)
+LOCAL_BASE_FEATURES := arrow,ffi,python,high-precision,streaming,defi
+else
+LOCAL_BASE_FEATURES := arrow,ffi,python,high-precision,streaming
+endif
+
+ifneq ($(strip $(EXTRA_FEATURES)),)
+LOCAL_CARGO_FEATURES := $(LOCAL_BASE_FEATURES),$(EXTRA_FEATURES)
+else
+LOCAL_CARGO_FEATURES := $(LOCAL_BASE_FEATURES)
+endif
+
 # Core crates (excludes adapters/*, nautilus-pyo3, nautilus-cli)
 CORE_CRATES := nautilus-analysis nautilus-backtest nautilus-common nautilus-core \
     nautilus-cryptography nautilus-data nautilus-execution nautilus-indicators \
@@ -269,6 +283,30 @@ pre-flight:  #-- Run comprehensive pre-flight checks (format, check-code, cargo-
 	@$(MAKE) --no-print-directory build-debug
 	@$(MAKE) --no-print-directory pytest
 	@printf "$(GREEN)All pre-flight checks passed$(RESET)\n"
+
+.PHONY: pre-flight-local
+pre-flight-local: export CARGO_TARGET_DIR=$(TARGET_DIR)
+pre-flight-local:  #-- Run faster local pre-flight checks without compiling bins/examples
+	$(info $(M) Running local pre-flight checks...)
+	@if ! git diff --quiet; then \
+		printf "$(RED)ERROR: You have unstaged changes$(RESET)\n"; \
+		printf "$(YELLOW)Stage your changes first:$(RESET) git add .\n"; \
+		exit 1; \
+	fi
+	@$(MAKE) --no-print-directory install-deps
+	@$(MAKE) --no-print-directory format
+	@$(MAKE) --no-print-directory check-code-local EXTRA_FEATURES="capnp,hypersync"
+	@$(MAKE) --no-print-directory cargo-test-extras-local
+	@$(MAKE) --no-print-directory build-debug
+	@$(MAKE) --no-print-directory pytest
+	@printf "$(GREEN)All local pre-flight checks passed$(RESET)\n"
+
+.PHONY: check-code-local
+check-code-local:  #-- Run clippy on libs/tests only for faster local checks
+	$(info $(M) Running local code quality checks...)
+	@cargo clippy --workspace --lib --tests --features "$(LOCAL_CARGO_FEATURES)" --profile nextest -- -D warnings
+	@uv run --active --no-sync ruff check . --fix
+	@printf "$(GREEN)Local checks passed$(RESET)\n"
 
 .PHONY: ruff
 ruff:  #-- Run ruff linter with automatic fixes
@@ -508,6 +546,22 @@ endif
 .PHONY: cargo-test-extras
 cargo-test-extras:  #-- Run all Rust tests with capnp and hypersync features (convenience shortcut)
 	$(MAKE) cargo-test EXTRA_FEATURES="capnp,hypersync"
+
+.PHONY: cargo-test-extras-local
+cargo-test-extras-local:  #-- Run local Rust tests with capnp and hypersync features
+	$(MAKE) cargo-test-local EXTRA_FEATURES="capnp,hypersync"
+
+.PHONY: cargo-test-local
+cargo-test-local: export RUST_BACKTRACE=1
+cargo-test-local: check-nextest-installed
+cargo-test-local:  #-- Run Rust lib/test targets only for faster local iteration
+ifeq ($(VERBOSE),true)
+	$(info $(M) Running local Rust tests...)
+	cargo nextest run --workspace --lib --tests --features "$(LOCAL_CARGO_FEATURES)" $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --verbose
+else
+	$(info $(M) Running local Rust tests (showing summary and failures only)...)
+	cargo nextest run --workspace --lib --tests --features "$(LOCAL_CARGO_FEATURES)" $(FAIL_FAST_FLAG) --profile $(NEXTEST_PROFILE) --cargo-profile nextest --status-level fail --final-status-level flaky
+endif
 
 # Both core and adapter targets use identical --workspace --features flags so
 # cargo sees the same feature union and does not recompile between runs.
