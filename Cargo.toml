@@ -306,6 +306,7 @@ alloy = { version = "1.8.3", default-features = false, features = [
   "signer-local",
 ] }
 arc-swap = "1.9.0"
+bzip2 = "0.6.1"
 cosmrs = { version = "0.22.0", default-features = false, features = ["bip32"] }
 csv = "1.4.0"
 databento = { version = "0.45.0", default-features = false, features = [
