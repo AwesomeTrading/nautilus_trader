@@ -114,6 +114,8 @@ Released on TBD (UTC).
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
 - Fixed Binance SBE price/quantity precision derivation (#3670), thanks @husariancom
 - Fixed Binance Futures `set_futures_hedge_mode` sending GET instead of POST to `positionSide/dual` endpoint (#3745), thanks for reporting @dodge-basic
+- Fixed Binance order update silently dropped when instrument not cached (#3775), thanks for reporting @M-at-ti-a
+- Fixed Binance Futures `OrderStatusReport` missing `avg_px` from WS order updates (Python)
 - Fixed Binance Spot post-only (`LIMIT_MAKER`) rejection not setting `due_post_only` on `OrderRejected` events (Python and Rust)
 - Fixed Binance Rust WS trading API not decoding SBE error responses, losing error codes on rejection
 - Fixed Binance Rust WS trading request-response race condition where fast rejections arrived before pending request registration

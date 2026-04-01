@@ -26,6 +26,7 @@ use std::{
 
 use anyhow::Context;
 use async_trait::async_trait;
+use dashmap::DashMap;
 use futures_util::{StreamExt, pin_mut};
 use nautilus_common::{
     clients::ExecutionClient,
@@ -259,6 +260,13 @@ impl BinanceFuturesExecutionClient {
     #[must_use]
     pub fn is_hedge_mode(&self) -> bool {
         self.is_hedge_mode.load(Ordering::Acquire)
+    }
+
+    /// Returns a clone of the HTTP client's instruments cache Arc.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn instruments_cache(&self) -> Arc<DashMap<ustr::Ustr, BinanceFuturesInstrument>> {
+        self.http_client.instruments_cache()
     }
 
     /// Determines the position side for hedge mode based on order direction.
@@ -2167,19 +2175,6 @@ fn dispatch_order_update(
     let cache = http_client.instruments_cache();
     let cached_instrument = cache.get(&symbol_ustr);
 
-    let needs_precision = matches!(
-        order.execution_type,
-        BinanceExecutionType::Trade | BinanceExecutionType::Calculated
-    ) || order.is_exchange_generated();
-
-    if cached_instrument.is_none() && needs_precision {
-        log::error!(
-            "Instrument not in cache for fill: {}, skipping to avoid precision mismatch",
-            order.symbol
-        );
-        return;
-    }
-
     let (instrument_id, price_precision, size_precision) = if let Some(ref inst) = cached_instrument
     {
         (
@@ -2207,7 +2202,9 @@ fn dispatch_order_update(
     if order.is_exchange_generated() {
         let is_linear = cached_instrument
             .as_ref()
-            .is_some_and(|inst| matches!(inst.value(), BinanceFuturesInstrument::UsdM(_)));
+            .map_or(product_type == BinanceProductType::UsdM, |inst| {
+                matches!(inst.value(), BinanceFuturesInstrument::UsdM(_))
+            });
 
         let quote_currency = cached_instrument
             .as_ref()
