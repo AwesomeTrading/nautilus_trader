@@ -15,7 +15,7 @@
 
 //! Core Databento historical client for both Rust and Python usage.
 
-use std::{fs, num::NonZeroU64, path::PathBuf, str::FromStr, sync::Arc};
+use std::{fmt::Debug, fs, num::NonZeroU64, path::PathBuf, str::FromStr, sync::Arc};
 
 use databento::{
     dbn::{self, decode::DbnMetadata},
@@ -32,7 +32,7 @@ use nautilus_model::{
 };
 
 use crate::{
-    common::get_date_time_range,
+    common::{Credential, get_date_time_range},
     decode::{
         decode_imbalance_msg, decode_instrument_def_msg, decode_mbo_msg, decode_mbp10_msg,
         decode_record, decode_statistics_msg, decode_status_msg,
@@ -48,9 +48,9 @@ use crate::{
 ///
 /// This client provides both synchronous and asynchronous interfaces for fetching
 /// various types of historical market data from Databento.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DatabentoHistoricalClient {
-    pub key: String,
+    credential: Credential,
     clock: &'static AtomicTime,
     inner: Arc<tokio::sync::Mutex<databento::HistoricalClient>>,
     publisher_venue_map: Arc<IndexMap<PublisherId, Venue>>,
@@ -76,21 +76,35 @@ pub struct DatasetRange {
     pub end: String,
 }
 
+impl Debug for DatabentoHistoricalClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(stringify!(DatabentoHistoricalClient))
+            .field("credential", &self.credential)
+            .finish()
+    }
+}
+
 impl DatabentoHistoricalClient {
+    /// Returns the API key from the stored credential.
+    #[must_use]
+    pub fn api_key(&self) -> &str {
+        self.credential.api_key()
+    }
+
     /// Creates a new [`DatabentoHistoricalClient`] instance.
     ///
     /// # Errors
     ///
     /// Returns an error if client creation or publisher loading fails.
     pub fn new(
-        key: String,
+        credential: Credential,
         publishers_filepath: PathBuf,
         clock: &'static AtomicTime,
         use_exchange_as_venue: bool,
     ) -> anyhow::Result<Self> {
         let client = databento::HistoricalClient::builder()
             .user_agent_extension(NAUTILUS_USER_AGENT.into())
-            .key(key.clone())
+            .key(credential.api_key())
             .map_err(|e| anyhow::anyhow!("Failed to create client builder: {e}"))?
             .build()
             .map_err(|e| anyhow::anyhow!("Failed to build client: {e}"))?;
@@ -108,7 +122,7 @@ impl DatabentoHistoricalClient {
             inner: Arc::new(tokio::sync::Mutex::new(client)),
             publisher_venue_map: Arc::new(publisher_venue_map),
             symbol_venue_map: Arc::new(AtomicMap::new()),
-            key,
+            credential,
             use_exchange_as_venue,
         })
     }

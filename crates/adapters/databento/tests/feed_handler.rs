@@ -35,7 +35,7 @@ use databento::{
     live::Subscription,
 };
 use nautilus_common::testing::wait_until_async;
-use nautilus_databento::live::{LiveCommand, LiveMessage};
+use nautilus_databento::live::{DatabentoMessage, HandlerCommand};
 use nautilus_model::{data::Data, instruments::Instrument};
 use rstest::rstest;
 
@@ -43,7 +43,7 @@ const INSTRUMENT_ID: u32 = 1;
 const RAW_SYMBOL: &str = "ESM4";
 const RECV_TIMEOUT: Duration = Duration::from_secs(5);
 
-async fn recv_msg(rx: &mut tokio::sync::mpsc::Receiver<LiveMessage>) -> LiveMessage {
+async fn recv_msg(rx: &mut tokio::sync::mpsc::Receiver<DatabentoMessage>) -> DatabentoMessage {
     tokio::time::timeout(RECV_TIMEOUT, rx.recv())
         .await
         .expect("timed out waiting for message")
@@ -71,15 +71,15 @@ async fn test_connect_and_authenticate() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     tokio::time::sleep(Duration::from_millis(100)).await;
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
 
     let close_msg = recv_msg(&mut msg_rx).await;
-    assert!(matches!(close_msg, LiveMessage::Close));
+    assert!(matches!(close_msg, DatabentoMessage::Close));
 
     handle.await.unwrap().unwrap();
     server.stop().await;
@@ -98,15 +98,15 @@ async fn test_close_command_stops_handler() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     tokio::time::sleep(Duration::from_millis(100)).await;
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
-    assert!(matches!(msg, LiveMessage::Close));
+    assert!(matches!(msg, DatabentoMessage::Close));
 
     let result = handle.await.unwrap();
     assert!(result.is_ok());
@@ -130,13 +130,13 @@ async fn test_subscribe_trades() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Trade(trade)) => {
+        DatabentoMessage::Data(Data::Trade(trade)) => {
             assert_eq!(trade.instrument_id.symbol.as_str(), RAW_SYMBOL);
             assert!(trade.price.as_f64() > 0.0);
             assert!(trade.size.as_f64() > 0.0);
@@ -144,7 +144,7 @@ async fn test_subscribe_trades() {
         other => panic!("expected Data::Trade, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -170,20 +170,20 @@ async fn test_subscribe_quotes_mbp1() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbp1)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbp1)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Quote(quote)) => {
+        DatabentoMessage::Data(Data::Quote(quote)) => {
             assert_eq!(quote.instrument_id.symbol.as_str(), RAW_SYMBOL);
             assert!(quote.bid_price.as_f64() < quote.ask_price.as_f64());
         }
         other => panic!("expected Data::Quote, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -209,9 +209,9 @@ async fn test_subscribe_quotes_with_trade() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbp1)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbp1)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let mut got_quote = false;
     let mut got_trade = false;
@@ -219,8 +219,8 @@ async fn test_subscribe_quotes_with_trade() {
     for _ in 0..2 {
         let msg = recv_msg(&mut msg_rx).await;
         match msg {
-            LiveMessage::Data(Data::Quote(_)) => got_quote = true,
-            LiveMessage::Data(Data::Trade(_)) => got_trade = true,
+            DatabentoMessage::Data(Data::Quote(_)) => got_quote = true,
+            DatabentoMessage::Data(Data::Trade(_)) => got_trade = true,
             _ => {}
         }
     }
@@ -228,7 +228,7 @@ async fn test_subscribe_quotes_with_trade() {
     assert!(got_quote, "expected a QuoteTick");
     assert!(got_trade, "expected a TradeTick");
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -249,13 +249,15 @@ async fn test_subscribe_bars_ohlcv() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Ohlcv1S)))
+        .send(HandlerCommand::Subscribe(subscription(
+            dbn::Schema::Ohlcv1S,
+        )))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Bar(bar)) => {
+        DatabentoMessage::Data(Data::Bar(bar)) => {
             assert!(bar.high.as_f64() >= bar.low.as_f64());
             assert!(bar.high.as_f64() >= bar.open.as_f64());
             assert!(bar.high.as_f64() >= bar.close.as_f64());
@@ -264,7 +266,7 @@ async fn test_subscribe_bars_ohlcv() {
         other => panic!("expected Data::Bar, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -285,19 +287,19 @@ async fn test_subscribe_instrument_status() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Status)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Status)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Status(status) => {
+        DatabentoMessage::Status(status) => {
             assert_eq!(status.instrument_id.symbol.as_str(), RAW_SYMBOL);
         }
-        other => panic!("expected LiveMessage::Status, was {other:?}"),
+        other => panic!("expected DatabentoMessage::Status, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -318,13 +320,13 @@ async fn test_subscribe_book_depth_mbp10() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbp10)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbp10)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Depth10(depth)) => {
+        DatabentoMessage::Data(Data::Depth10(depth)) => {
             assert_eq!(depth.instrument_id.symbol.as_str(), RAW_SYMBOL);
             // Bids descending, asks ascending
             for i in 0..9 {
@@ -345,7 +347,7 @@ async fn test_subscribe_book_depth_mbp10() {
         other => panic!("expected Data::Depth10, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -378,19 +380,19 @@ async fn test_subscribe_book_deltas_mbo() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbo)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbo)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Deltas(deltas)) => {
+        DatabentoMessage::Data(Data::Deltas(deltas)) => {
             assert!(!deltas.deltas.is_empty(), "expected at least one delta");
         }
         other => panic!("expected Data::Deltas, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -406,12 +408,12 @@ async fn test_close_during_backoff() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     tokio::time::sleep(Duration::from_millis(500)).await;
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
 
     let result = handle.await.unwrap();
     assert!(
@@ -446,17 +448,17 @@ async fn test_reconnection_resubscribes() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg1 = recv_msg(&mut msg_rx).await;
-    assert!(matches!(msg1, LiveMessage::Data(Data::Trade(_))));
+    assert!(matches!(msg1, DatabentoMessage::Data(Data::Trade(_))));
 
     let msg2 = recv_msg(&mut msg_rx).await;
-    assert!(matches!(msg2, LiveMessage::Data(Data::Trade(_))));
+    assert!(matches!(msg2, DatabentoMessage::Data(Data::Trade(_))));
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -479,13 +481,13 @@ async fn test_system_msg_subscription_ack() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::SubscriptionAck(ack) => {
+        DatabentoMessage::SubscriptionAck(ack) => {
             assert!(
                 ack.message.contains("succeeded"),
                 "ack message should contain 'succeeded', was: {}",
@@ -495,7 +497,7 @@ async fn test_system_msg_subscription_ack() {
         other => panic!("expected SubscriptionAck, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -516,21 +518,21 @@ async fn test_subscribe_instrument_def() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(
+        .send(HandlerCommand::Subscribe(subscription(
             dbn::Schema::Definition,
         )))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Instrument(instrument) => {
+        DatabentoMessage::Instrument(instrument) => {
             assert_eq!(instrument.id().symbol.as_str(), RAW_SYMBOL);
         }
-        other => panic!("expected LiveMessage::Instrument, was {other:?}"),
+        other => panic!("expected DatabentoMessage::Instrument, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -554,22 +556,24 @@ async fn test_subscribe_imbalance() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Imbalance)))
+        .send(HandlerCommand::Subscribe(subscription(
+            dbn::Schema::Imbalance,
+        )))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     // Skip the instrument message
     let _instrument = recv_msg(&mut msg_rx).await;
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Imbalance(imbalance) => {
+        DatabentoMessage::Imbalance(imbalance) => {
             assert_eq!(imbalance.instrument_id.symbol.as_str(), RAW_SYMBOL);
         }
-        other => panic!("expected LiveMessage::Imbalance, was {other:?}"),
+        other => panic!("expected DatabentoMessage::Imbalance, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -593,24 +597,24 @@ async fn test_subscribe_statistics() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(
+        .send(HandlerCommand::Subscribe(subscription(
             dbn::Schema::Statistics,
         )))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     // Skip the instrument message
     let _instrument = recv_msg(&mut msg_rx).await;
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Statistics(stats) => {
+        DatabentoMessage::Statistics(stats) => {
             assert_eq!(stats.instrument_id.symbol.as_str(), RAW_SYMBOL);
         }
-        other => panic!("expected LiveMessage::Statistics, was {other:?}"),
+        other => panic!("expected DatabentoMessage::Statistics, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -632,18 +636,18 @@ async fn test_error_msg_continues_processing() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     // ErrorMsg is logged but does not stop processing; trade should arrive
     let msg = recv_msg(&mut msg_rx).await;
     assert!(
-        matches!(msg, LiveMessage::Data(Data::Trade(_))),
+        matches!(msg, DatabentoMessage::Data(Data::Trade(_))),
         "expected trade after error, was {msg:?}"
     );
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -669,13 +673,13 @@ async fn test_mbo_buffering_waits_for_f_last() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbo)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbo)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Deltas(deltas)) => {
+        DatabentoMessage::Data(Data::Deltas(deltas)) => {
             assert_eq!(
                 deltas.deltas.len(),
                 3,
@@ -686,7 +690,7 @@ async fn test_mbo_buffering_waits_for_f_last() {
         other => panic!("expected Data::Deltas, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -725,13 +729,13 @@ async fn test_mbo_snapshot_buffered_until_delta() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbo)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbo)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Deltas(deltas)) => {
+        DatabentoMessage::Data(Data::Deltas(deltas)) => {
             assert_eq!(
                 deltas.deltas.len(),
                 3,
@@ -742,7 +746,7 @@ async fn test_mbo_snapshot_buffered_until_delta() {
         other => panic!("expected Data::Deltas, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -772,9 +776,9 @@ async fn test_mbo_multiple_instruments() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Mbo)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Mbo)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg1 = recv_msg(&mut msg_rx).await;
     let msg2 = recv_msg(&mut msg_rx).await;
@@ -782,7 +786,7 @@ async fn test_mbo_multiple_instruments() {
     let mut symbols: Vec<String> = Vec::new();
     for msg in [msg1, msg2] {
         match msg {
-            LiveMessage::Data(Data::Deltas(deltas)) => {
+            DatabentoMessage::Data(Data::Deltas(deltas)) => {
                 symbols.push(deltas.instrument_id.symbol.to_string());
             }
             other => panic!("expected Data::Deltas, was {other:?}"),
@@ -792,7 +796,7 @@ async fn test_mbo_multiple_instruments() {
     symbols.sort();
     assert_eq!(symbols, vec!["ESM4", "NQM4"]);
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -815,9 +819,9 @@ async fn test_reconnect_timeout_gives_up() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let result = handle.await.unwrap();
     assert!(result.is_err(), "handler should return Err on timeout");
@@ -838,9 +842,9 @@ async fn test_command_channel_disconnect_stops_handler() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     tokio::time::sleep(Duration::from_millis(100)).await;
     drop(cmd_tx);
@@ -874,20 +878,22 @@ async fn test_bars_timestamp_on_close_enabled() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Ohlcv1S)))
+        .send(HandlerCommand::Subscribe(subscription(
+            dbn::Schema::Ohlcv1S,
+        )))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Bar(bar)) => {
+        DatabentoMessage::Data(Data::Bar(bar)) => {
             // With bars_timestamp_on_close, ts_event shifts by the bar interval (1s)
             assert!(bar.ts_event.as_u64() > 0);
         }
         other => panic!("expected Data::Bar, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -915,22 +921,22 @@ async fn test_instrument_def_with_exchange_as_venue() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(
+        .send(HandlerCommand::Subscribe(subscription(
             dbn::Schema::Definition,
         )))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Instrument(instrument) => {
+        DatabentoMessage::Instrument(instrument) => {
             // Venue from exchange field, not publisher map
             assert_eq!(instrument.id().venue.as_str(), "XCME");
         }
-        other => panic!("expected LiveMessage::Instrument, was {other:?}"),
+        other => panic!("expected DatabentoMessage::Instrument, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -971,12 +977,12 @@ async fn test_replay_subscription_buffers_until_past_start() {
         .stype_in(dbn::SType::RawSymbol)
         .start(time::OffsetDateTime::from_unix_timestamp(0).unwrap())
         .build();
-    cmd_tx.send(LiveCommand::Subscribe(sub)).unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Subscribe(sub)).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let msg = recv_msg(&mut msg_rx).await;
     match msg {
-        LiveMessage::Data(Data::Deltas(deltas)) => {
+        DatabentoMessage::Data(Data::Deltas(deltas)) => {
             assert_eq!(
                 deltas.deltas.len(),
                 3,
@@ -987,7 +993,7 @@ async fn test_replay_subscription_buffers_until_past_start() {
         other => panic!("expected Data::Deltas, was {other:?}"),
     }
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     server.stop().await;
 }
@@ -1028,14 +1034,14 @@ async fn test_session_success_resets_backoff() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let collect_handle = tokio::spawn(async move {
         while let Ok(Some(msg)) = tokio::time::timeout(Duration::from_secs(10), msg_rx.recv()).await
         {
-            if matches!(msg, LiveMessage::Data(Data::Trade(_))) {
+            if matches!(msg, DatabentoMessage::Data(Data::Trade(_))) {
                 trade_count_rx.fetch_add(1, Ordering::Relaxed);
             }
         }
@@ -1052,7 +1058,7 @@ async fn test_session_success_resets_backoff() {
 
     assert!(trade_count.load(Ordering::Relaxed) >= 2);
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     collect_handle.abort();
     server.stop().await;
@@ -1090,14 +1096,14 @@ async fn test_buffered_subscribe_during_backoff() {
     let handle = tokio::spawn(async move { handler.run().await });
 
     cmd_tx
-        .send(LiveCommand::Subscribe(subscription(dbn::Schema::Trades)))
+        .send(HandlerCommand::Subscribe(subscription(dbn::Schema::Trades)))
         .unwrap();
-    cmd_tx.send(LiveCommand::Start).unwrap();
+    cmd_tx.send(HandlerCommand::Start).unwrap();
 
     let collect_handle = tokio::spawn(async move {
         while let Ok(Some(msg)) = tokio::time::timeout(Duration::from_secs(10), msg_rx.recv()).await
         {
-            if matches!(msg, LiveMessage::Data(Data::Trade(_))) {
+            if matches!(msg, DatabentoMessage::Data(Data::Trade(_))) {
                 got_trade_rx.store(true, Ordering::Relaxed);
             }
         }
@@ -1114,7 +1120,7 @@ async fn test_buffered_subscribe_during_backoff() {
 
     assert!(got_trade.load(Ordering::Relaxed));
 
-    cmd_tx.send(LiveCommand::Close).unwrap();
+    cmd_tx.send(HandlerCommand::Close).unwrap();
     let _ = handle.await;
     collect_handle.abort();
     server.stop().await;

@@ -13,7 +13,22 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-use std::sync::Arc;
+//! Databento live feed handler.
+//!
+//! The feed handler runs a single async task per dataset. It receives
+//! [`HandlerCommand`] messages over an unbounded channel and streams decoded
+//! market data back as [`DatabentoMessage`]s on a bounded tokio channel.
+//!
+//! The inner loop uses `tokio::select!` to concurrently await the next record
+//! from the Databento gateway and the next command from the engine, giving
+//! near-zero idle CPU and immediate command responsiveness.
+//!
+//! Heartbeat detection is delegated to the upstream `databento` client, which
+//! returns `Error::HeartbeatTimeout` when no data arrives within
+//! `heartbeat_interval + 5 s` (default 35 s). The handler treats this as a
+//! connection error and enters the reconnection backoff loop.
+
+use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use ahash::{AHashMap, HashSet, HashSetExt};
 use databento::{
@@ -31,35 +46,28 @@ use nautilus_model::{
     instruments::{Instrument, InstrumentAny},
 };
 use nautilus_network::backoff::ExponentialBackoff;
-use tokio::{
-    sync::mpsc::error::TryRecvError,
-    time::{Duration, Instant},
-};
 
 use super::{
     decode::{decode_imbalance_msg, decode_statistics_msg, decode_status_msg},
     types::{DatabentoImbalance, DatabentoStatistics, SubscriptionAckEvent},
 };
 use crate::{
+    common::Credential,
     decode::{decode_instrument_def_msg, decode_record},
     types::PublisherId,
 };
 
 #[derive(Debug)]
-pub enum LiveCommand {
+pub enum HandlerCommand {
     Subscribe(Subscription),
     Start,
     Close,
 }
 
 #[derive(Debug)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "TODO: Optimize this (largest variant 1096 vs 80 bytes)"
-)]
-pub enum LiveMessage {
+pub enum DatabentoMessage {
     Data(Data),
-    Instrument(InstrumentAny),
+    Instrument(Box<InstrumentAny>),
     Status(InstrumentStatus),
     Imbalance(DatabentoImbalance),
     Statistics(DatabentoStatistics),
@@ -70,8 +78,8 @@ pub enum LiveMessage {
 
 /// Handles a raw TCP data feed from the Databento LSG for a single dataset.
 ///
-/// [`LiveCommand`] messages are received synchronously across a channel,
-/// decoded records are sent asynchronously on a tokio channel as [`LiveMessage`]s
+/// [`HandlerCommand`] messages are received synchronously across a channel,
+/// decoded records are sent asynchronously on a tokio channel as [`DatabentoMessage`]s
 /// back to a message processing task.
 ///
 /// # Crash Policy
@@ -81,12 +89,11 @@ pub enum LiveMessage {
 /// misbehavior), the process will run out of memory and terminate. This is by
 /// design - such scenarios indicate fundamental problems that require external
 /// intervention.
-#[derive(Debug)]
 pub struct DatabentoFeedHandler {
-    key: String,
+    credential: Credential,
     dataset: String,
-    cmd_rx: tokio::sync::mpsc::UnboundedReceiver<LiveCommand>,
-    msg_tx: tokio::sync::mpsc::Sender<LiveMessage>,
+    cmd_rx: tokio::sync::mpsc::UnboundedReceiver<HandlerCommand>,
+    msg_tx: tokio::sync::mpsc::Sender<DatabentoMessage>,
     publisher_venue_map: IndexMap<PublisherId, Venue>,
     symbol_venue_map: Arc<AtomicMap<Symbol, Venue>>,
     replay: bool,
@@ -95,9 +102,21 @@ pub struct DatabentoFeedHandler {
     reconnect_timeout_mins: Option<u64>,
     backoff: ExponentialBackoff,
     subscriptions: Vec<Subscription>,
-    buffered_commands: Vec<LiveCommand>,
+    buffered_commands: Vec<HandlerCommand>,
     gateway_addr: Option<String>,
     success_threshold: Duration,
+}
+
+impl Debug for DatabentoFeedHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(stringify!(DatabentoFeedHandler))
+            .field("credential", &self.credential)
+            .field("dataset", &self.dataset)
+            .field("replay", &self.replay)
+            .field("reconnect_timeout_mins", &self.reconnect_timeout_mins)
+            .field("subscriptions", &self.subscriptions.len())
+            .finish()
+    }
 }
 
 impl DatabentoFeedHandler {
@@ -109,10 +128,10 @@ impl DatabentoFeedHandler {
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        key: String,
+        credential: Credential,
         dataset: String,
-        rx: tokio::sync::mpsc::UnboundedReceiver<LiveCommand>,
-        tx: tokio::sync::mpsc::Sender<LiveMessage>,
+        rx: tokio::sync::mpsc::UnboundedReceiver<HandlerCommand>,
+        tx: tokio::sync::mpsc::Sender<DatabentoMessage>,
         publisher_venue_map: IndexMap<PublisherId, Venue>,
         symbol_venue_map: Arc<AtomicMap<Symbol, Venue>>,
         use_exchange_as_venue: bool,
@@ -132,7 +151,7 @@ impl DatabentoFeedHandler {
             .expect("hardcoded backoff parameters are valid");
 
         Self {
-            key,
+            credential,
             dataset,
             cmd_rx: rx,
             msg_tx: tx,
@@ -183,7 +202,7 @@ impl DatabentoFeedHandler {
     pub async fn run(&mut self) -> anyhow::Result<()> {
         log::debug!("Running feed handler");
 
-        let mut reconnect_start: Option<Instant> = None;
+        let mut reconnect_start: Option<tokio::time::Instant> = None;
         let mut attempt = 0;
 
         loop {
@@ -202,7 +221,7 @@ impl DatabentoFeedHandler {
                     }
                 }
                 Err(e) => {
-                    let cycle_start = reconnect_start.get_or_insert_with(Instant::now);
+                    let cycle_start = reconnect_start.get_or_insert_with(tokio::time::Instant::now);
 
                     if let Some(timeout_mins) = self.reconnect_timeout_mins {
                         let elapsed = cycle_start.elapsed();
@@ -210,7 +229,7 @@ impl DatabentoFeedHandler {
 
                         if elapsed >= timeout {
                             log::error!("Giving up reconnection after {timeout_mins} minutes");
-                            self.send_msg(LiveMessage::Error(anyhow::anyhow!(
+                            self.send_msg(DatabentoMessage::Error(anyhow::anyhow!(
                                 "Reconnection timeout after {timeout_mins} minutes: {e}"
                             )))
                             .await;
@@ -231,7 +250,7 @@ impl DatabentoFeedHandler {
                         () = tokio::time::sleep(delay) => {}
                         cmd = self.cmd_rx.recv() => {
                             match cmd {
-                                Some(LiveCommand::Close) => {
+                                Some(HandlerCommand::Close) => {
                                     log::info!("Close received during backoff");
                                     return Ok(());
                                 }
@@ -264,7 +283,7 @@ impl DatabentoFeedHandler {
             log::info!("Reconnecting (attempt {attempt})...");
         }
 
-        let session_start = Instant::now();
+        let session_start = tokio::time::Instant::now();
         let clock = get_atomic_clock_realtime();
         let mut symbol_map = PitSymbolMap::new();
         let mut instrument_id_map: AHashMap<u32, InstrumentId> = AHashMap::new();
@@ -276,7 +295,7 @@ impl DatabentoFeedHandler {
         let timeout = Duration::from_secs(5); // Hardcoded timeout for now
 
         let gateway_addr = self.gateway_addr.clone();
-        let key = self.key.clone();
+        let api_key = self.credential.api_key().to_owned();
         let dataset = self.dataset.clone();
 
         let result = tokio::time::timeout(timeout, async move {
@@ -287,7 +306,7 @@ impl DatabentoFeedHandler {
                 base
             };
             base.user_agent_extension(NAUTILUS_USER_AGENT.into())
-                .key(key)?
+                .key(api_key)?
                 .dataset(dataset)
                 .build()
                 .await
@@ -318,16 +337,16 @@ impl DatabentoFeedHandler {
             );
             for cmd in self.buffered_commands.drain(..) {
                 match cmd {
-                    LiveCommand::Subscribe(sub) => {
+                    HandlerCommand::Subscribe(sub) => {
                         if !self.replay && sub.start.is_some() {
                             self.replay = true;
                         }
                         self.subscriptions.push(sub);
                     }
-                    LiveCommand::Start => {
+                    HandlerCommand::Start => {
                         start_buffered = true;
                     }
-                    LiveCommand::Close => {
+                    HandlerCommand::Close => {
                         log::warn!("Close command was buffered, shutting down");
                         return Ok(false);
                     }
@@ -335,7 +354,6 @@ impl DatabentoFeedHandler {
             }
         }
 
-        let timeout = Duration::from_millis(10);
         let mut running = false;
 
         if !self.subscriptions.is_empty() {
@@ -370,56 +388,77 @@ impl DatabentoFeedHandler {
                 return Ok(false);
             }
 
-            match self.cmd_rx.try_recv() {
-                Ok(cmd) => {
-                    log::debug!("Received command: {cmd:?}");
-                    match cmd {
-                        LiveCommand::Subscribe(sub) => {
-                            if !self.replay && sub.start.is_some() {
-                                self.replay = true;
-                            }
-                            client.subscribe(sub.clone()).await?;
-                            // Store without start to avoid replaying history on reconnect
-                            let mut sub_for_reconnect = sub;
-                            sub_for_reconnect.start = None;
-                            self.subscriptions.push(sub_for_reconnect);
-                        }
-                        LiveCommand::Start => {
-                            buffering_start = if self.replay {
-                                Some(clock.get_time_ns())
-                            } else {
-                                None
-                            };
-                            client.start().await?;
-                            running = true;
-                            log::debug!("Started");
-                        }
-                        LiveCommand::Close => {
-                            self.msg_tx.send(LiveMessage::Close).await?;
+            // Wait for either a command or a record. When the session has not
+            // started yet (`!running`), only commands are awaited. Once running,
+            // `next_record` is cancel-safe so `tokio::select!` can safely
+            // race both futures.
+            if !running {
+                match self.cmd_rx.recv().await {
+                    Some(HandlerCommand::Subscribe(sub)) => {
+                        log::debug!("Received command: Subscribe");
 
-                            if running {
-                                client.close().await?;
-                                log::debug!("Closed inner client");
-                            }
-                            return Ok(false);
+                        if !self.replay && sub.start.is_some() {
+                            self.replay = true;
                         }
+                        client.subscribe(sub.clone()).await?;
+                        let mut sub_for_reconnect = sub;
+                        sub_for_reconnect.start = None;
+                        self.subscriptions.push(sub_for_reconnect);
+                        continue;
+                    }
+                    Some(HandlerCommand::Start) => {
+                        log::debug!("Received command: Start");
+                        buffering_start = if self.replay {
+                            Some(clock.get_time_ns())
+                        } else {
+                            None
+                        };
+                        client.start().await?;
+                        running = true;
+                        continue;
+                    }
+                    Some(HandlerCommand::Close) => {
+                        self.msg_tx.send(DatabentoMessage::Close).await?;
+                        return Ok(false);
+                    }
+                    None => {
+                        log::debug!("Command channel disconnected");
+                        return Ok(false);
                     }
                 }
-                Err(TryRecvError::Empty) => {}
-                Err(TryRecvError::Disconnected) => {
-                    log::debug!("Command channel disconnected");
-                    return Ok(false);
-                }
             }
 
-            if !running {
-                continue;
-            }
+            let record_opt = tokio::select! {
+                cmd = self.cmd_rx.recv() =>
+                match cmd {
+                    Some(HandlerCommand::Subscribe(sub)) => {
+                        log::debug!("Received command: Subscribe");
 
-            let result = tokio::time::timeout(timeout, client.next_record()).await;
-            let record_opt = match result {
-                Ok(record_opt) => record_opt,
-                Err(_) => continue,
+                        if !self.replay && sub.start.is_some() {
+                            self.replay = true;
+                        }
+                        client.subscribe(sub.clone()).await?;
+                        let mut sub_for_reconnect = sub;
+                        sub_for_reconnect.start = None;
+                        self.subscriptions.push(sub_for_reconnect);
+                        continue;
+                    }
+                    Some(HandlerCommand::Start) => {
+                        log::warn!("Received Start command but session already running");
+                        continue;
+                    }
+                    Some(HandlerCommand::Close) => {
+                        self.msg_tx.send(DatabentoMessage::Close).await?;
+                        client.close().await?;
+                        log::debug!("Closed inner client");
+                        return Ok(false);
+                    }
+                    None => {
+                        log::debug!("Command channel disconnected");
+                        return Ok(false);
+                    }
+                },
+                result = client.next_record() => result,
             };
 
             let record = match record_opt {
@@ -447,7 +486,7 @@ impl DatabentoFeedHandler {
                 handle_error_msg(msg);
             } else if let Some(msg) = record.get::<dbn::SystemMsg>() {
                 if let Some(ack) = handle_system_msg(msg, ts_init) {
-                    self.send_msg(LiveMessage::SubscriptionAck(ack)).await;
+                    self.send_msg(DatabentoMessage::SubscriptionAck(ack)).await;
                 }
             } else if let Some(msg) = record.get::<dbn::SymbolMappingMsg>() {
                 // Remove instrument ID index as the raw symbol may have changed
@@ -479,7 +518,8 @@ impl DatabentoFeedHandler {
                     )?
                 };
                 price_precision_map.insert(msg.hd.instrument_id, data.price_precision());
-                self.send_msg(LiveMessage::Instrument(data)).await;
+                self.send_msg(DatabentoMessage::Instrument(Box::new(data)))
+                    .await;
             } else if let Some(msg) = record.get::<dbn::StatusMsg>() {
                 let data = {
                     let sym_map = self.symbol_venue_map.load();
@@ -493,7 +533,7 @@ impl DatabentoFeedHandler {
                         ts_init,
                     )?
                 };
-                self.send_msg(LiveMessage::Status(data)).await;
+                self.send_msg(DatabentoMessage::Status(data)).await;
             } else if let Some(msg) = record.get::<dbn::ImbalanceMsg>() {
                 let data = {
                     let sym_map = self.symbol_venue_map.load();
@@ -508,7 +548,7 @@ impl DatabentoFeedHandler {
                         ts_init,
                     )?
                 };
-                self.send_msg(LiveMessage::Imbalance(data)).await;
+                self.send_msg(DatabentoMessage::Imbalance(data)).await;
             } else if let Some(msg) = record.get::<dbn::StatMsg>() {
                 let data = {
                     let sym_map = self.symbol_venue_map.load();
@@ -523,7 +563,7 @@ impl DatabentoFeedHandler {
                         ts_init,
                     )?
                 };
-                self.send_msg(LiveMessage::Statistics(data)).await;
+                self.send_msg(DatabentoMessage::Statistics(data)).await;
             } else {
                 // Decode a generic record with possible errors
                 let res = {
@@ -575,18 +615,18 @@ impl DatabentoFeedHandler {
                 }
 
                 if let Some(data) = data1 {
-                    self.send_msg(LiveMessage::Data(data)).await;
+                    self.send_msg(DatabentoMessage::Data(data)).await;
                 }
 
                 if let Some(data) = data2 {
-                    self.send_msg(LiveMessage::Data(data)).await;
+                    self.send_msg(DatabentoMessage::Data(data)).await;
                 }
             }
         }
     }
 
     /// Sends a message to the message processing task.
-    async fn send_msg(&self, msg: LiveMessage) {
+    async fn send_msg(&self, msg: DatabentoMessage) {
         log::trace!("Sending {msg:?}");
         match self.msg_tx.send(msg).await {
             Ok(()) => {}
@@ -923,7 +963,7 @@ mod tests {
         let (msg_tx, _msg_rx) = tokio::sync::mpsc::channel(100);
 
         DatabentoFeedHandler::new(
-            "test_key".to_string(),
+            Credential::new("test_key"),
             "GLBX.MDP3".to_string(),
             cmd_rx,
             msg_tx,
@@ -970,7 +1010,7 @@ mod tests {
 
         assert!(!handler.replay);
         assert_eq!(handler.dataset, "GLBX.MDP3");
-        assert_eq!(handler.key, "test_key");
+        assert_eq!(handler.credential.api_key(), "test_key");
         assert!(handler.subscriptions.is_empty());
         assert!(handler.buffered_commands.is_empty());
     }

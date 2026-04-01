@@ -25,7 +25,10 @@ use databento::dbn::{
 };
 use indexmap::IndexMap;
 use nautilus_core::AtomicMap;
-use nautilus_databento::live::{DatabentoFeedHandler, LiveCommand, LiveMessage};
+use nautilus_databento::{
+    common::Credential,
+    live::{DatabentoFeedHandler, DatabentoMessage, HandlerCommand},
+};
 use nautilus_model::identifiers::Venue;
 
 pub const TEST_KEY: &str = "32-character-with-lots-of-filler";
@@ -49,8 +52,8 @@ pub fn create_test_handler(
     addr: &str,
     dataset: &str,
 ) -> (
-    tokio::sync::mpsc::UnboundedSender<LiveCommand>,
-    tokio::sync::mpsc::Receiver<LiveMessage>,
+    tokio::sync::mpsc::UnboundedSender<HandlerCommand>,
+    tokio::sync::mpsc::Receiver<DatabentoMessage>,
     DatabentoFeedHandler,
 ) {
     create_test_handler_with_config(addr, dataset, &TestHandlerConfig::default())
@@ -61,15 +64,15 @@ pub fn create_test_handler_with_config(
     dataset: &str,
     config: &TestHandlerConfig,
 ) -> (
-    tokio::sync::mpsc::UnboundedSender<LiveCommand>,
-    tokio::sync::mpsc::Receiver<LiveMessage>,
+    tokio::sync::mpsc::UnboundedSender<HandlerCommand>,
+    tokio::sync::mpsc::Receiver<DatabentoMessage>,
     DatabentoFeedHandler,
 ) {
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::unbounded_channel();
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel(100);
 
     let handler = DatabentoFeedHandler::new(
-        TEST_KEY.to_string(),
+        Credential::new(TEST_KEY),
         dataset.to_string(),
         cmd_rx,
         msg_tx,

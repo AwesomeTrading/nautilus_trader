@@ -221,7 +221,12 @@ impl DatabentoHistoricalClientFactory {
         use_exchange_as_venue: bool,
         clock: &'static AtomicTime,
     ) -> anyhow::Result<DatabentoHistoricalClient> {
-        DatabentoHistoricalClient::new(api_key, publishers_filepath, clock, use_exchange_as_venue)
+        DatabentoHistoricalClient::new(
+            Credential::new(api_key),
+            publishers_filepath,
+            clock,
+            use_exchange_as_venue,
+        )
     }
 }
 
