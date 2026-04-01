@@ -227,6 +227,16 @@ impl AxDataClient {
             }
         });
     }
+
+    fn abort_all_tasks(&mut self) {
+        self.cancellation_token.cancel();
+        for task in self.tasks.drain(..) {
+            task.abort();
+        }
+        for (_, task) in self.funding_rate_tasks.drain() {
+            task.abort();
+        }
+    }
 }
 
 #[async_trait(?Send)]
@@ -246,26 +256,14 @@ impl DataClient for AxDataClient {
 
     fn stop(&mut self) -> anyhow::Result<()> {
         log::debug!("Stopping {}", self.client_id);
-        self.cancellation_token.cancel();
-        for task in self.tasks.drain(..) {
-            task.abort();
-        }
-        for (_, task) in self.funding_rate_tasks.drain() {
-            task.abort();
-        }
+        self.abort_all_tasks();
         self.is_connected.store(false, Ordering::Release);
         Ok(())
     }
 
     fn reset(&mut self) -> anyhow::Result<()> {
         log::debug!("Resetting {}", self.client_id);
-        self.cancellation_token.cancel();
-        for task in self.tasks.drain(..) {
-            task.abort();
-        }
-        for (_, task) in self.funding_rate_tasks.drain() {
-            task.abort();
-        }
+        self.abort_all_tasks();
         self.funding_rate_cache.lock().unwrap().clear();
         self.cancellation_token = CancellationToken::new();
         Ok(())
@@ -273,13 +271,7 @@ impl DataClient for AxDataClient {
 
     fn dispose(&mut self) -> anyhow::Result<()> {
         log::debug!("Disposing {}", self.client_id);
-        self.cancellation_token.cancel();
-        for task in self.tasks.drain(..) {
-            task.abort();
-        }
-        for (_, task) in self.funding_rate_tasks.drain() {
-            task.abort();
-        }
+        self.abort_all_tasks();
         self.is_connected.store(false, Ordering::Release);
         Ok(())
     }
@@ -355,15 +347,8 @@ impl DataClient for AxDataClient {
 
     async fn disconnect(&mut self) -> anyhow::Result<()> {
         log::info!("Disconnecting {}", self.client_id);
-        self.cancellation_token.cancel();
         self.ws_client.close().await;
-
-        for task in self.tasks.drain(..) {
-            task.abort();
-        }
-        for (_, task) in self.funding_rate_tasks.drain() {
-            task.abort();
-        }
+        self.abort_all_tasks();
         self.funding_rate_cache.lock().unwrap().clear();
 
         self.is_connected.store(false, Ordering::Release);
@@ -1044,6 +1029,8 @@ fn handle_md_message(
             }
         }
         AxMdMessage::Ticker(ticker) => {
+            // TODO: Parse mark price, index price, and open interest from
+            // the ticker into MarkPriceUpdate / IndexPriceUpdate events
             log::debug!(
                 "Received ticker: {} last={} vol={} oi={:?}",
                 ticker.s,

@@ -60,9 +60,10 @@ use super::{
         AxFundingRatesResponse, AxInitialMarginRequirementResponse, AxInstrument,
         AxInstrumentsResponse, AxOpenOrdersResponse, AxOrderStatusQueryResponse, AxOrdersResponse,
         AxPlaceOrderResponse, AxPositionsResponse, AxPreviewAggressiveLimitOrderResponse,
-        AxRiskSnapshotResponse, AxTicker, AxTickersResponse, AxTradesResponse,
-        AxTransactionsResponse, AxWhoAmI, BatchCancelOrdersRequest, CancelAllOrdersRequest,
-        CancelOrderRequest, PlaceOrderRequest, PreviewAggressiveLimitOrderRequest,
+        AxReplaceOrderResponse, AxRiskSnapshotResponse, AxTicker, AxTickersResponse,
+        AxTradesResponse, AxTransactionsResponse, AxWhoAmI, BatchCancelOrdersRequest,
+        CancelAllOrdersRequest, CancelOrderRequest, PlaceOrderRequest,
+        PreviewAggressiveLimitOrderRequest, ReplaceOrderRequest,
     },
     parse::{
         parse_account_state, parse_bar, parse_fill_report, parse_funding_rate,
@@ -640,6 +641,34 @@ impl AxRawHttpClient {
             &self.orders_base_url,
             Method::POST,
             "/cancel_order",
+            None,
+            Some(body),
+            true,
+        )
+        .await
+    }
+
+    /// Replaces (amends) an existing order.
+    ///
+    /// The exchange cancels the original order and creates a new one with the
+    /// updated fields. Unspecified optional fields inherit from the original.
+    ///
+    /// # Endpoint
+    /// `POST /replace_order` (orders base URL)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the response cannot be parsed.
+    pub async fn replace_order(
+        &self,
+        request: &ReplaceOrderRequest,
+    ) -> Result<AxReplaceOrderResponse, AxHttpError> {
+        let body = serde_json::to_vec(request)
+            .map_err(|e| AxHttpError::JsonError(format!("Failed to serialize request: {e}")))?;
+        self.send_request_to_url::<AxReplaceOrderResponse, ()>(
+            &self.orders_base_url,
+            Method::POST,
+            "/replace_order",
             None,
             Some(body),
             true,

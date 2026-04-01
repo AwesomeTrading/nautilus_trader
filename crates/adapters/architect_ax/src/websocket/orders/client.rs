@@ -318,6 +318,7 @@ impl AxOrdersWebSocketClient {
             size_precision: instrument.size_precision(),
             price_precision: instrument.price_precision(),
             quote_currency: instrument.quote_currency(),
+            pending_trigger_price: None,
         };
 
         self.caches
@@ -612,6 +613,7 @@ impl AxOrdersWebSocketClient {
             size_precision: instrument.size_precision(),
             price_precision: instrument.price_precision(),
             quote_currency: instrument.quote_currency(),
+            pending_trigger_price: None,
         };
         self.caches
             .orders_metadata

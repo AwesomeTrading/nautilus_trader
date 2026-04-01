@@ -17,7 +17,7 @@
 
 use nautilus_model::identifiers::{AccountId, TraderId};
 
-use crate::common::credential::credential_env_vars;
+use crate::common::{credential::credential_env_vars, enums::AxEnvironment};
 
 /// Configuration for the AX Exchange live data client.
 #[cfg_attr(
@@ -98,40 +98,38 @@ impl AxDataClientConfig {
         has_key && has_secret
     }
 
+    /// Returns the resolved environment.
+    #[must_use]
+    pub fn environment(&self) -> AxEnvironment {
+        if self.is_sandbox {
+            AxEnvironment::Sandbox
+        } else {
+            AxEnvironment::Production
+        }
+    }
+
     /// Returns the REST base URL, considering overrides and environment.
     #[must_use]
     pub fn http_base_url(&self) -> String {
-        self.base_url_http.clone().unwrap_or_else(|| {
-            if self.is_sandbox {
-                "https://gateway.sandbox.architect.exchange/api".to_string()
-            } else {
-                "https://gateway.architect.exchange/api".to_string()
-            }
-        })
+        self.base_url_http
+            .clone()
+            .unwrap_or_else(|| self.environment().http_url().to_string())
     }
 
     /// Returns the public WebSocket URL, considering overrides and environment.
     #[must_use]
     pub fn ws_public_url(&self) -> String {
-        self.base_url_ws_public.clone().unwrap_or_else(|| {
-            if self.is_sandbox {
-                "wss://gateway.sandbox.architect.exchange/md/ws".to_string()
-            } else {
-                "wss://gateway.architect.exchange/md/ws".to_string()
-            }
-        })
+        self.base_url_ws_public
+            .clone()
+            .unwrap_or_else(|| self.environment().ws_md_url().to_string())
     }
 
     /// Returns the private WebSocket URL, considering overrides and environment.
     #[must_use]
     pub fn ws_private_url(&self) -> String {
-        self.base_url_ws_private.clone().unwrap_or_else(|| {
-            if self.is_sandbox {
-                "wss://gateway.sandbox.architect.exchange/orders/ws".to_string()
-            } else {
-                "wss://gateway.architect.exchange/orders/ws".to_string()
-            }
-        })
+        self.base_url_ws_private
+            .clone()
+            .unwrap_or_else(|| self.environment().ws_orders_url().to_string())
     }
 }
 
@@ -190,6 +188,9 @@ pub struct AxExecClientConfig {
     /// Receive window in milliseconds for signed requests.
     #[builder(default = 5_000)]
     pub recv_window_ms: u64,
+    /// Cancel all open orders when the orders WebSocket disconnects.
+    #[builder(default)]
+    pub cancel_on_disconnect: bool,
 }
 
 impl Default for AxExecClientConfig {
@@ -214,39 +215,106 @@ impl AxExecClientConfig {
         has_key && has_secret
     }
 
+    /// Returns the resolved environment.
+    #[must_use]
+    pub fn environment(&self) -> AxEnvironment {
+        if self.is_sandbox {
+            AxEnvironment::Sandbox
+        } else {
+            AxEnvironment::Production
+        }
+    }
+
     /// Returns the REST base URL, considering overrides and environment.
     #[must_use]
     pub fn http_base_url(&self) -> String {
-        self.base_url_http.clone().unwrap_or_else(|| {
-            if self.is_sandbox {
-                "https://gateway.sandbox.architect.exchange/api".to_string()
-            } else {
-                "https://gateway.architect.exchange/api".to_string()
-            }
-        })
+        self.base_url_http
+            .clone()
+            .unwrap_or_else(|| self.environment().http_url().to_string())
     }
 
     /// Returns the orders REST base URL, considering overrides and environment.
     #[must_use]
     pub fn orders_base_url(&self) -> String {
-        self.base_url_orders.clone().unwrap_or_else(|| {
-            if self.is_sandbox {
-                "https://gateway.sandbox.architect.exchange/orders".to_string()
-            } else {
-                "https://gateway.architect.exchange/orders".to_string()
-            }
-        })
+        self.base_url_orders
+            .clone()
+            .unwrap_or_else(|| self.environment().orders_url().to_string())
     }
 
     /// Returns the private WebSocket URL, considering overrides and environment.
     #[must_use]
     pub fn ws_private_url(&self) -> String {
-        self.base_url_ws_private.clone().unwrap_or_else(|| {
-            if self.is_sandbox {
-                "wss://gateway.sandbox.architect.exchange/orders/ws".to_string()
-            } else {
-                "wss://gateway.architect.exchange/orders/ws".to_string()
-            }
-        })
+        self.base_url_ws_private
+            .clone()
+            .unwrap_or_else(|| self.environment().ws_orders_url().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+    use crate::common::consts::{
+        AX_HTTP_SANDBOX_URL, AX_HTTP_URL, AX_ORDERS_SANDBOX_URL, AX_ORDERS_URL, AX_WS_PRIVATE_URL,
+        AX_WS_PUBLIC_URL, AX_WS_SANDBOX_PRIVATE_URL, AX_WS_SANDBOX_PUBLIC_URL,
+    };
+
+    #[rstest]
+    fn test_data_config_sandbox_urls_match_consts() {
+        let config = AxDataClientConfig::builder().is_sandbox(true).build();
+        assert_eq!(config.http_base_url(), AX_HTTP_SANDBOX_URL);
+        assert_eq!(config.ws_public_url(), AX_WS_SANDBOX_PUBLIC_URL);
+        assert_eq!(config.ws_private_url(), AX_WS_SANDBOX_PRIVATE_URL);
+    }
+
+    #[rstest]
+    fn test_data_config_production_urls_match_consts() {
+        let config = AxDataClientConfig::builder().is_sandbox(false).build();
+        assert_eq!(config.http_base_url(), AX_HTTP_URL);
+        assert_eq!(config.ws_public_url(), AX_WS_PUBLIC_URL);
+        assert_eq!(config.ws_private_url(), AX_WS_PRIVATE_URL);
+    }
+
+    #[rstest]
+    fn test_data_config_url_overrides() {
+        let config = AxDataClientConfig::builder()
+            .base_url_http("http://custom".to_string())
+            .base_url_ws_public("ws://custom-pub".to_string())
+            .base_url_ws_private("ws://custom-priv".to_string())
+            .build();
+        assert_eq!(config.http_base_url(), "http://custom");
+        assert_eq!(config.ws_public_url(), "ws://custom-pub");
+        assert_eq!(config.ws_private_url(), "ws://custom-priv");
+    }
+
+    #[rstest]
+    fn test_exec_config_sandbox_urls_match_consts() {
+        let config = AxExecClientConfig::builder().is_sandbox(true).build();
+        assert_eq!(config.http_base_url(), AX_HTTP_SANDBOX_URL);
+        assert_eq!(config.orders_base_url(), AX_ORDERS_SANDBOX_URL);
+        assert_eq!(config.ws_private_url(), AX_WS_SANDBOX_PRIVATE_URL);
+    }
+
+    #[rstest]
+    fn test_exec_config_production_urls_match_consts() {
+        let config = AxExecClientConfig::builder().is_sandbox(false).build();
+        assert_eq!(config.http_base_url(), AX_HTTP_URL);
+        assert_eq!(config.orders_base_url(), AX_ORDERS_URL);
+        assert_eq!(config.ws_private_url(), AX_WS_PRIVATE_URL);
+    }
+
+    #[rstest]
+    fn test_exec_config_cancel_on_disconnect_default_false() {
+        let config = AxExecClientConfig::default();
+        assert!(!config.cancel_on_disconnect);
+    }
+
+    #[rstest]
+    fn test_exec_config_cancel_on_disconnect_enabled() {
+        let config = AxExecClientConfig::builder()
+            .cancel_on_disconnect(true)
+            .build();
+        assert!(config.cancel_on_disconnect);
     }
 }
