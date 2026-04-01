@@ -46,7 +46,7 @@ runs:
         haskell: ${{ inputs.build-type != 'pre-commit' }}
         large-packages: ${{ inputs.build-type != 'pre-commit' }}
         docker-images: true
-        swap-storage: ${{ inputs.build-type != 'pre-commit' }}
+        swap-storage: true
 
     - name: Free disk space (macOS)
       if: inputs.free-disk-space == 'true' && runner.os == 'macOS'
@@ -77,17 +77,6 @@ runs:
         if [ "$BUILD_TYPE" != "pre-commit" ]; then
           rm -rf "/c/Program Files (x86)/Microsoft Visual Studio/2019"
         fi
-
-    - name: Add swap space
-      if: inputs.build-type != 'pre-commit' && runner.os == 'Linux' && inputs.free-disk-space == 'true'
-      shell: bash
-      run: |
-        sudo swapoff -a || true
-        sudo rm -f /swapfile || true
-        sudo fallocate -l 8G /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
 
     - name: Install runner dependencies
       if: runner.os == 'Linux'
