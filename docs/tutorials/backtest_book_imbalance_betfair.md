@@ -109,7 +109,7 @@ for item in items {
 ```
 
 `OrderBookDeltas_API` is a thin wrapper around `OrderBookDeltas` required by
-the `Data` enum (a legacy FFI shim that will be removed in a future release).
+the `Data` enum (an FFI shim).
 
 Instruments are re-emitted on every market definition update in the stream,
 so the map naturally deduplicates them by keeping the latest version.

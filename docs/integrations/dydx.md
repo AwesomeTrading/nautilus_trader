@@ -160,7 +160,7 @@ product types.
 
 dYdX supports perpetual futures trading with a full set of order types and execution
 features. The Rust adapter automatically classifies orders as short-term or long-term based on
-time-in-force and expiry, so no manual tagging is needed (unlike the legacy Python adapter).
+time-in-force and expiry, so no manual tagging is needed.
 
 ### Order types
 

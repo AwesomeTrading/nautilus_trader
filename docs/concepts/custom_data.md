@@ -372,18 +372,15 @@ Current behavior:
   (type_name, metadata, identifier) and return results sorted by `ts_init`;
   this is exposed via the PyO3 `RedisCacheDatabase` API.
 
-## Relationship to legacy Cython custom data
+## Cython custom data
 
-Legacy Cython `@customdataclass` remains separate from this architecture.
-
+The Cython `@customdataclass` system is separate from this architecture.
 This document describes the PyO3 custom-data system:
 
 - PyO3 `CustomData`.
 - Dynamic runtime registration.
 - Arrow/Parquet persistence.
 - Native Rust execution paths.
-
-Legacy Cython support is intentionally left unchanged.
 
 ## Practical implications
 

@@ -358,7 +358,7 @@ For a complete parameter list see the `StrategyConfig`
 ## Windows signal handling
 
 :::warning
-Windows: asyncio event loops do not implement `loop.add_signal_handler`. As a result, the legacy
+Windows: asyncio event loops do not implement `loop.add_signal_handler`. As a result,
 `TradingNode` does not receive OS signals via asyncio on Windows. Use Ctrl+C (SIGINT) handling or
 programmatic shutdown; SIGTERM parity is not expected on Windows.
 :::

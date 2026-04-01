@@ -119,7 +119,7 @@ catalog = ParquetDataCatalog(CATALOG_PATH)
 loader = DatabentoDataLoader()
 
 # %% [markdown]
-# Load Rust pyo3 objects by setting `as_legacy_cython=False` (more efficient than legacy Cython objects).
+# Load Rust PyO3 objects by setting `as_legacy_cython=False`.
 #
 # Passing an `instrument_id` is optional but speeds up loading by skipping symbology mapping. If provided, use the Nautilus `symbol.venue` format (e.g., "ES.GLBX").
 

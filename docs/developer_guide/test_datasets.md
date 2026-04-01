@@ -1,8 +1,8 @@
 # Test Datasets
 
 Target standards for curating, storing, and consuming external datasets used as test fixtures.
-New datasets should follow these standards. Existing datasets are documented under
-[legacy datasets](#legacy-datasets) and will be migrated incrementally.
+New datasets should follow these standards. Existing datasets that predate this
+policy are documented under [legacy datasets](#legacy-datasets).
 
 ## Dataset categories
 

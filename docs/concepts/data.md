@@ -584,7 +584,7 @@ There are a number of **DataWrangler v2** components, which will take a `pd.Data
 with a different fixed width Nautilus Arrow v2 schema, and output PyO3 Nautilus objects which are only compatible with the new version
 of the Nautilus core, currently in development.
 
-**These PyO3 provided data objects are not compatible where the legacy Cython objects are currently used (e.g., adding directly to a `BacktestEngine`).**
+**These PyO3 data objects are not compatible where v1 legacy Cython objects are expected (e.g., adding directly to a `BacktestEngine`).**
 :::
 
 ### Fixed-point precision and raw values
@@ -603,26 +603,25 @@ When constructing `Price` or `Quantity` using `from_raw()`, the raw value **must
 Raw values that are not valid multiples will cause a panic. The raw value must be divisible by `10^(FIXED_PRECISION - precision)` where `FIXED_PRECISION` is 9 (standard mode) or 16 (high-precision mode).
 :::
 
-#### Legacy catalog data and floating-point errors
+#### Automatic raw value correction
 
-Data written to catalogs using V2 wranglers before 16th December 2025 may contain raw values with floating-point precision errors. This occurred because the wranglers used:
-
-```python
-int(value * FIXED_SCALAR)  # Introduces floating-point errors
-```
-
-For example, `int(0.67068 * 1e9)` produces `670680000000001` instead of the expected `670680000000000`. The correct approach is:
+Catalog data can contain raw values with floating-point precision errors.
+This happens when raw values are produced with `int(value * FIXED_SCALAR)`
+instead of precision-aware conversion:
 
 ```python
+int(value * FIXED_SCALAR)             # Introduces floating-point errors
 round(value * 10**precision) * scale  # Correct precision-aware conversion
 ```
 
-#### Automatic correction during catalog reads
+For example, `int(0.67068 * 1e9)` produces `670680000000001` instead of
+the expected `670680000000000`.
 
-To maintain backward compatibility with existing catalog data, the Arrow decode path automatically corrects raw values by rounding them to the nearest valid multiple. This ensures that legacy catalogs continue to work without requiring data migration.
+The Arrow decode path automatically corrects these values by rounding to
+the nearest valid multiple, so affected catalogs work without data migration.
 
 :::note
-This automatic correction adds a small amount of overhead during data decoding. In a future version, once catalogs have been repaired or migrated, this correction will become opt-in. A catalog repair/migration script may be provided to permanently fix legacy data.
+This correction adds a small amount of overhead during data decoding.
 :::
 
 ### Transformation pipeline
@@ -704,11 +703,7 @@ The NautilusTrader data catalog is built on a dual-backend architecture that com
 - Schema evolution support for data model changes.
 - Cross-language compatibility (Python, Rust, Java, C++, etc.).
 
-The Arrow schemas used for the Parquet format are primarily single-sourced in the core `persistence` Rust crate, with some legacy schemas available from the `/serialization/arrow/schema.py` module.
-
-:::note
-The current plan is to eventually phase out the Python schemas module, so that all schemas are single sourced in the Rust core for consistency and performance.
-:::
+The Arrow schemas used for the Parquet format are defined in two places: the Rust `model` and `persistence` crates for core market data types, and the Python `serialization/arrow/schema.py` module for additional types.
 
 ### Initializing
 

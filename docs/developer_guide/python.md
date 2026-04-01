@@ -106,10 +106,10 @@ def test_sma_with_single_input_returns_expected_value(self):
 
 ## Cython (legacy)
 
-:::warning[Deprecation notice]
-Cython is being phased out in favor of Rust implementations. New code should use Rust. This section documents legacy Cython code only.
+:::note
+This section covers Cython conventions for `.pyx` and `.pxd` files.
 :::
 
-For legacy `.pyx` and `.pxd` files, make sure all functions and methods returning `void` or a primitive C type (such as `bint`, `int`, `double`) include the `except *` keyword in the signature. Without it, Python exceptions are silently ignored.
+For `.pyx` and `.pxd` files, make sure all functions and methods returning `void` or a primitive C type (such as `bint`, `int`, `double`) include the `except *` keyword in the signature. Without it, Python exceptions are silently ignored.
 
 For more information, see the [Cython docs](https://cython.readthedocs.io/en/latest/index.html).

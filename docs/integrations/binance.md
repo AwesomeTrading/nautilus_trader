@@ -6,8 +6,7 @@ derivative products.
 
 NautilusTrader provides Binance integration in both Python and Rust. The Rust
 adapter supports all product types listed below and includes additional
-features (noted inline). The Python adapter supports the same product types
-but will not receive new features as development moves to v2.
+features (noted inline). The Python adapter supports the same product types.
 
 Supported products:
 

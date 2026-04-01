@@ -41,10 +41,10 @@ Use parametrized tests and fixtures (e.g., `@pytest.mark.parametrize`) to avoid 
 
 ## Running tests
 
-### Legacy Python tests
+### v1 legacy Python tests
 
-The legacy test suite lives under `tests/` at the repository root and tests the
-Cython-based package. From the repository root:
+The v1 legacy test suite lives under `tests/` at the repository root and tests
+the Cython-based package. From the repository root:
 
 ```bash
 make pytest
@@ -138,11 +138,11 @@ Use **pytest-style free functions and fixtures**. Do not use test classes.
 - Mark tests that depend on unfinished features with
   `@pytest.mark.skip(reason="WIP: <description>")` rather than deleting them.
 
-### Legacy Python tests (`tests/`)
+### v1 legacy Python tests (`tests/`)
 
-The legacy test suite uses a mix of test classes and free functions. New tests added
-to this suite may follow either pattern, but free functions with fixtures are preferred
-for new files.
+The v1 legacy test suite uses a mix of test classes and free functions. New tests
+added to this suite may follow either pattern, but free functions with fixtures
+are preferred for new files.
 
 ### Rust
 

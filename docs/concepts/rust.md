@@ -15,11 +15,12 @@ requirements may change between releases.
 Nautilus has three implementations. Understanding where each stands helps
 you choose the right one for your use case.
 
-- **v1 legacy**: Cython/Python classes under `nautilus_trader/`. The
-  original implementation, fully featured but gradually being replaced.
+- **v1 legacy**: Cython/Python classes under `nautilus_trader/`. Fully
+  featured with the broadest component coverage.
 - **v2 Rust**: Pure Rust under `crates/`. Runs without Python.
-- **v2 PyO3**: Python strategies running on the Rust core via PyO3
-  bindings. Combines Python convenience with Rust engine performance.
+- **v2 PyO3**: Python user-components (actors, strategies) running on
+  the Rust core via PyO3 bindings. Combines Python convenience with
+  Rust engine performance.
 
 ### Capability matrix
 
@@ -73,9 +74,9 @@ you choose the right one for your use case.
 - **v2 Rust** gives native performance without a Python runtime. All core
   trading functionality is available. Use it for latency-sensitive
   deployments or teams that prefer a compiled language.
-- **v2 PyO3** is the recommended path going forward. Python strategies run
-  on the Rust core engine, getting Rust performance for data processing
-  and execution while keeping the Python strategy authoring experience.
+- **v2 PyO3**: Python user-components (actors, strategies) run on the
+  Rust core engine with Rust performance for data processing and
+  execution, while keeping the Python authoring experience.
 
 ## Project setup
 

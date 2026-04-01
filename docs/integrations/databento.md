@@ -563,7 +563,7 @@ file also works). The data covers one month of TSLA trades on Nasdaq:
 TSLA_NASDAQ = TestInstrumentProvider.equity(symbol="TSLA")
 engine.add_instrument(TSLA_NASDAQ)
 
-# Decode data to legacy Cython objects
+# Decode data to Cython objects
 loader = DatabentoDataLoader()
 trades = loader.from_dbn_file(
     path=TEST_DATA_DIR / "databento" / "temp" / "tsla-xnas-20240107-20240206.trades.dbn.zst",
@@ -577,8 +577,7 @@ engine.add_data(trades)
 ### DBN data to a ParquetDataCatalog
 
 Load DBN data and write to a `ParquetDataCatalog`. Set `as_legacy_cython=False`
-to decode as PyO3 objects. Cython objects also work with `write_data` but require
-conversion under the hood, so PyO3 objects are faster.
+to decode as PyO3 objects.
 
 ### Loading instruments
 
