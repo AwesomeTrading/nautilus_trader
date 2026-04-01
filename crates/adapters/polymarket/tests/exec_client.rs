@@ -129,6 +129,7 @@ fn create_test_exec_config(addr: SocketAddr) -> PolymarketExecClientConfig {
         funder: None,
         base_url_http: Some(format!("http://{addr}")),
         base_url_ws: Some(format!("ws://{addr}/ws")),
+        base_url_data_api: Some(format!("http://{addr}")),
         http_timeout_secs: 5,
         max_retries: 0,
         ..PolymarketExecClientConfig::default()
@@ -295,6 +296,10 @@ async fn handle_health() -> impl IntoResponse {
     StatusCode::OK
 }
 
+async fn handle_get_positions() -> impl IntoResponse {
+    Json(serde_json::json!([]))
+}
+
 fn create_test_router(state: TestServerState) -> Router {
     Router::new()
         .route("/data/orders", get(handle_get_orders))
@@ -311,6 +316,7 @@ fn create_test_router(state: TestServerState) -> Router {
         .route("/book", get(handle_get_book))
         .route("/fee-rate", get(handle_get_fee_rate))
         .route("/health", get(handle_health))
+        .route("/positions", get(handle_get_positions))
         .with_state(state)
 }
 
