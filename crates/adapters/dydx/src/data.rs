@@ -32,14 +32,14 @@ use nautilus_common::{
     messages::{
         DataEvent, DataResponse,
         data::{
-            BarsResponse, InstrumentResponse, InstrumentsResponse, RequestBars, RequestInstrument,
-            RequestInstruments, RequestTrades, SubscribeBars, SubscribeBookDeltas,
-            SubscribeFundingRates, SubscribeIndexPrices, SubscribeInstrument,
-            SubscribeInstrumentStatus, SubscribeInstruments, SubscribeMarkPrices, SubscribeQuotes,
-            SubscribeTrades, TradesResponse, UnsubscribeBars, UnsubscribeBookDeltas,
-            UnsubscribeFundingRates, UnsubscribeIndexPrices, UnsubscribeInstrument,
-            UnsubscribeInstrumentStatus, UnsubscribeInstruments, UnsubscribeMarkPrices,
-            UnsubscribeQuotes, UnsubscribeTrades,
+            BarsResponse, FundingRatesResponse, InstrumentResponse, InstrumentsResponse,
+            RequestBars, RequestFundingRates, RequestInstrument, RequestInstruments, RequestTrades,
+            SubscribeBars, SubscribeBookDeltas, SubscribeFundingRates, SubscribeIndexPrices,
+            SubscribeInstrument, SubscribeInstrumentStatus, SubscribeInstruments,
+            SubscribeMarkPrices, SubscribeQuotes, SubscribeTrades, TradesResponse, UnsubscribeBars,
+            UnsubscribeBookDeltas, UnsubscribeFundingRates, UnsubscribeIndexPrices,
+            UnsubscribeInstrument, UnsubscribeInstrumentStatus, UnsubscribeInstruments,
+            UnsubscribeMarkPrices, UnsubscribeQuotes, UnsubscribeTrades,
         },
     },
 };
@@ -902,6 +902,66 @@ impl DataClient for DydxDataClient {
                     }
                 }
                 Err(e) => log::error!("Bar request failed for {bar_type}: {e:?}"),
+            }
+        });
+
+        Ok(())
+    }
+
+    fn request_funding_rates(&self, request: RequestFundingRates) -> anyhow::Result<()> {
+        let http_client = self.http_client.clone();
+        let sender = self.data_sender.clone();
+        let instrument_id = request.instrument_id;
+        let start = request.start;
+        let end = request.end;
+        let limit = request.limit.map(|n| n.get() as u32);
+        let request_id = request.request_id;
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let params = request.params;
+        let clock = self.clock;
+        let start_nanos = datetime_to_unix_nanos(start);
+        let end_nanos = datetime_to_unix_nanos(end);
+
+        get_runtime().spawn(async move {
+            match http_client
+                .request_funding_rates(instrument_id, start, end, limit)
+                .await
+                .context("failed to request funding rates from dYdX")
+            {
+                Ok(funding_rates) => {
+                    let response = DataResponse::FundingRates(FundingRatesResponse::new(
+                        request_id,
+                        client_id,
+                        instrument_id,
+                        funding_rates,
+                        start_nanos,
+                        end_nanos,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send funding rates response: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Funding rates request failed for {instrument_id}: {e:?}");
+
+                    let response = DataResponse::FundingRates(FundingRatesResponse::new(
+                        request_id,
+                        client_id,
+                        instrument_id,
+                        Vec::new(),
+                        start_nanos,
+                        end_nanos,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send empty funding rates response: {e}");
+                    }
+                }
             }
         });
 

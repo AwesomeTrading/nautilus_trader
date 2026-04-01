@@ -412,13 +412,11 @@ pub enum DydxPositionStatus {
     Liquidated,
 }
 
-impl From<DydxPositionStatus> for PositionSide {
-    fn from(value: DydxPositionStatus) -> Self {
-        match value {
-            DydxPositionStatus::Open => Self::Long, // Default, actual side from position size
-            DydxPositionStatus::Closed => Self::Flat,
-            DydxPositionStatus::Liquidated => Self::Flat,
-        }
+impl DydxPositionStatus {
+    /// Returns whether this status represents a closed position.
+    #[must_use]
+    pub const fn is_closed(&self) -> bool {
+        matches!(self, Self::Closed | Self::Liquidated)
     }
 }
 
