@@ -614,6 +614,10 @@ criteria = "safe-to-deploy"
 version = "1.11.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.bzip2]]
+version = "0.6.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.c-kzg]]
 version = "2.1.6"
 criteria = "safe-to-deploy"
@@ -1428,6 +1432,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.lexical-write-integer]]
 version = "1.0.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.libbz2-rs-sys]]
+version = "0.2.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.libc]]
