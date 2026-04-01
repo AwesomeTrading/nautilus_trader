@@ -788,13 +788,15 @@ Test order modification (amend) and cancel-replace workflows.
 | **Prerequisite**   | Open GTC limit buy from TC-E10.                                        |
 | **Action**         | ExecTester modifies limit buy to a new price as market moves (`modify_orders_to_maintain_tob_offset=True`). |
 | **Event sequence** | `OrderPendingUpdate` → `OrderUpdated`.                                 |
-| **Pass criteria**  | Order price updated on venue; `OrderUpdated` event contains new price. |
+| **Pass criteria**  | `OrderUpdated` event logged with the new price; order exits `PendingUpdate`. |
 | **Skip when**      | Adapter does not support order modification.                           |
 
 **Considerations:**
 
 - Requires market movement to trigger the ExecTester's order maintenance logic.
 - The modify is triggered when the order price drifts from the target TOB offset.
+- Verify the `OrderUpdated` log shows the expected price. If the event never
+  arrives, the order stays in `PendingUpdate` and the tester stops modifying it.
 
 **Python config:**
 
@@ -824,7 +826,7 @@ config.modify_orders_to_maintain_tob_offset = true;
 | **Prerequisite**   | Open GTC limit sell from TC-E11.                                       |
 | **Action**         | ExecTester modifies limit sell to new price as market moves.           |
 | **Event sequence** | `OrderPendingUpdate` → `OrderUpdated`.                                 |
-| **Pass criteria**  | Order price updated on venue; `OrderUpdated` event contains new price. |
+| **Pass criteria**  | `OrderUpdated` event logged with the new price; order exits `PendingUpdate`. |
 | **Skip when**      | Adapter does not support order modification.                           |
 
 **Python config:**
@@ -922,7 +924,7 @@ config.cancel_replace_orders_to_maintain_tob_offset = true;
 | **Prerequisite**   | Open stop order from TC-E20 or TC-E22.                                 |
 | **Action**         | ExecTester modifies stop trigger price as market moves (`modify_stop_orders_to_maintain_offset=True`). |
 | **Event sequence** | `OrderPendingUpdate` → `OrderUpdated`.                                 |
-| **Pass criteria**  | Stop order trigger price updated on venue.                             |
+| **Pass criteria**  | `OrderUpdated` event logged with the new trigger price; order exits `PendingUpdate`. |
 | **Skip when**      | Adapter does not support modify, or no stop order support.             |
 
 **Python config:**
