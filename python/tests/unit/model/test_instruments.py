@@ -39,6 +39,7 @@ from nautilus_trader.model import PerpetualContract
 from nautilus_trader.model import Price
 from nautilus_trader.model import Quantity
 from nautilus_trader.model import Symbol
+from nautilus_trader.model import SyntheticInstrument
 from nautilus_trader.model import TokenizedAsset
 from nautilus_trader.model import Venue
 from tests.providers import TestInstrumentProvider
@@ -849,3 +850,76 @@ def test_notional_value_currency_pair():
 
     assert notional.currency == audusd.quote_currency
     assert notional.as_double() == pytest.approx(75_000.0)
+
+
+def test_synthetic_instrument_construction():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=8,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=0,
+        ts_init=0,
+    )
+
+    assert synth.id == InstrumentId(Symbol("BTC-ETH"), Venue("SYNTH"))
+    assert synth.price_precision == 8
+    assert len(synth.components) == 2
+    assert synth.formula == "(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2"
+
+
+def test_synthetic_instrument_calculate():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=2,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=0,
+        ts_init=0,
+    )
+
+    result = synth.calculate([50_000.0, 3_000.0])
+
+    assert result.precision == 2
+    assert result.as_double() == pytest.approx(26_500.0)
+
+
+def test_synthetic_instrument_change_formula():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=8,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=0,
+        ts_init=0,
+    )
+
+    synth.change_formula("BTCUSDT.BINANCE - ETHUSDT.BINANCE")
+
+    assert synth.formula == "BTCUSDT.BINANCE - ETHUSDT.BINANCE"
+
+
+def test_synthetic_instrument_is_valid_formula():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=8,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=0,
+        ts_init=0,
+    )
+
+    assert synth.is_valid_formula("BTCUSDT.BINANCE + ETHUSDT.BINANCE")
+    assert not synth.is_valid_formula("BTCUSDT.BINANCE + XRPUSDT.BINANCE")

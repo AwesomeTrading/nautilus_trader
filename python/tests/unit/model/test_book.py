@@ -20,9 +20,11 @@ import pytest
 from nautilus_trader.model import BookAction
 from nautilus_trader.model import BookOrder
 from nautilus_trader.model import BookType
+from nautilus_trader.model import InstrumentId
 from nautilus_trader.model import OrderBook
 from nautilus_trader.model import OrderBookDelta
 from nautilus_trader.model import OrderBookDeltas
+from nautilus_trader.model import OrderBookDepth10
 from nautilus_trader.model import OrderSide
 from nautilus_trader.model import Price
 from nautilus_trader.model import Quantity
@@ -280,3 +282,86 @@ def test_order_book_repr(audusd_id):
 
     assert "OrderBook" in r
     assert "L2_MBP" in r
+
+
+@pytest.fixture
+def depth10():
+    return OrderBookDepth10.get_stub()
+
+
+def test_depth10_get_stub(depth10):
+    assert depth10.instrument_id == InstrumentId.from_str("AAPL.XNAS")
+    assert len(depth10.bids) == 10
+    assert len(depth10.asks) == 10
+    assert len(depth10.bid_counts) == 10
+    assert len(depth10.ask_counts) == 10
+
+
+def test_depth10_properties(depth10):
+    assert depth10.flags == 0
+    assert depth10.sequence == 0
+    assert depth10.ts_event == 1
+    assert depth10.ts_init == 2
+
+
+def test_depth10_bid_ask_structure(depth10):
+    for bid in depth10.bids:
+        assert bid.side == OrderSide.BUY
+    for ask in depth10.asks:
+        assert ask.side == OrderSide.SELL
+
+    assert depth10.bids[0].price > depth10.bids[1].price
+    assert depth10.asks[0].price < depth10.asks[1].price
+
+
+def test_depth10_hash(depth10):
+    assert isinstance(hash(depth10), int)
+
+
+def test_depth10_str_and_repr(depth10):
+    assert "AAPL.XNAS" in str(depth10)
+    assert "OrderBookDepth10" in repr(depth10)
+
+
+def test_depth10_to_dict_and_from_dict_roundtrip(depth10):
+    d = depth10.to_dict()
+    restored = OrderBookDepth10.from_dict(d)
+
+    assert d["instrument_id"] == "AAPL.XNAS"
+    assert len(d["bids"]) == 10
+    assert len(d["asks"]) == 10
+    assert restored == depth10
+
+
+def test_depth10_fully_qualified_name():
+    assert "OrderBookDepth10" in OrderBookDepth10.fully_qualified_name()
+
+
+def test_depth10_json_roundtrip(depth10):
+    json_bytes = depth10.to_json_bytes()
+    restored = OrderBookDepth10.from_json(json_bytes)
+
+    assert restored == depth10
+
+
+def test_depth10_msgpack_roundtrip(depth10):
+    msgpack_bytes = depth10.to_msgpack_bytes()
+    restored = OrderBookDepth10.from_msgpack(msgpack_bytes)
+
+    assert restored == depth10
+
+
+def test_depth10_get_metadata():
+    instrument_id = InstrumentId.from_str("AAPL.XNAS")
+    metadata = OrderBookDepth10.get_metadata(instrument_id, 2, 0)
+
+    assert metadata["instrument_id"] == "AAPL.XNAS"
+
+
+def test_depth10_get_fields():
+    fields = OrderBookDepth10.get_fields()
+
+    assert "flags" in fields
+    assert "sequence" in fields
+    assert "ts_event" in fields
+    assert "ts_init" in fields
