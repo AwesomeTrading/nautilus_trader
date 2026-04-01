@@ -18,16 +18,26 @@ from decimal import Decimal
 import pytest
 
 from nautilus_trader.core import UUID4
+from nautilus_trader.model import AccountId
 from nautilus_trader.model import ClientOrderId
 from nautilus_trader.model import ContingencyType
+from nautilus_trader.model import Currency
 from nautilus_trader.model import InstrumentId
 from nautilus_trader.model import LimitIfTouchedOrder
 from nautilus_trader.model import LimitOrder
+from nautilus_trader.model import LiquiditySide
 from nautilus_trader.model import MarketIfTouchedOrder
 from nautilus_trader.model import MarketOrder
 from nautilus_trader.model import MarketToLimitOrder
+from nautilus_trader.model import Money
+from nautilus_trader.model import OrderAccepted
+from nautilus_trader.model import OrderCanceled
+from nautilus_trader.model import OrderDenied
+from nautilus_trader.model import OrderFilled
+from nautilus_trader.model import OrderRejected
 from nautilus_trader.model import OrderSide
 from nautilus_trader.model import OrderStatus
+from nautilus_trader.model import OrderSubmitted
 from nautilus_trader.model import OrderType
 from nautilus_trader.model import PositionSide
 from nautilus_trader.model import Price
@@ -36,11 +46,13 @@ from nautilus_trader.model import StopLimitOrder
 from nautilus_trader.model import StopMarketOrder
 from nautilus_trader.model import StrategyId
 from nautilus_trader.model import TimeInForce
+from nautilus_trader.model import TradeId
 from nautilus_trader.model import TraderId
 from nautilus_trader.model import TrailingOffsetType
 from nautilus_trader.model import TrailingStopLimitOrder
 from nautilus_trader.model import TrailingStopMarketOrder
 from nautilus_trader.model import TriggerType
+from nautilus_trader.model import VenueOrderId
 
 
 def test_market_order_construction():
@@ -784,3 +796,303 @@ def test_opposite_side(side, expected):
 )
 def test_closing_side(position_side, expected):
     assert MarketOrder.closing_side(position_side) == expected
+
+
+TRADER_ID = TraderId("TRADER-001")
+STRATEGY_ID = StrategyId("S-001")
+AUDUSD_SIM = InstrumentId.from_str("AUD/USD.SIM")
+ACCOUNT_ID = AccountId("SIM-000")
+
+
+def _market_order(side=OrderSide.BUY, qty=100_000, client_order_id="O-001"):
+    return MarketOrder(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=ClientOrderId(client_order_id),
+        order_side=side,
+        quantity=Quantity.from_int(qty),
+        init_id=UUID4(),
+        ts_init=0,
+        time_in_force=TimeInForce.GTC,
+        reduce_only=False,
+        quote_quantity=False,
+    )
+
+
+def test_apply_submitted():
+    order = _market_order()
+    submitted = OrderSubmitted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+
+    order.apply(submitted)
+
+    assert order.status == OrderStatus.SUBMITTED
+    assert order.account_id == ACCOUNT_ID
+    assert len(order.events()) == 2
+
+
+def test_apply_accepted():
+    order = _market_order()
+    submitted = OrderSubmitted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+    accepted = OrderAccepted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=2,
+        ts_init=2,
+        reconciliation=False,
+    )
+
+    order.apply(submitted)
+    order.apply(accepted)
+
+    assert order.status == OrderStatus.ACCEPTED
+    assert len(order.events()) == 3
+
+
+def test_apply_denied():
+    order = _market_order()
+    denied = OrderDenied(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        reason="Exceeded rate limit",
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+
+    order.apply(denied)
+
+    assert order.status == OrderStatus.DENIED
+
+
+def test_apply_rejected():
+    order = _market_order()
+    submitted = OrderSubmitted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+    rejected = OrderRejected(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        reason="Insufficient margin",
+        event_id=UUID4(),
+        ts_event=2,
+        ts_init=2,
+        reconciliation=False,
+    )
+
+    order.apply(submitted)
+    order.apply(rejected)
+
+    assert order.status == OrderStatus.REJECTED
+
+
+def test_apply_canceled():
+    order = _market_order()
+    submitted = OrderSubmitted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+    accepted = OrderAccepted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=2,
+        ts_init=2,
+        reconciliation=False,
+    )
+    canceled = OrderCanceled(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        event_id=UUID4(),
+        ts_event=3,
+        ts_init=3,
+        reconciliation=False,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+    )
+
+    order.apply(submitted)
+    order.apply(accepted)
+    order.apply(canceled)
+
+    assert order.status == OrderStatus.CANCELED
+
+
+def test_apply_filled():
+    order = _market_order()
+    submitted = OrderSubmitted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+    accepted = OrderAccepted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=2,
+        ts_init=2,
+        reconciliation=False,
+    )
+    filled = OrderFilled(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+        trade_id=TradeId("T-001"),
+        order_side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        last_qty=Quantity.from_int(100_000),
+        last_px=Price.from_str("1.00000"),
+        currency=Currency.from_str("USD"),
+        liquidity_side=LiquiditySide.TAKER,
+        event_id=UUID4(),
+        ts_event=3,
+        ts_init=3,
+        reconciliation=False,
+        commission=Money.from_str("2.00 USD"),
+    )
+
+    order.apply(submitted)
+    order.apply(accepted)
+    order.apply(filled)
+
+    assert order.status == OrderStatus.FILLED
+    assert order.quantity == Quantity.from_int(100_000)
+    assert len(order.events()) == 4
+
+
+def test_apply_partial_fill():
+    order = _market_order()
+    submitted = OrderSubmitted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=1,
+        ts_init=1,
+    )
+    accepted = OrderAccepted(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+        event_id=UUID4(),
+        ts_event=2,
+        ts_init=2,
+        reconciliation=False,
+    )
+    partial = OrderFilled(
+        trader_id=TRADER_ID,
+        strategy_id=STRATEGY_ID,
+        instrument_id=AUDUSD_SIM,
+        client_order_id=order.client_order_id,
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=ACCOUNT_ID,
+        trade_id=TradeId("T-001"),
+        order_side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        last_qty=Quantity.from_int(50_000),
+        last_px=Price.from_str("1.00000"),
+        currency=Currency.from_str("USD"),
+        liquidity_side=LiquiditySide.TAKER,
+        event_id=UUID4(),
+        ts_event=3,
+        ts_init=3,
+        reconciliation=False,
+    )
+
+    order.apply(submitted)
+    order.apply(accepted)
+    order.apply(partial)
+
+    assert order.status == OrderStatus.PARTIALLY_FILLED
+
+
+def test_would_reduce_only():
+    order = _market_order(side=OrderSide.SELL, qty=50_000)
+
+    assert order.would_reduce_only(PositionSide.LONG, Quantity.from_int(100_000))
+    assert not order.would_reduce_only(PositionSide.SHORT, Quantity.from_int(100_000))
+    assert not order.would_reduce_only(PositionSide.FLAT, Quantity.from_int(0))
+
+
+def test_signed_decimal_qty():
+    buy_order = _market_order(side=OrderSide.BUY, qty=100_000)
+    sell_order = _market_order(side=OrderSide.SELL, qty=100_000)
+
+    assert buy_order.signed_decimal_qty() == Decimal(100000)
+    assert sell_order.signed_decimal_qty() == Decimal(-100000)
+
+
+def test_order_to_dict_from_dict_roundtrip():
+    order = _market_order()
+
+    d = order.to_dict()
+    restored = MarketOrder.from_dict(d)
+
+    assert restored.client_order_id == order.client_order_id
+    assert restored.side == order.side
+    assert restored.quantity == order.quantity
+    assert restored.status == OrderStatus.INITIALIZED
