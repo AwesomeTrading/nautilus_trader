@@ -34,10 +34,7 @@ use nautilus_common::{
 use nautilus_core::{UUID4, UnixNanos};
 use nautilus_execution::engine::{ExecutionEngine, config::ExecutionEngineConfig};
 use nautilus_model::{
-    accounts::{
-        AccountAny, CashAccount, MarginAccount,
-        stubs::{cash_account, margin_account},
-    },
+    accounts::{AccountAny, BettingAccount, CashAccount, MarginAccount, stubs::cash_account},
     data::{QuoteTick, stubs::quote_audusd},
     enums::{
         AccountType, LiquiditySide, OmsType, OrderSide, OrderType, PositionSide, TimeInForce,
@@ -58,7 +55,8 @@ use nautilus_model::{
     instruments::{
         CryptoPerpetual, CurrencyPair, FuturesSpread, Instrument, InstrumentAny, OptionSpread,
         stubs::{
-            audusd_sim, crypto_perpetual_ethusdt, futures_spread_es, option_spread, xbtusd_bitmex,
+            audusd_sim, betting, crypto_perpetual_ethusdt, futures_spread_es, option_spread,
+            xbtusd_bitmex,
         },
     },
     orders::{Order, OrderAny, OrderList, OrderTestBuilder},
@@ -3282,36 +3280,49 @@ fn test_modify_order_with_default_settings_then_sends_to_client(
 fn test_modify_order_for_emulated_order_then_sends_to_emulator() {}
 
 #[rstest]
-fn test_submit_order_when_market_order_and_over_free_balance_then_denies_with_betting_account(
+fn test_submit_order_when_betting_back_order_liability_within_free_balance_then_accepts(
     strategy_id_ema_cross: StrategyId,
     client_id_binance: ClientId,
     trader_id: TraderId,
     _client_order_id: ClientOrderId,
-    instrument_audusd: InstrumentAny,
     _venue_order_id: VenueOrderId,
     process_order_event_handler: TypedIntoMessageSavingHandler<OrderEventAny>,
-    cash_account_state_million_usd: AccountState,
-    quote_audusd: QuoteTick,
     mut simple_cache: Cache,
 ) {
-    simple_cache
-        .add_instrument(instrument_audusd.clone())
-        .unwrap();
+    let gbp = Currency::GBP();
+    let instrument = InstrumentAny::Betting(betting());
+    let account_state = AccountState::new(
+        AccountId::new("BETFAIR-001"),
+        AccountType::Betting,
+        vec![AccountBalance::new(
+            Money::new(1_000.0, gbp),
+            Money::new(0.0, gbp),
+            Money::new(1_000.0, gbp),
+        )],
+        vec![],
+        true,
+        UUID4::new(),
+        UnixNanos::default(),
+        UnixNanos::default(),
+        Some(gbp),
+    );
+
+    simple_cache.add_instrument(instrument.clone()).unwrap();
 
     simple_cache
-        .add_account(AccountAny::Margin(margin_account(
-            cash_account_state_million_usd,
+        .add_account(AccountAny::Betting(BettingAccount::new(
+            account_state,
+            true,
         )))
         .unwrap();
 
-    simple_cache.add_quote(quote_audusd).unwrap();
-
     let mut risk_engine =
         get_risk_engine(Some(Rc::new(RefCell::new(simple_cache))), None, None, false);
-    let order = OrderTestBuilder::new(OrderType::Market)
-        .instrument_id(instrument_audusd.id())
+    let order = OrderTestBuilder::new(OrderType::Limit)
+        .instrument_id(instrument.id())
         .side(OrderSide::Buy)
-        .quantity(Quantity::from_str("100000").unwrap())
+        .price(Price::from("1.25"))
+        .quantity(Quantity::from_str("1000").unwrap())
         .build();
 
     risk_engine
@@ -3324,7 +3335,7 @@ fn test_submit_order_when_market_order_and_over_free_balance_then_denies_with_be
         trader_id,
         Some(client_id_binance),
         strategy_id_ema_cross,
-        instrument_audusd.id(),
+        instrument.id(),
         order.client_order_id(),
         order.init_event().clone(),
         None,
@@ -3337,7 +3348,193 @@ fn test_submit_order_when_market_order_and_over_free_balance_then_denies_with_be
     risk_engine.execute(TradingCommand::SubmitOrder(submit_order));
     let saved_process_messages =
         get_process_order_event_handler_messages(&process_order_event_handler);
-    assert_eq!(saved_process_messages.len(), 0); // Margin requirement ($2,400 at 3% margin_init) is within $1M balance
+    assert!(saved_process_messages.is_empty());
+}
+
+#[rstest]
+fn test_submit_order_when_betting_back_order_liability_exceeds_free_balance_then_denies(
+    strategy_id_ema_cross: StrategyId,
+    client_id_binance: ClientId,
+    trader_id: TraderId,
+    _client_order_id: ClientOrderId,
+    _venue_order_id: VenueOrderId,
+    process_order_event_handler: TypedIntoMessageSavingHandler<OrderEventAny>,
+    mut simple_cache: Cache,
+) {
+    let gbp = Currency::GBP();
+    let instrument = InstrumentAny::Betting(betting());
+    let account_state = AccountState::new(
+        AccountId::new("BETFAIR-002"),
+        AccountType::Betting,
+        vec![AccountBalance::new(
+            Money::new(999.0, gbp),
+            Money::new(0.0, gbp),
+            Money::new(999.0, gbp),
+        )],
+        vec![],
+        true,
+        UUID4::new(),
+        UnixNanos::default(),
+        UnixNanos::default(),
+        Some(gbp),
+    );
+
+    simple_cache.add_instrument(instrument.clone()).unwrap();
+    simple_cache
+        .add_account(AccountAny::Betting(BettingAccount::new(
+            account_state,
+            true,
+        )))
+        .unwrap();
+
+    let mut risk_engine =
+        get_risk_engine(Some(Rc::new(RefCell::new(simple_cache))), None, None, false);
+    let order = OrderTestBuilder::new(OrderType::Limit)
+        .instrument_id(instrument.id())
+        .side(OrderSide::Buy)
+        .price(Price::from("10.0"))
+        .quantity(Quantity::from_str("1000").unwrap())
+        .build();
+
+    risk_engine
+        .cache()
+        .borrow_mut()
+        .add_order(order.clone(), None, Some(client_id_binance), false)
+        .unwrap();
+
+    let submit_order = SubmitOrder::new(
+        trader_id,
+        Some(client_id_binance),
+        strategy_id_ema_cross,
+        instrument.id(),
+        order.client_order_id(),
+        order.init_event().clone(),
+        None,
+        None,
+        None,
+        UUID4::new(),
+        risk_engine.clock().borrow().timestamp_ns(),
+    );
+
+    risk_engine.execute(TradingCommand::SubmitOrder(submit_order));
+    let saved_process_messages =
+        get_process_order_event_handler_messages(&process_order_event_handler);
+    assert_eq!(saved_process_messages.len(), 1);
+    assert_eq!(
+        saved_process_messages.first().unwrap().event_type(),
+        OrderEventType::Denied
+    );
+    assert!(
+        saved_process_messages
+            .first()
+            .unwrap()
+            .message()
+            .unwrap()
+            .as_str()
+            .contains("NOTIONAL_EXCEEDS_FREE_BALANCE")
+    );
+}
+
+#[rstest]
+fn test_submit_order_when_betting_sell_reduces_long_position_then_accepts(
+    strategy_id_ema_cross: StrategyId,
+    client_id_binance: ClientId,
+    trader_id: TraderId,
+    _client_order_id: ClientOrderId,
+    _venue_order_id: VenueOrderId,
+    process_order_event_handler: TypedIntoMessageSavingHandler<OrderEventAny>,
+    mut simple_cache: Cache,
+) {
+    let gbp = Currency::GBP();
+    let instrument = InstrumentAny::Betting(betting());
+
+    // Account with only 10 GBP free (not enough for a new bet)
+    let account_state = AccountState::new(
+        AccountId::new("BETFAIR-001"),
+        AccountType::Betting,
+        vec![AccountBalance::new(
+            Money::new(10.0, gbp),
+            Money::new(0.0, gbp),
+            Money::new(10.0, gbp),
+        )],
+        vec![],
+        true,
+        UUID4::new(),
+        UnixNanos::default(),
+        UnixNanos::default(),
+        Some(gbp),
+    );
+
+    simple_cache.add_instrument(instrument.clone()).unwrap();
+    let betting_account = BettingAccount::new(account_state, true);
+    simple_cache
+        .add_account(AccountAny::Betting(betting_account.clone()))
+        .unwrap();
+
+    // Create a long position via a filled Buy order
+    let entry_order = OrderTestBuilder::new(OrderType::Market)
+        .instrument_id(instrument.id())
+        .side(OrderSide::Buy)
+        .quantity(Quantity::from("100"))
+        .build();
+
+    let mut fill = order_filled(
+        &entry_order,
+        &instrument,
+        None,
+        Some(AccountId::new("BETFAIR-001")),
+        Some(VenueOrderId::from("V-001")),
+        None,
+        None,
+        Some(Price::from("2.0")),
+        None,
+        Some(AccountAny::Betting(betting_account)),
+        None,
+    );
+    fill.position_id = Some(PositionId::from("P-001"));
+    let position = Position::new(&instrument, fill);
+    assert_eq!(position.side, PositionSide::Long);
+
+    simple_cache
+        .add_position(&position, OmsType::Hedging)
+        .unwrap();
+
+    let mut risk_engine =
+        get_risk_engine(Some(Rc::new(RefCell::new(simple_cache))), None, None, false);
+
+    // Sell 50 to reduce the 100-qty long position (position-reducing, skips balance check)
+    let order = OrderTestBuilder::new(OrderType::Limit)
+        .instrument_id(instrument.id())
+        .side(OrderSide::Sell)
+        .price(Price::from("2.5"))
+        .quantity(Quantity::from("50"))
+        .build();
+
+    risk_engine
+        .cache()
+        .borrow_mut()
+        .add_order(order.clone(), None, Some(client_id_binance), false)
+        .unwrap();
+
+    let submit_order = SubmitOrder::new(
+        trader_id,
+        Some(client_id_binance),
+        strategy_id_ema_cross,
+        instrument.id(),
+        order.client_order_id(),
+        order.init_event().clone(),
+        None,
+        None,
+        None,
+        UUID4::new(),
+        risk_engine.clock().borrow().timestamp_ns(),
+    );
+
+    risk_engine.execute(TradingCommand::SubmitOrder(submit_order));
+    let saved_process_messages =
+        get_process_order_event_handler_messages(&process_order_event_handler);
+    // Position-reducing sell should NOT be denied despite low free balance
+    assert!(saved_process_messages.is_empty());
 }
 
 #[rstest]

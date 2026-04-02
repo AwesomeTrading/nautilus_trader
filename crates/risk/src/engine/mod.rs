@@ -833,13 +833,16 @@ impl RiskEngine {
         };
 
         let is_margin = matches!(account, AccountAny::Margin(_));
+        let is_betting = matches!(account, AccountAny::Betting(_));
         let free = match &account {
-            AccountAny::Cash(cash) => cash.balance_free(Some(instrument.quote_currency())),
             AccountAny::Margin(margin) => margin.balance_free(Some(instrument.quote_currency())),
+            AccountAny::Cash(cash) => cash.balance_free(Some(instrument.quote_currency())),
+            AccountAny::Betting(betting) => betting.balance_free(Some(instrument.quote_currency())),
         };
         let allow_borrowing = match &account {
-            AccountAny::Cash(cash) => cash.allow_borrowing,
             AccountAny::Margin(_) => false,
+            AccountAny::Cash(cash) => cash.allow_borrowing,
+            AccountAny::Betting(_) => false,
         };
 
         if self.config.debug {
@@ -884,8 +887,8 @@ impl RiskEngine {
             );
         }
 
-        // For margin accounts, also track SHORT positions for buy-side reduction
-        let available_short_qty_raw = if is_margin {
+        // For margin and betting accounts, also track SHORT positions for buy-side reduction
+        let available_short_qty_raw = if is_margin || is_betting {
             let cache = self.cache.borrow();
             let short_qty: QuantityRaw = cache
                 .positions_open(
@@ -1264,11 +1267,33 @@ impl RiskEngine {
                 // Cash account: check full notional value
                 let notional =
                     instrument.calculate_notional_value(effective_quantity, last_px, None);
-                let order_balance_impact = match order.order_side() {
-                    OrderSide::Buy => Money::from_raw(-notional.raw, notional.currency),
-                    OrderSide::Sell => Money::from_raw(notional.raw, notional.currency),
-                    OrderSide::NoOrderSide => {
-                        panic!("invalid `OrderSide`, was {}", order.order_side());
+                let order_balance_impact = if is_betting {
+                    match &mut account {
+                        AccountAny::Betting(betting) => Money::from_raw(
+                            -betting
+                                .calculate_balance_locked(
+                                    instrument,
+                                    order.order_side(),
+                                    effective_quantity,
+                                    last_px,
+                                    None,
+                                )
+                                .unwrap_or_else(|e| {
+                                    log::error!("Failed to calculate betting balance locked: {e}");
+                                    Money::new(0.0, instrument.quote_currency())
+                                })
+                                .raw,
+                            instrument.quote_currency(),
+                        ),
+                        _ => unreachable!(),
+                    }
+                } else {
+                    match order.order_side() {
+                        OrderSide::Buy => Money::from_raw(-notional.raw, notional.currency),
+                        OrderSide::Sell => Money::from_raw(notional.raw, notional.currency),
+                        OrderSide::NoOrderSide => {
+                            panic!("invalid `OrderSide`, was {}", order.order_side());
+                        }
                     }
                 };
 
@@ -1276,7 +1301,29 @@ impl RiskEngine {
                     log::debug!("Balance impact: {order_balance_impact}");
                 }
 
-                // Skip balance check when borrowing is enabled (e.g. spot margin trading)
+                // Check if order reduces an existing position
+                let is_position_reducing = if order.is_buy() {
+                    let reducing = order.is_reduce_only()
+                        || (cum_buy_qty_raw + effective_quantity.raw) <= available_short_qty_raw;
+                    cum_buy_qty_raw += effective_quantity.raw;
+                    reducing
+                } else if order.is_sell() {
+                    let reducing = order.is_reduce_only()
+                        || (cum_sell_qty_raw + effective_quantity.raw) <= available_long_qty_raw;
+                    cum_sell_qty_raw += effective_quantity.raw;
+                    reducing
+                } else {
+                    false
+                };
+
+                if is_position_reducing {
+                    if self.config.debug {
+                        log::debug!("Position-reducing order skips balance check");
+                    }
+                    continue;
+                }
+
+                // Deny when order exceeds free balance (unless borrowing is enabled)
                 if !allow_borrowing
                     && let Some(free_val) = free
                     && (free_val.as_decimal() + order_balance_impact.as_decimal()) < Decimal::ZERO
@@ -1319,20 +1366,38 @@ impl RiskEngine {
                         return false; // Denied
                     }
                 } else if order.is_sell() {
-                    let is_position_reducing_sell = order.is_reduce_only()
-                        || (cum_sell_qty_raw + effective_quantity.raw) <= available_long_qty_raw;
-                    cum_sell_qty_raw += effective_quantity.raw;
-
-                    if is_position_reducing_sell {
-                        if self.config.debug {
-                            log::debug!("Position-reducing SELL skips balance check");
+                    if is_betting {
+                        match cum_notional_sell.as_mut() {
+                            Some(cum_notional_sell_val) => {
+                                cum_notional_sell_val.raw += -order_balance_impact.raw;
+                            }
+                            None => {
+                                cum_notional_sell = Some(Money::from_raw(
+                                    -order_balance_impact.raw,
+                                    order_balance_impact.currency,
+                                ));
+                            }
                         }
+
+                        if self.config.debug {
+                            log::debug!("Cumulative betting SELL liability: {cum_notional_sell:?}");
+                        }
+
+                        if !allow_borrowing
+                            && let (Some(free), Some(cum_notional_sell)) = (free, cum_notional_sell)
+                            && cum_notional_sell > free
+                        {
+                            self.deny_order(order, &format!("CUM_NOTIONAL_EXCEEDS_FREE_BALANCE: free={free}, cum_notional={cum_notional_sell}"));
+                            return false;
+                        }
+
                         continue;
                     }
 
                     let has_base_currency = match &account {
+                        AccountAny::Margin(_) => false,
                         AccountAny::Cash(cash) => cash.base_currency.is_some(),
-                        _ => false,
+                        AccountAny::Betting(betting) => betting.base_currency.is_some(),
                     };
 
                     if has_base_currency {
@@ -1373,8 +1438,11 @@ impl RiskEngine {
 
                         // Use base-currency free balance for sell checks
                         let base_free = match &account {
-                            AccountAny::Cash(cash) => cash.balance_free(Some(base_currency)),
                             AccountAny::Margin(_) => None,
+                            AccountAny::Cash(cash) => cash.balance_free(Some(base_currency)),
+                            AccountAny::Betting(betting) => {
+                                betting.balance_free(Some(base_currency))
+                            }
                         };
 
                         if self.config.debug
@@ -1383,6 +1451,18 @@ impl RiskEngine {
                             log::debug!("Cash value: {cash_value:?}");
                             log::debug!("Total: {:?}", cash.balance_total(Some(base_currency)));
                             log::debug!("Locked: {:?}", cash.balance_locked(Some(base_currency)));
+                            log::debug!("Free: {base_free:?}");
+                        }
+
+                        if self.config.debug
+                            && let AccountAny::Betting(betting) = &account
+                        {
+                            log::debug!("Cash value: {cash_value:?}");
+                            log::debug!("Total: {:?}", betting.balance_total(Some(base_currency)));
+                            log::debug!(
+                                "Locked: {:?}",
+                                betting.balance_locked(Some(base_currency))
+                            );
                             log::debug!("Free: {base_free:?}");
                         }
 

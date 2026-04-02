@@ -837,8 +837,9 @@ impl BacktestEngine {
         for venue in self.venues.keys() {
             if let Some(account) = cache.account_for_venue(venue) {
                 let account_ref: &dyn Account = match account {
-                    AccountAny::Cash(cash) => cash,
                     AccountAny::Margin(margin) => margin,
+                    AccountAny::Cash(cash) => cash,
+                    AccountAny::Betting(betting) => betting,
                 };
                 for (currency, money) in account_ref.starting_balances() {
                     analyzer
@@ -1142,8 +1143,9 @@ impl BacktestEngine {
             if let Some(account) = cache.account_for_venue(&ex.id) {
                 log::info!("Balances starting:");
                 let account_ref: &dyn Account = match account {
-                    AccountAny::Cash(cash) => cash,
                     AccountAny::Margin(margin) => margin,
+                    AccountAny::Cash(cash) => cash,
+                    AccountAny::Betting(betting) => betting,
                 };
                 for balance in account_ref.starting_balances().values() {
                     log::info!("  {balance}");
