@@ -150,6 +150,7 @@ impl OrderFillTrackerMap {
     /// Returns `Some(FillReport)` if a synthetic fill should be emitted.
     /// Removes the entry on dust settlement to prevent duplicate synthetic
     /// fills from repeated MATCHED events.
+    #[allow(clippy::too_many_arguments)]
     pub fn check_dust_and_build_fill(
         &self,
         venue_order_id: &VenueOrderId,
@@ -158,6 +159,7 @@ impl OrderFillTrackerMap {
         fallback_px: f64,
         currency: Currency,
         ts_event: UnixNanos,
+        ts_init: UnixNanos,
     ) -> Option<FillReport> {
         let mut guard = self.inner.lock().expect(MUTEX_POISONED);
         let s = guard.get(venue_order_id)?;
@@ -199,7 +201,7 @@ impl OrderFillTrackerMap {
                 liquidity_side: LiquiditySide::NoLiquiditySide,
                 report_id: UUID4::new(),
                 ts_event,
-                ts_init: ts_event,
+                ts_init,
                 client_order_id: None,
                 venue_position_id: None,
             })
@@ -316,12 +318,15 @@ mod tests {
             0.55,
             usdc(),
             UnixNanos::from(3_000u64),
+            UnixNanos::from(4_000u64),
         );
         assert!(dust_fill.is_some());
         let fill = dust_fill.unwrap();
         assert!((fill.last_qty.as_f64() - 0.002286).abs() < 1e-9);
         assert_eq!(fill.order_side, OrderSide::Buy);
         assert_eq!(fill.liquidity_side, LiquiditySide::NoLiquiditySide);
+        assert_eq!(fill.ts_event, UnixNanos::from(3_000u64));
+        assert_eq!(fill.ts_init, UnixNanos::from(4_000u64));
     }
 
     #[rstest]
@@ -346,6 +351,7 @@ mod tests {
             "order-1",
             0.55,
             usdc(),
+            UnixNanos::from(2_000u64),
             UnixNanos::from(2_000u64),
         );
         assert!(dust_fill.is_none());
@@ -374,6 +380,7 @@ mod tests {
             0.55,
             usdc(),
             UnixNanos::from(2_000u64),
+            UnixNanos::from(2_000u64),
         );
         assert!(dust_fill.is_none());
     }
@@ -389,6 +396,7 @@ mod tests {
             "unknown",
             0.55,
             usdc(),
+            UnixNanos::from(1_000u64),
             UnixNanos::from(1_000u64),
         );
         assert!(dust_fill.is_none());
@@ -416,6 +424,7 @@ mod tests {
                 "order-1",
                 0.50, // fallback, should NOT be used
                 usdc(),
+                UnixNanos::from(2_000u64),
                 UnixNanos::from(2_000u64),
             )
             .unwrap();
@@ -447,6 +456,7 @@ mod tests {
             0.55,
             usdc(),
             UnixNanos::from(2_000u64),
+            UnixNanos::from(2_000u64),
         );
         assert!(dust_fill.is_some());
 
@@ -458,6 +468,7 @@ mod tests {
             "order-1",
             0.55,
             usdc(),
+            UnixNanos::from(3_000u64),
             UnixNanos::from(3_000u64),
         );
         assert!(dust_fill2.is_none());

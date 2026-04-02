@@ -143,6 +143,7 @@ fn dispatch_order_update(order: &PolymarketUserOrder, ctx: &WsDispatchContext<'_
             price.as_f64(),
             crate::execution::get_usdc_currency(),
             ts_event,
+            ts_init,
         ) {
             emit_or_buffer_fill_report(
                 dust_fill,
@@ -459,6 +460,7 @@ fn emit_or_buffer_fill_report(
 #[cfg(test)]
 mod tests {
     use nautilus_common::messages::{ExecutionEvent, ExecutionReport};
+    use nautilus_core::time::AtomicTime;
     use nautilus_model::{
         enums::{AccountType, CurrencyType, OrderStatus},
         identifiers::TraderId,
@@ -742,6 +744,72 @@ mod tests {
                 other => panic!("Expected order report, was {other:?}"),
             },
             other => panic!("Expected report event, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_dispatch_order_matched_dust_fill_uses_local_ts_init() {
+        let order: PolymarketUserOrder = load("ws_user_order_matched.json");
+        let instrument = test_instrument();
+
+        let token_instruments = AtomicMap::new();
+        token_instruments.insert(order.asset_id, instrument.clone());
+
+        let fill_tracker = OrderFillTrackerMap::new();
+        let venue_order_id = VenueOrderId::from(order.id.as_str());
+        fill_tracker.register(
+            venue_order_id,
+            Quantity::from("100"),
+            OrderSide::Buy,
+            instrument.id(),
+            instrument.size_precision(),
+            instrument.price_precision(),
+        );
+        fill_tracker.record_fill(&venue_order_id, 99.995, 0.5, UnixNanos::from(1_000u64));
+
+        let pending_fills = Mutex::new(FifoCacheMap::default());
+        let pending_order_reports = Mutex::new(FifoCacheMap::default());
+        let mut emitter = test_emitter();
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        emitter.set_sender(sender);
+
+        let clock = Box::leak(Box::new(AtomicTime::new(
+            false,
+            UnixNanos::from(2_000_000_000u64),
+        )));
+
+        let ctx = WsDispatchContext {
+            token_instruments: &token_instruments,
+            fill_tracker: &fill_tracker,
+            pending_fills: &pending_fills,
+            pending_order_reports: &pending_order_reports,
+            emitter: &emitter,
+            account_id: AccountId::from("POLY-001"),
+            clock,
+            user_address: "0xtest",
+            user_api_key: "test-key",
+        };
+        let mut state = WsDispatchState::default();
+
+        dispatch_user_message(&UserWsMessage::Order(order), &ctx, &mut state);
+
+        let first = receiver.try_recv().expect("Expected order report");
+        let second = receiver.try_recv().expect("Expected dust fill report");
+
+        match first {
+            ExecutionEvent::Report(ExecutionReport::Order(_)) => {}
+            other => panic!("Expected order report, was {other:?}"),
+        }
+
+        match second {
+            ExecutionEvent::Report(ExecutionReport::Fill(fill_report)) => {
+                assert_eq!(
+                    fill_report.ts_event,
+                    UnixNanos::from(1_703_875_201_000_000_000u64)
+                );
+                assert_eq!(fill_report.ts_init, UnixNanos::from(2_000_000_000u64));
+            }
+            other => panic!("Expected fill report, was {other:?}"),
         }
     }
 }

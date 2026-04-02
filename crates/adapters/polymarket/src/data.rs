@@ -613,7 +613,7 @@ impl PolymarketDataClient {
                                 }
 
                                 // Emit instrument status based on WS active flag
-                                let ts = clock.get_time_ns();
+                                let ts_now = clock.get_time_ns();
                                 let action = if active {
                                     MarketStatusAction::Trading
                                 } else {
@@ -622,8 +622,8 @@ impl PolymarketDataClient {
                                 let status = InstrumentStatus::new(
                                     instrument_id,
                                     action,
-                                    ts,
-                                    ts,
+                                    ts_now,
+                                    ts_now,
                                     None,
                                     None,
                                     None,

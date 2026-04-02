@@ -504,6 +504,15 @@ mod tests {
         assert_eq!(report.time_in_force, TimeInForce::Gtc);
         assert_eq!(report.order_status, OrderStatus::Accepted);
         assert!(report.price.is_some());
+        assert_eq!(
+            report.ts_accepted,
+            UnixNanos::from(1_703_875_200_000_000_000u64)
+        );
+        assert_eq!(
+            report.ts_last,
+            UnixNanos::from(1_703_875_200_000_000_000u64)
+        );
+        assert_eq!(report.ts_init, UnixNanos::from(1_000_000_000u64));
     }
 
     #[rstest]
