@@ -356,7 +356,7 @@ pub fn calculate_market_price(
     }
 
     match side {
-        PolymarketOrderSide::Buy => parsed_levels.sort_by(|a, b| a.0.cmp(&b.0)),
+        PolymarketOrderSide::Buy => parsed_levels.sort_by_key(|a| a.0),
         PolymarketOrderSide::Sell => parsed_levels.sort_by(|a, b| b.0.cmp(&a.0)),
     }
 

@@ -1451,8 +1451,9 @@ impl KrakenFuturesHttpClient {
             let ts_event = entry
                 .timestamp
                 .parse::<DateTime<Utc>>()
-                .map(|dt| UnixNanos::from(dt.timestamp_nanos_opt().unwrap_or(0) as u64))
-                .unwrap_or(ts_init);
+                .map_or(ts_init, |dt| {
+                    UnixNanos::from(dt.timestamp_nanos_opt().unwrap_or(0) as u64)
+                });
 
             if let Some(s) = start_ns
                 && ts_event.as_u64() < s
