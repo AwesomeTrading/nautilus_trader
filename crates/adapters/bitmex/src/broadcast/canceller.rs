@@ -53,6 +53,10 @@ use tokio::{sync::RwLock, task::JoinHandle, time::interval};
 
 use crate::{common::consts::BITMEX_HTTP_TESTNET_URL, http::client::BitmexHttpClient};
 
+const IDEMPOTENT_ALREADY_CANCELED: &str = "AlreadyCanceled";
+const IDEMPOTENT_ORDER_NOT_FOUND: &str = "orderID not found";
+const IDEMPOTENT_UNABLE_DUE_TO_STATE: &str = "Unable to cancel order due to existing state";
+
 /// Trait for order cancellation operations.
 ///
 /// This trait abstracts the execution layer to enable dependency injection and testing
@@ -214,9 +218,9 @@ impl Default for CancelBroadcasterConfig {
                 "Order had execInst of ParticipateDoNotInitiate".to_string(),
             ],
             idempotent_success_patterns: vec![
-                "AlreadyCanceled".to_string(),
-                "orderID not found".to_string(),
-                "Unable to cancel order due to existing state".to_string(),
+                IDEMPOTENT_ALREADY_CANCELED.to_string(),
+                IDEMPOTENT_ORDER_NOT_FOUND.to_string(),
+                IDEMPOTENT_UNABLE_DUE_TO_STATE.to_string(),
             ],
             proxy_urls: vec![],
         }

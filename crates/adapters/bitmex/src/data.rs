@@ -500,6 +500,10 @@ impl BitmexDataClient {
 
         self.http_client.cache_instruments(&instruments);
 
+        if let Some(ws) = &self.ws_client {
+            ws.cache_instruments(&instruments);
+        }
+
         for instrument in &instruments {
             if let Err(e) = self
                 .data_sender

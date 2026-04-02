@@ -39,6 +39,7 @@ use nautilus_core::{
 use nautilus_model::{
     data::bar::BarType,
     identifiers::{AccountId, InstrumentId},
+    instruments::{Instrument, InstrumentAny},
 };
 use nautilus_network::{
     http::USER_AGENT,
@@ -84,6 +85,7 @@ pub struct BitmexWebSocketClient {
     task_handle: Option<Arc<tokio::task::JoinHandle<()>>>,
     subscriptions: SubscriptionState,
     tracked_subscriptions: Arc<DashMap<String, ()>>,
+    instruments: Arc<DashMap<Ustr, InstrumentAny>>,
 }
 
 impl BitmexWebSocketClient {
@@ -126,6 +128,7 @@ impl BitmexWebSocketClient {
             task_handle: None,
             subscriptions: SubscriptionState::new(BITMEX_WS_TOPIC_DELIMITER),
             tracked_subscriptions: Arc::new(DashMap::new()),
+            instruments: Arc::new(DashMap::new()),
         })
     }
 
@@ -212,6 +215,29 @@ impl BitmexWebSocketClient {
     /// Sets the account ID.
     pub fn set_account_id(&mut self, account_id: AccountId) {
         self.account_id = account_id;
+    }
+
+    /// Bulk-replaces the instrument cache with the given instruments.
+    pub fn cache_instruments(&self, instruments: &[InstrumentAny]) {
+        self.instruments.clear();
+        for inst in instruments {
+            self.instruments
+                .insert(inst.raw_symbol().inner(), inst.clone());
+        }
+    }
+
+    /// Upserts a single instrument into the cache.
+    pub fn cache_instrument(&self, instrument: InstrumentAny) {
+        self.instruments
+            .insert(instrument.raw_symbol().inner(), instrument);
+    }
+
+    /// Retrieves an instrument from the cache by symbol.
+    #[must_use]
+    pub fn get_instrument(&self, symbol: &Ustr) -> Option<InstrumentAny> {
+        self.instruments
+            .get(symbol)
+            .map(|entry| entry.value().clone())
     }
 
     /// Connect to the BitMEX WebSocket server.

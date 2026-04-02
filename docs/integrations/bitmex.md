@@ -756,11 +756,11 @@ The BitMEX data client provides the following configuration options:
 | `api_secret`                      | `None`   | Optional API secret; if `None`, loaded from `BITMEX_API_SECRET` or `BITMEX_TESTNET_API_SECRET` (when `testnet=True`). |
 | `base_url_http`                   | `None`   | Override for the REST base URL (defaults to production). |
 | `base_url_ws`                     | `None`   | Override for the WebSocket base URL (defaults to production). |
-| `testnet`                         | `False`  | Route requests to the BitMEX testnet when `True`. |
+| `testnet`                     | `False`  | Route requests to the BitMEX testnet when `True`. |
 | `http_timeout_secs`               | `60`     | Request timeout applied to HTTP calls. |
-| `max_retries`                     | `None`   | Maximum retry attempts for HTTP calls (disabled when `None`). |
+| `max_retries`                     | `3`      | Maximum retry attempts for HTTP calls. |
 | `retry_delay_initial_ms`          | `1,000`  | Initial backoff delay (milliseconds) between retries. |
-| `retry_delay_max_ms`              | `5,000`  | Maximum backoff delay (milliseconds) between retries. |
+| `retry_delay_max_ms`              | `10,000` | Maximum backoff delay (milliseconds) between retries. |
 | `recv_window_ms`                  | `10,000` | Expiration window (milliseconds) for signed requests. See [Request authentication](#request-authentication-and-expiration). |
 | `update_instruments_interval_mins`| `60`     | Interval (minutes) between instrument catalogue refreshes. |
 | `max_requests_per_second`         | `10`     | Burst rate limit enforced by the adapter for REST calls. |
@@ -780,9 +780,9 @@ The BitMEX execution client provides the following configuration options:
 | `base_url_ws`            | `None`   | Override for the WebSocket base URL (defaults to production). |
 | `testnet`                | `False`  | Route orders to the BitMEX testnet when `True`. |
 | `http_timeout_secs`      | `60`     | Request timeout applied to HTTP calls. |
-| `max_retries`            | `None`   | Maximum retry attempts for HTTP calls (disabled when `None`). |
+| `max_retries`            | `3`      | Maximum retry attempts for HTTP calls. |
 | `retry_delay_initial_ms` | `1,000`  | Initial backoff delay (milliseconds) between retries. |
-| `retry_delay_max_ms`     | `5,000`  | Maximum backoff delay (milliseconds) between retries. |
+| `retry_delay_max_ms`     | `10,000` | Maximum backoff delay (milliseconds) between retries. |
 | `recv_window_ms`         | `10,000` | Expiration window (milliseconds) for signed requests. See [Request authentication](#request-authentication-and-expiration). |
 | `max_requests_per_second`| `10`     | Burst rate limit enforced by the adapter for REST calls. |
 | `max_requests_per_minute`| `120`    | Rolling minute rate limit enforced by the adapter for REST calls. |

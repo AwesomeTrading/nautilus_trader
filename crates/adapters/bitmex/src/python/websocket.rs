@@ -1314,7 +1314,7 @@ fn handle_execution_messages(
                 callback,
             );
             dispatch_state.insert_filled(cid);
-            dispatch_state.triggered_orders.remove(&cid);
+            dispatch_state.remove_triggered(&cid);
             let filled =
                 fill_report_to_order_filled(&fill, trader_id, &ident, instrument.quote_currency());
             send_to_python(filled, call_soon, callback);
@@ -1342,9 +1342,9 @@ fn dispatch_order_event_to_python(
 
     match event {
         ParsedOrderEvent::Accepted(e) => {
-            if state.emitted_accepted.contains(&client_order_id)
-                || state.filled_orders.contains(&client_order_id)
-                || state.triggered_orders.contains(&client_order_id)
+            if state.accepted_contains(&client_order_id)
+                || state.filled_contains(&client_order_id)
+                || state.triggered_contains(&client_order_id)
             {
                 log::debug!("Skipping duplicate Accepted for {client_order_id}");
                 return;
@@ -1354,7 +1354,7 @@ fn dispatch_order_event_to_python(
             send_to_python(e, call_soon, callback);
         }
         ParsedOrderEvent::Triggered(e) => {
-            if state.filled_orders.contains(&client_order_id) {
+            if state.filled_contains(&client_order_id) {
                 log::debug!("Skipping stale Triggered for {client_order_id} (already filled)");
                 return;
             }
@@ -1385,8 +1385,8 @@ fn dispatch_order_event_to_python(
                 call_soon,
                 callback,
             );
-            state.triggered_orders.remove(&client_order_id);
-            state.filled_orders.remove(&client_order_id);
+            state.remove_triggered(&client_order_id);
+            state.remove_filled(&client_order_id);
             is_terminal = true;
             send_to_python(e, call_soon, callback);
         }
@@ -1402,14 +1402,14 @@ fn dispatch_order_event_to_python(
                 call_soon,
                 callback,
             );
-            state.triggered_orders.remove(&client_order_id);
-            state.filled_orders.remove(&client_order_id);
+            state.remove_triggered(&client_order_id);
+            state.remove_filled(&client_order_id);
             is_terminal = true;
             send_to_python(e, call_soon, callback);
         }
         ParsedOrderEvent::Rejected(e) => {
-            state.triggered_orders.remove(&client_order_id);
-            state.filled_orders.remove(&client_order_id);
+            state.remove_triggered(&client_order_id);
+            state.remove_filled(&client_order_id);
             is_terminal = true;
             send_to_python(e, call_soon, callback);
         }
@@ -1417,7 +1417,7 @@ fn dispatch_order_event_to_python(
 
     if is_terminal {
         state.order_identities.remove(&client_order_id);
-        state.emitted_accepted.remove(&client_order_id);
+        state.remove_accepted(&client_order_id);
     }
 }
 
@@ -1434,7 +1434,7 @@ fn ensure_accepted_to_python(
     call_soon: &Py<PyAny>,
     callback: &Py<PyAny>,
 ) {
-    if state.emitted_accepted.contains(&client_order_id) {
+    if state.accepted_contains(&client_order_id) {
         return;
     }
     state.insert_accepted(client_order_id);

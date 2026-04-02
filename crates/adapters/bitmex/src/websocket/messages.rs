@@ -119,8 +119,8 @@ pub(super) enum BitmexWsFrame {
         /// Whether heartbeat is enabled for this connection.
         #[serde(rename = "heartbeatEnabled")]
         heartbeat_enabled: bool,
-        /// Rate limit information.
-        limit: BitmexRateLimit,
+        /// Rate limit information (absent on some endpoints).
+        limit: Option<BitmexRateLimit>,
         /// Application name (testnet only).
         #[serde(rename = "appName")]
         app_name: Option<String>,

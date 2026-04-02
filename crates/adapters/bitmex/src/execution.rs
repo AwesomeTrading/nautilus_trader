@@ -364,6 +364,7 @@ impl BitmexExecutionClient {
         instruments.sort_by_key(|instrument| instrument.id());
 
         self.http_client.cache_instruments(&instruments);
+        self.ws_client.cache_instruments(&instruments);
         for instrument in &instruments {
             self._submitter.cache_instrument(instrument);
             self._canceller.cache_instrument(instrument);
@@ -1030,6 +1031,7 @@ impl ExecutionClient for BitmexExecutionClient {
         self.ensure_order_identity(cmd.client_order_id, cmd.strategy_id, cmd.instrument_id);
         let canceller = self._canceller.clone_for_async();
         let emitter = self.emitter.clone();
+        let dispatch_state = Arc::clone(&self.ws_dispatch_state);
         let instrument_id = cmd.instrument_id;
         let client_order_id = Some(cmd.client_order_id);
         let venue_order_id = cmd.venue_order_id;
@@ -1039,9 +1041,13 @@ impl ExecutionClient for BitmexExecutionClient {
                 .broadcast_cancel(instrument_id, client_order_id, venue_order_id)
                 .await
             {
-                Ok(Some(report)) => emitter.send_order_status_report(report),
+                Ok(Some(report)) => {
+                    if let Some(cid) = &report.client_order_id {
+                        dispatch_state.tombstone_order(cid);
+                    }
+                    emitter.send_order_status_report(report);
+                }
                 Ok(None) => {
-                    // Idempotent success - order already cancelled
                     log::debug!("Order already cancelled: {client_order_id:?}");
                 }
                 Err(e) => log::error!("BitMEX cancel order failed: {e:?}"),
@@ -1055,6 +1061,7 @@ impl ExecutionClient for BitmexExecutionClient {
     fn cancel_all_orders(&self, cmd: &CancelAllOrders) -> anyhow::Result<()> {
         let canceller = self._canceller.clone_for_async();
         let emitter = self.emitter.clone();
+        let dispatch_state = Arc::clone(&self.ws_dispatch_state);
         let instrument_id = cmd.instrument_id;
         let order_side = if cmd.order_side == OrderSide::NoOrderSide {
             log::debug!(
@@ -1071,6 +1078,11 @@ impl ExecutionClient for BitmexExecutionClient {
                 .await
             {
                 Ok(reports) => {
+                    for report in &reports {
+                        if let Some(cid) = &report.client_order_id {
+                            dispatch_state.tombstone_order(cid);
+                        }
+                    }
                     for report in reports {
                         emitter.send_order_status_report(report);
                     }
@@ -1086,6 +1098,7 @@ impl ExecutionClient for BitmexExecutionClient {
     fn batch_cancel_orders(&self, cmd: &BatchCancelOrders) -> anyhow::Result<()> {
         let canceller = self._canceller.clone_for_async();
         let emitter = self.emitter.clone();
+        let dispatch_state = Arc::clone(&self.ws_dispatch_state);
         let instrument_id = cmd.instrument_id;
 
         let client_ids: Vec<ClientOrderId> = cmd
@@ -1118,6 +1131,11 @@ impl ExecutionClient for BitmexExecutionClient {
                 .await
             {
                 Ok(reports) => {
+                    for report in &reports {
+                        if let Some(cid) = &report.client_order_id {
+                            dispatch_state.tombstone_order(cid);
+                        }
+                    }
                     for report in reports {
                         emitter.send_order_status_report(report);
                     }

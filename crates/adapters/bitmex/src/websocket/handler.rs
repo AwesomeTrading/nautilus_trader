@@ -255,7 +255,7 @@ impl BitmexWsFeedHandler {
                                 "Welcome to the BitMEX Realtime API: version={}, heartbeat={}, rate_limit={:?}",
                                 version,
                                 heartbeat_enabled,
-                                limit.remaining,
+                                limit.as_ref().and_then(|l| l.remaining),
                             );
                         }
                         BitmexWsFrame::Subscription { .. } => return Some(msg),

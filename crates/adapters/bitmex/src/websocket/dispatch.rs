@@ -20,10 +20,13 @@
 //! proper order events; untracked orders fall back to execution reports for
 //! downstream reconciliation.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 use ahash::AHashMap;
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use nautilus_core::{UUID4, UnixNanos};
 use nautilus_live::ExecutionEventEmitter;
 use nautilus_model::{
@@ -49,8 +52,8 @@ use crate::{
     },
 };
 
-/// Maximum entries in the dedup sets before they are cleared.
-const DEDUP_CAPACITY: usize = 10_000;
+/// Maximum entries per generation before rotation.
+const DEDUP_GENERATION_CAPACITY: usize = 10_000;
 
 /// Order identity context stored at submission time, used by the WS dispatch
 /// task to produce proper order events without Cache access.
@@ -66,59 +69,139 @@ pub struct OrderIdentity {
     pub order_type: OrderType,
 }
 
+/// Two-generation dedup set that avoids the duplicate-emission window caused
+/// by wholesale clearing. Holds a current and previous `AHashSet` behind a
+/// `Mutex`. When the current set fills up, `std::mem::swap` promotes it to
+/// previous and starts a fresh current, all under a single lock acquisition.
+/// Membership checks and removals also take the lock briefly.
+///
+/// The lock is held only for the duration of a hash-set insert (and sometimes
+/// a swap + clear), so contention is negligible.
+#[derive(Debug)]
+struct GenerationalDedupSet {
+    inner: Mutex<DedupInner>,
+}
+
+#[derive(Debug)]
+struct DedupInner {
+    current: ahash::AHashSet<ClientOrderId>,
+    previous: ahash::AHashSet<ClientOrderId>,
+}
+
+impl Default for GenerationalDedupSet {
+    fn default() -> Self {
+        Self {
+            inner: Mutex::new(DedupInner {
+                current: ahash::AHashSet::new(),
+                previous: ahash::AHashSet::new(),
+            }),
+        }
+    }
+}
+
+impl GenerationalDedupSet {
+    fn contains(&self, key: &ClientOrderId) -> bool {
+        let guard = self.inner.lock().expect("dedup lock poisoned");
+        guard.current.contains(key) || guard.previous.contains(key)
+    }
+
+    fn insert(&self, key: ClientOrderId) {
+        let mut guard = self.inner.lock().expect("dedup lock poisoned");
+        let inner = &mut *guard;
+        inner.current.insert(key);
+        if inner.current.len() >= DEDUP_GENERATION_CAPACITY {
+            inner.previous.clear();
+            std::mem::swap(&mut inner.current, &mut inner.previous);
+        }
+    }
+
+    fn remove(&self, key: &ClientOrderId) {
+        let mut guard = self.inner.lock().expect("dedup lock poisoned");
+        guard.current.remove(key);
+        guard.previous.remove(key);
+    }
+}
+
 /// Shared state for WS dispatch event deduplication and order tracking.
 ///
-/// Uses `DashMap`/`DashSet` for concurrent access from the stream task
+/// Uses `DashMap` and mutex-guarded sets for concurrent access from the stream task
 /// and the main thread without mutex contention.
 #[derive(Debug)]
 pub struct WsDispatchState {
     pub order_identities: DashMap<ClientOrderId, OrderIdentity>,
-    pub emitted_accepted: DashSet<ClientOrderId>,
-    pub triggered_orders: DashSet<ClientOrderId>,
-    pub filled_orders: DashSet<ClientOrderId>,
+    emitted_accepted: GenerationalDedupSet,
+    triggered_orders: GenerationalDedupSet,
+    filled_orders: GenerationalDedupSet,
+    tombstoned: GenerationalDedupSet,
     pub margin_subscribed: AtomicBool,
-    clearing: AtomicBool,
 }
 
 impl Default for WsDispatchState {
     fn default() -> Self {
         Self {
             order_identities: DashMap::new(),
-            emitted_accepted: DashSet::default(),
-            triggered_orders: DashSet::default(),
-            filled_orders: DashSet::default(),
+            emitted_accepted: GenerationalDedupSet::default(),
+            triggered_orders: GenerationalDedupSet::default(),
+            filled_orders: GenerationalDedupSet::default(),
+            tombstoned: GenerationalDedupSet::default(),
             margin_subscribed: AtomicBool::new(false),
-            clearing: AtomicBool::new(false),
         }
     }
 }
 
 impl WsDispatchState {
-    fn evict_if_full(&self, set: &DashSet<ClientOrderId>) {
-        if set.len() >= DEDUP_CAPACITY
-            && self
-                .clearing
-                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
-                .is_ok()
-        {
-            set.clear();
-            self.clearing.store(false, Ordering::Release);
-        }
+    pub(crate) fn accepted_contains(&self, cid: &ClientOrderId) -> bool {
+        self.emitted_accepted.contains(cid)
+    }
+
+    pub(crate) fn filled_contains(&self, cid: &ClientOrderId) -> bool {
+        self.filled_orders.contains(cid)
+    }
+
+    pub(crate) fn triggered_contains(&self, cid: &ClientOrderId) -> bool {
+        self.triggered_orders.contains(cid)
     }
 
     pub(crate) fn insert_accepted(&self, cid: ClientOrderId) {
-        self.evict_if_full(&self.emitted_accepted);
         self.emitted_accepted.insert(cid);
     }
 
     pub(crate) fn insert_filled(&self, cid: ClientOrderId) {
-        self.evict_if_full(&self.filled_orders);
         self.filled_orders.insert(cid);
     }
 
     pub(crate) fn insert_triggered(&self, cid: ClientOrderId) {
-        self.evict_if_full(&self.triggered_orders);
         self.triggered_orders.insert(cid);
+    }
+
+    pub(crate) fn remove_triggered(&self, cid: &ClientOrderId) {
+        self.triggered_orders.remove(cid);
+    }
+
+    pub(crate) fn remove_filled(&self, cid: &ClientOrderId) {
+        self.filled_orders.remove(cid);
+    }
+
+    pub(crate) fn remove_accepted(&self, cid: &ClientOrderId) {
+        self.emitted_accepted.remove(cid);
+    }
+
+    /// Returns `true` if the order has been tombstoned by the HTTP cancel path.
+    pub(crate) fn is_tombstoned(&self, cid: &ClientOrderId) -> bool {
+        self.tombstoned.contains(cid)
+    }
+
+    /// Tombstones an order so the WS dispatch silently drops all subsequent
+    /// messages for it. Call after the HTTP path has already sent a terminal
+    /// report (cancel, expire, reject). The tombstone prevents stale WS
+    /// messages (Accepted, Triggered) that are still queued from being
+    /// processed as untracked orders and re-activating a closed order.
+    pub(crate) fn tombstone_order(&self, cid: &ClientOrderId) {
+        self.tombstoned.insert(*cid);
+        self.order_identities.remove(cid);
+        self.remove_accepted(cid);
+        self.remove_triggered(cid);
+        self.remove_filled(cid);
     }
 }
 
@@ -264,7 +347,8 @@ fn dispatch_order_messages(
 
                 let client_order_id = order_msg.cl_ord_id.map(ClientOrderId::new);
 
-                // Update caches for execution message routing
+                // Update caches before tombstone check so execution messages
+                // that arrive later can still resolve the symbol
                 if let Some(ref cid) = client_order_id {
                     if let Some(ord_type) = &order_msg.ord_type {
                         let order_type: OrderType = if *ord_type == BitmexOrderType::Pegged
@@ -281,6 +365,14 @@ fn dispatch_order_messages(
                         order_type_cache.insert(*cid, order_type);
                     }
                     order_symbol_cache.insert(*cid, order_msg.symbol);
+                }
+
+                // Skip tombstoned orders (already handled by HTTP cancel path)
+                if let Some(ref cid) = client_order_id
+                    && state.is_tombstoned(cid)
+                {
+                    log::debug!("Skipping tombstoned order {cid}");
+                    continue;
                 }
 
                 let identity = client_order_id
@@ -494,7 +586,7 @@ fn dispatch_execution_messages(
                 ts_init,
             );
             state.insert_filled(cid);
-            state.triggered_orders.remove(&cid);
+            state.remove_triggered(&cid);
             let filled = fill_report_to_order_filled(
                 &fill,
                 emitter.trader_id(),
@@ -528,9 +620,9 @@ fn dispatch_parsed_order_event(
 
     match event {
         ParsedOrderEvent::Accepted(e) => {
-            if state.emitted_accepted.contains(&client_order_id)
-                || state.filled_orders.contains(&client_order_id)
-                || state.triggered_orders.contains(&client_order_id)
+            if state.accepted_contains(&client_order_id)
+                || state.filled_contains(&client_order_id)
+                || state.triggered_contains(&client_order_id)
             {
                 log::debug!("Skipping duplicate Accepted for {client_order_id}");
                 return;
@@ -540,7 +632,7 @@ fn dispatch_parsed_order_event(
             emitter.send_order_event(OrderEventAny::Accepted(e));
         }
         ParsedOrderEvent::Triggered(e) => {
-            if state.filled_orders.contains(&client_order_id) {
+            if state.filled_contains(&client_order_id) {
                 log::debug!("Skipping stale Triggered for {client_order_id} (already filled)");
                 return;
             }
@@ -567,8 +659,8 @@ fn dispatch_parsed_order_event(
                 state,
                 ts_init,
             );
-            state.triggered_orders.remove(&client_order_id);
-            state.filled_orders.remove(&client_order_id);
+            state.remove_triggered(&client_order_id);
+            state.remove_filled(&client_order_id);
             is_terminal = true;
             emitter.send_order_event(OrderEventAny::Canceled(e));
         }
@@ -582,14 +674,14 @@ fn dispatch_parsed_order_event(
                 state,
                 ts_init,
             );
-            state.triggered_orders.remove(&client_order_id);
-            state.filled_orders.remove(&client_order_id);
+            state.remove_triggered(&client_order_id);
+            state.remove_filled(&client_order_id);
             is_terminal = true;
             emitter.send_order_event(OrderEventAny::Expired(e));
         }
         ParsedOrderEvent::Rejected(e) => {
-            state.triggered_orders.remove(&client_order_id);
-            state.filled_orders.remove(&client_order_id);
+            state.remove_triggered(&client_order_id);
+            state.remove_filled(&client_order_id);
             is_terminal = true;
             emitter.send_order_event(OrderEventAny::Rejected(e));
         }
@@ -597,7 +689,7 @@ fn dispatch_parsed_order_event(
 
     if is_terminal {
         state.order_identities.remove(&client_order_id);
-        state.emitted_accepted.remove(&client_order_id);
+        state.remove_accepted(&client_order_id);
     }
 }
 
@@ -612,7 +704,7 @@ fn ensure_accepted_emitted(
     state: &WsDispatchState,
     ts_init: UnixNanos,
 ) {
-    if state.emitted_accepted.contains(&client_order_id) {
+    if state.accepted_contains(&client_order_id) {
         return;
     }
     state.insert_accepted(client_order_id);
