@@ -105,8 +105,10 @@ pub struct PolymarketQuote {
     pub side: PolymarketOrderSide,
     pub size: String,
     pub hash: String,
-    pub best_bid: String,
-    pub best_ask: String,
+    #[serde(default)]
+    pub best_bid: Option<String>,
+    #[serde(default)]
+    pub best_ask: Option<String>,
 }
 
 /// A price change (quotes) message from the WebSocket market channel.
@@ -343,8 +345,8 @@ mod tests {
         assert_eq!(quotes.price_changes.len(), 2);
         assert_eq!(quotes.price_changes[0].side, PolymarketOrderSide::Buy);
         assert_eq!(quotes.price_changes[0].price, "0.51");
-        assert_eq!(quotes.price_changes[0].best_bid, "0.51");
-        assert_eq!(quotes.price_changes[0].best_ask, "0.52");
+        assert_eq!(quotes.price_changes[0].best_bid.as_deref(), Some("0.51"));
+        assert_eq!(quotes.price_changes[0].best_ask.as_deref(), Some("0.52"));
         assert_eq!(quotes.price_changes[1].side, PolymarketOrderSide::Sell);
         assert_eq!(quotes.timestamp, "1703875201000");
     }

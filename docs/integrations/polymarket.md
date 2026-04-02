@@ -347,17 +347,20 @@ with additional trade events stored in the cache as JSON under a custom key to r
 
 ## Fees
 
-Polymarket charges **zero fees** on most markets. The exception is **15-minute crypto markets**:
+Polymarket uses the formula `fee = C * feeRate * p * (1 - p)` where C is shares traded and p is the share price. Fees peak at p = 0.50 and decrease symmetrically toward the extremes. Only takers pay fees; makers pay zero.
 
-| Trade Type | Fee Deducted In | Rate Range  |
-|------------|-----------------|-------------|
-| Buy        | Tokens          | 0.2% - 1.6% |
-| Sell       | USDC            | 0.8% - 3.7% |
+| Category                              | Taker `feeRate` |
+|---------------------------------------|-----------------|
+| Crypto                                | 0.072           |
+| Sports                                | 0.03            |
+| Finance / Politics / Mentions / Tech  | 0.04            |
+| Economics / Culture / Weather / Other | 0.05            |
+| Geopolitics                           | 0.00            |
 
-Fees are rounded to 4 decimal places (0.0001 USDC minimum). Market makers receive daily rebates from collected taker fees.
+Fees are rounded to 5 decimal places (0.00001 USDC minimum). Fees are collected in shares on buy orders and USDC on sell orders.
 
 :::note
-For the latest rates, see Polymarket's [Fees](https://docs.polymarket.com/polymarket-learn/trading/fees) and [Maker Rebates](https://docs.polymarket.com/polymarket-learn/trading/maker-rebates-program) documentation.
+For the latest rates, see Polymarket's [Fees](https://docs.polymarket.com/trading/fees) documentation.
 :::
 
 ## Reconciliation

@@ -244,6 +244,7 @@ pub fn parse_quote_from_snapshot(
 
 /// Parses a quote tick from a price change message using its best_bid/best_ask fields.
 ///
+/// Returns `None` when either best_bid or best_ask is absent (empty book side).
 /// When `last_quote` is provided the opposite side's size is carried forward
 /// instead of being set to zero, matching the Python adapter's behavior.
 pub fn parse_quote_from_price_change(
@@ -254,9 +255,12 @@ pub fn parse_quote_from_price_change(
     last_quote: Option<&QuoteTick>,
     ts_event: UnixNanos,
     ts_init: UnixNanos,
-) -> anyhow::Result<QuoteTick> {
-    let bid_price = parse_price(&quote.best_bid, price_precision)?;
-    let ask_price = parse_price(&quote.best_ask, price_precision)?;
+) -> anyhow::Result<Option<QuoteTick>> {
+    let (Some(best_bid), Some(best_ask)) = (&quote.best_bid, &quote.best_ask) else {
+        return Ok(None);
+    };
+    let bid_price = parse_price(best_bid, price_precision)?;
+    let ask_price = parse_price(best_ask, price_precision)?;
     let changed_price = parse_price(&quote.price, price_precision)?;
 
     let size = parse_quantity(&quote.size, size_precision)?;
@@ -285,7 +289,7 @@ pub fn parse_quote_from_price_change(
         }
     };
 
-    QuoteTick::new_checked(
+    Ok(Some(QuoteTick::new_checked(
         instrument_id,
         bid_price,
         ask_price,
@@ -293,7 +297,7 @@ pub fn parse_quote_from_price_change(
         ask_size,
         ts_event,
         ts_init,
-    )
+    )?))
 }
 
 #[cfg(test)]
@@ -504,7 +508,8 @@ mod tests {
             ts_event,
             ts_init,
         )
-        .unwrap();
+        .unwrap()
+        .expect("quote should be Some when best_bid/best_ask present");
 
         assert_eq!(quote.instrument_id, instrument.id());
     }

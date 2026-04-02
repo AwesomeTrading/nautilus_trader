@@ -441,9 +441,10 @@ impl PolymarketDataClient {
                             ts_event,
                             ts_init,
                         ) {
-                            Ok(quote) => {
+                            Ok(Some(quote)) => {
                                 Self::emit_quote_if_changed(ctx, instrument_id, quote);
                             }
+                            Ok(None) => {} // Missing best_bid/best_ask
                             Err(e) => {
                                 log::error!("Failed to parse quote from price change: {e}");
                             }
