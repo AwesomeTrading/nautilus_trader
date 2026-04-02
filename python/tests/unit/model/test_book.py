@@ -14,20 +14,29 @@
 # -------------------------------------------------------------------------------------------------
 
 import pickle
+from decimal import Decimal
 
 import pytest
 
 from nautilus_trader.model import BookAction
+from nautilus_trader.model import BookLevel
 from nautilus_trader.model import BookOrder
 from nautilus_trader.model import BookType
+from nautilus_trader.model import ClientOrderId
 from nautilus_trader.model import InstrumentId
 from nautilus_trader.model import OrderBook
 from nautilus_trader.model import OrderBookDelta
 from nautilus_trader.model import OrderBookDeltas
 from nautilus_trader.model import OrderBookDepth10
 from nautilus_trader.model import OrderSide
+from nautilus_trader.model import OrderStatus
+from nautilus_trader.model import OrderType
+from nautilus_trader.model import OwnBookOrder
+from nautilus_trader.model import OwnOrderBook
 from nautilus_trader.model import Price
 from nautilus_trader.model import Quantity
+from nautilus_trader.model import TimeInForce
+from nautilus_trader.model import TraderId
 
 
 @pytest.fixture
@@ -365,3 +374,365 @@ def test_depth10_get_fields():
     assert "sequence" in fields
     assert "ts_event" in fields
     assert "ts_init" in fields
+
+
+def test_order_book_apply_depth_updates_best_prices(depth10):
+    book = OrderBook(instrument_id=depth10.instrument_id, book_type=BookType.L2_MBP)
+
+    book.apply_depth(depth10)
+
+    assert book.best_bid_price() == Price.from_str("99.00")
+    assert book.best_ask_price() == Price.from_str("100.00")
+    assert book.best_bid_size() == Quantity.from_str("100")
+    assert book.best_ask_size() == Quantity.from_str("100")
+    assert book.update_count == 1
+    assert book.bids_to_dict(depth=2) == {
+        Decimal("99.00"): Decimal(100),
+        Decimal("98.00"): Decimal(200),
+    }
+    assert book.asks_to_dict(depth=2) == {
+        Decimal("100.00"): Decimal(100),
+        Decimal("101.00"): Decimal(200),
+    }
+
+
+def test_book_level_properties(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+    bid = BookOrder(OrderSide.BUY, Price.from_str("100.50"), Quantity.from_str("10"), 1)
+
+    book.apply_delta(OrderBookDelta(audusd_id, BookAction.ADD, bid, 0, 1, 0, 0))
+
+    level = book.bids()[0]
+
+    assert isinstance(level, BookLevel)
+    assert level.price == Price.from_str("100.50")
+    assert level.len() == 1
+    assert not level.is_empty()
+    assert level.size() == pytest.approx(10.0)
+    assert level.exposure() == pytest.approx(1005.0)
+    first = level.first()
+    assert first is not None
+    assert first.price == level.price
+    assert first.size == Quantity.from_str("10")
+    assert len(level.get_orders()) == 1
+
+
+def test_order_book_grouped_views(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("100.59"), Quantity.from_str("10"), 1),
+            0,
+            1,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("100.51"), Quantity.from_str("5"), 2),
+            0,
+            2,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("100.61"), Quantity.from_str("7"), 3),
+            0,
+            3,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("100.69"), Quantity.from_str("8"), 4),
+            0,
+            4,
+            0,
+            0,
+        ),
+    )
+
+    assert book.group_bids(Decimal("0.10")) == {Decimal("100.50"): Decimal(15)}
+    assert book.group_asks(Decimal("0.10")) == {Decimal("100.70"): Decimal(15)}
+
+
+def test_order_book_filtered_view_excludes_own_orders(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+    own_book = OwnOrderBook(instrument_id=audusd_id)
+
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("1.00000"), Quantity.from_int(100_000), 1),
+            0,
+            1,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("0.99990"), Quantity.from_int(50_000), 2),
+            0,
+            2,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("1.00010"), Quantity.from_int(70_000), 3),
+            0,
+            3,
+            0,
+            0,
+        ),
+    )
+
+    own_book.add(
+        OwnBookOrder(
+            trader_id=TraderId("TRADER-001"),
+            client_order_id=ClientOrderId("O-1"),
+            side=OrderSide.BUY,
+            price=Price.from_str("1.00000"),
+            size=Quantity.from_int(25_000),
+            order_type=OrderType.LIMIT,
+            time_in_force=TimeInForce.GTC,
+            status=OrderStatus.ACCEPTED,
+            ts_last=10,
+            ts_accepted=10,
+            ts_submitted=0,
+            ts_init=0,
+        ),
+    )
+    own_book.add(
+        OwnBookOrder(
+            trader_id=TraderId("TRADER-001"),
+            client_order_id=ClientOrderId("O-2"),
+            side=OrderSide.SELL,
+            price=Price.from_str("1.00010"),
+            size=Quantity.from_int(30_000),
+            order_type=OrderType.LIMIT,
+            time_in_force=TimeInForce.GTC,
+            status=OrderStatus.ACCEPTED,
+            ts_last=20,
+            ts_accepted=20,
+            ts_submitted=0,
+            ts_init=0,
+        ),
+    )
+
+    expected_bids = {
+        Decimal("1.00000"): Decimal(75000),
+        Decimal("0.99990"): Decimal(50000),
+    }
+    expected_asks = {Decimal("1.00010"): Decimal(40000)}
+
+    assert book.bids_filtered_to_dict(own_book=own_book) == expected_bids
+    assert book.asks_filtered_to_dict(own_book=own_book) == expected_asks
+    assert book.group_bids_filtered(Decimal("0.0001"), own_book=own_book) == {
+        Decimal("1.0000"): Decimal(75000),
+        Decimal("0.9999"): Decimal(50000),
+    }
+    assert book.group_asks_filtered(Decimal("0.0001"), own_book=own_book) == {
+        Decimal("1.0001"): Decimal(40000),
+    }
+
+    filtered = book.filtered_view(own_book=own_book)
+
+    assert filtered.bids_to_dict() == expected_bids
+    assert filtered.asks_to_dict() == expected_asks
+
+
+def test_order_book_get_quantity_methods(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("100.50"), Quantity.from_str("10"), 1),
+            0,
+            1,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("100.60"), Quantity.from_str("5"), 2),
+            0,
+            2,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("100.70"), Quantity.from_str("15"), 3),
+            0,
+            3,
+            0,
+            0,
+        ),
+    )
+
+    assert book.get_quantity_for_price(Price.from_str("100.60"), OrderSide.BUY) == pytest.approx(
+        5.0,
+    )
+    assert book.get_quantity_at_level(
+        Price.from_str("100.60"),
+        OrderSide.BUY,
+        1,
+    ) == Quantity.from_str("5.0")
+    assert book.get_quantity_for_price(
+        Price.from_str("100.50"),
+        OrderSide.SELL,
+    ) == pytest.approx(10.0)
+    assert book.get_quantity_at_level(
+        Price.from_str("100.50"),
+        OrderSide.SELL,
+        1,
+    ) == Quantity.from_str("10.0")
+
+
+def test_order_book_get_avg_px_qty_for_exposure(depth10):
+    book = OrderBook(instrument_id=depth10.instrument_id, book_type=BookType.L2_MBP)
+
+    book.apply_depth(depth10)
+
+    avg_px, filled_qty, worst_px = book.get_avg_px_qty_for_exposure(
+        Quantity.from_int(1),
+        OrderSide.BUY,
+    )
+
+    assert avg_px == pytest.approx(100.0)
+    assert filled_qty == pytest.approx(0.01)
+    assert worst_px == pytest.approx(100.0)
+
+
+def test_order_book_simulate_fills(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("100.50"), Quantity.from_str("10"), 1),
+            0,
+            1,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("100.60"), Quantity.from_str("5"), 2),
+            0,
+            2,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("100.70"), Quantity.from_str("15"), 3),
+            0,
+            3,
+            0,
+            0,
+        ),
+    )
+
+    buy_fills = book.simulate_fills(
+        BookOrder(OrderSide.BUY, Price.from_str("999"), Quantity.from_str("12"), 99),
+    )
+    sell_fills = book.simulate_fills(
+        BookOrder(OrderSide.SELL, Price.from_str("0"), Quantity.from_str("7"), 100),
+    )
+
+    assert [(str(px), str(qty)) for px, qty in buy_fills] == [
+        ("100.60", "5"),
+        ("100.70", "7"),
+    ]
+    assert [(str(px), str(qty)) for px, qty in sell_fills] == [("100.50", "7")]
+
+
+def test_order_book_clear_stale_levels_removes_crossed_market(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+
+    book.add(
+        BookOrder(OrderSide.BUY, Price.from_str("1.00020"), Quantity.from_int(100_000), 1),
+        flags=0,
+        sequence=1,
+        ts_event=1,
+    )
+    book.add(
+        BookOrder(OrderSide.SELL, Price.from_str("1.00010"), Quantity.from_int(100_000), 2),
+        flags=0,
+        sequence=2,
+        ts_event=2,
+    )
+
+    removed = book.clear_stale_levels()
+
+    assert removed is not None
+    assert len(removed) == 2
+    assert [str(level.price) for level in removed] == ["1.00020", "1.00010"]
+    assert book.best_bid_price() is None
+    assert book.best_ask_price() is None
+
+
+def test_order_book_check_integrity_on_valid_book(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L2_MBP)
+
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.BUY, Price.from_str("1.00000"), Quantity.from_int(100_000), 1),
+            0,
+            1,
+            0,
+            0,
+        ),
+    )
+    book.apply_delta(
+        OrderBookDelta(
+            audusd_id,
+            BookAction.ADD,
+            BookOrder(OrderSide.SELL, Price.from_str("1.00010"), Quantity.from_int(100_000), 2),
+            0,
+            2,
+            0,
+            0,
+        ),
+    )
+
+    book.check_integrity()

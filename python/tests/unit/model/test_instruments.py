@@ -923,3 +923,62 @@ def test_synthetic_instrument_is_valid_formula():
 
     assert synth.is_valid_formula("BTCUSDT.BINANCE + ETHUSDT.BINANCE")
     assert not synth.is_valid_formula("BTCUSDT.BINANCE + XRPUSDT.BINANCE")
+
+
+def test_synthetic_instrument_calculate_from_map():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=4,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=1,
+        ts_init=2,
+    )
+
+    result = synth.calculate_from_map(
+        {
+            "BTCUSDT.BINANCE": 50_000.0,
+            "ETHUSDT.BINANCE": 3_000.0,
+        },
+    )
+
+    assert result == Price.from_str("26500.0000")
+
+
+def test_synthetic_instrument_basic_properties():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=4,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=1,
+        ts_init=2,
+    )
+
+    assert synth.price_increment == Price.from_str("0.0001")
+    assert synth.id == InstrumentId(Symbol("BTC-ETH"), Venue("SYNTH"))
+    assert synth.ts_event == 1
+    assert synth.ts_init == 2
+
+
+def test_synthetic_instrument_calculate_from_map_missing_component_raises():
+    btcusdt_id = InstrumentId.from_str("BTCUSDT.BINANCE")
+    ethusdt_id = InstrumentId.from_str("ETHUSDT.BINANCE")
+
+    synth = SyntheticInstrument(
+        symbol=Symbol("BTC-ETH"),
+        price_precision=4,
+        components=[btcusdt_id, ethusdt_id],
+        formula="(BTCUSDT.BINANCE + ETHUSDT.BINANCE) / 2",
+        ts_event=1,
+        ts_init=2,
+    )
+
+    with pytest.raises(ValueError, match=r"Missing price for component: ETHUSDT\.BINANCE"):
+        synth.calculate_from_map({"BTCUSDT.BINANCE": 50_000.0})

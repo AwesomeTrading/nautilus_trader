@@ -13,7 +13,9 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+from nautilus_trader.model import CustomData
 from nautilus_trader.model import DataType
+from nautilus_trader.model import custom_data_backend_kind
 
 
 def test_data_type_construction():
@@ -44,3 +46,27 @@ def test_data_type_topic():
 
     assert "QuoteTick" in dt.topic
     assert "AUD/USD.SIM" in dt.topic
+
+
+def test_data_type_identifier():
+    dt = DataType("QuoteTick", identifier="alpha")
+
+    assert dt.identifier == "alpha"
+
+
+def test_custom_data_python_backend_and_json_bytes():
+    class Dummy:
+        ts_event = 1
+        ts_init = 2
+
+        def __repr__(self):
+            return "Dummy()"
+
+    custom = CustomData(DataType("Example"), Dummy())
+    payload = custom.to_json_bytes()
+
+    assert custom.data_type.type_name == "Example"
+    assert custom.ts_event == 1
+    assert custom.ts_init == 2
+    assert custom_data_backend_kind(custom) == "python"
+    assert b'"type":"Dummy"' in payload
