@@ -30,7 +30,10 @@ from nautilus_trader.model import OrderType
 from nautilus_trader.model import Position
 from nautilus_trader.model import PositionAdjusted
 from nautilus_trader.model import PositionAdjustmentType
+from nautilus_trader.model import PositionChanged
+from nautilus_trader.model import PositionClosed
 from nautilus_trader.model import PositionId
+from nautilus_trader.model import PositionOpened
 from nautilus_trader.model import PositionSnapshot
 from nautilus_trader.model import PositionStatusReport
 from nautilus_trader.model import Quantity
@@ -164,3 +167,12 @@ def test_position_snapshot_from_dict_returns_snapshot_instance():
     snapshot = PositionSnapshot.from_dict(values)
 
     assert type(snapshot).__name__ == "PositionSnapshot"
+
+
+def test_position_event_classes_expose_create_surface():
+    assert hasattr(PositionOpened, "position_id")
+    assert hasattr(PositionOpened, "quantity")
+    assert hasattr(PositionChanged, "peak_quantity")
+    assert hasattr(PositionChanged, "realized_pnl")
+    assert hasattr(PositionClosed, "closing_order_id")
+    assert hasattr(PositionClosed, "ts_closed")

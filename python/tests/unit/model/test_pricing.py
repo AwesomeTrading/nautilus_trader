@@ -15,6 +15,7 @@
 
 import pytest
 
+from nautilus_trader.model import BlackScholesGreeksResult
 from nautilus_trader.model import ForwardPrice
 from nautilus_trader.model import InstrumentId
 from nautilus_trader.model import OptionChainSlice
@@ -123,6 +124,7 @@ def test_option_chain_slice_empty_state_and_lookups():
 def test_black_scholes_greeks_result_properties():
     result = black_scholes_greeks(100.0, 0.01, 0.01, 0.2, True, 100.0, 0.5)
 
+    assert isinstance(result, BlackScholesGreeksResult)
     assert result.price > 0.0
     assert result.vol == pytest.approx(0.2)
     assert 0.0 < result.delta < 1.0
