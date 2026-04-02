@@ -114,6 +114,9 @@ pub const BINANCE_FUTURES_USD_TESTNET_WS_URL: &str = "wss://stream.binancefuture
 /// Binance COIN-M Futures WebSocket base URL (testnet).
 pub const BINANCE_FUTURES_COIN_TESTNET_WS_URL: &str = "wss://dstream.binancefuture.com/ws";
 
+/// HTTP header name for the Binance API key.
+pub const BINANCE_API_KEY_HEADER: &str = "X-MBX-APIKEY";
+
 /// Binance Spot API version path.
 pub const BINANCE_SPOT_API_PATH: &str = "/api/v3";
 

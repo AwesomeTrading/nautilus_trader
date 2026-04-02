@@ -30,7 +30,7 @@ use std::{
     fmt::Debug,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -72,6 +72,7 @@ pub struct BinanceSpotWsTradingHandler {
     out_tx: tokio::sync::mpsc::UnboundedSender<BinanceSpotWsTradingMessage>,
     credential: Arc<SigningCredential>,
     pending_requests: AHashMap<String, BinanceSpotWsTradingRequestMeta>,
+    request_id_counter: AtomicU64,
 }
 
 impl Debug for BinanceSpotWsTradingHandler {
@@ -104,6 +105,7 @@ impl BinanceSpotWsTradingHandler {
             out_tx,
             credential,
             pending_requests: AHashMap::new(),
+            request_id_counter: AtomicU64::new(1000),
         }
     }
 
@@ -326,8 +328,7 @@ impl BinanceSpotWsTradingHandler {
     }
 
     fn next_request_id(&self) -> String {
-        // Use the same counter pattern as the outer client
-        let id = self.pending_requests.len().wrapping_add(1000).to_string();
+        let id = self.request_id_counter.fetch_add(1, Ordering::Relaxed);
         format!("ws-{id}")
     }
 

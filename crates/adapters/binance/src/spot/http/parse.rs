@@ -1999,13 +1999,13 @@ mod tests {
         buf.push((-2i8) as u8); // price_exponent
         buf.push((-4i8) as u8); // qty_exponent
         buf.extend_from_slice(&create_group_header(KLINES_BLOCK_LENGTH, 1));
-        buf.extend_from_slice(&1_700_000_000_000i64.to_le_bytes()); // open_time
+        buf.extend_from_slice(&1_700_000_000_000_000i64.to_le_bytes()); // open_time (micros)
         buf.extend_from_slice(&12_000i64.to_le_bytes()); // open_price
         buf.extend_from_slice(&12_500i64.to_le_bytes()); // high_price
         buf.extend_from_slice(&11_900i64.to_le_bytes()); // low_price
         buf.extend_from_slice(&12_345i64.to_le_bytes()); // close_price
         buf.extend_from_slice(&1_234_500i128.to_le_bytes()); // volume
-        buf.extend_from_slice(&1_700_000_059_999i64.to_le_bytes()); // close_time
+        buf.extend_from_slice(&1_700_000_059_999_000i64.to_le_bytes()); // close_time (micros)
         buf.extend_from_slice(&2_345_600i128.to_le_bytes()); // quote_volume
         buf.extend_from_slice(&100i64.to_le_bytes()); // num_trades
         buf.extend_from_slice(&600_000i128.to_le_bytes()); // taker_buy_base_volume
@@ -2016,7 +2016,7 @@ mod tests {
         assert_eq!(klines.price_exponent, -2);
         assert_eq!(klines.qty_exponent, -4);
         assert_eq!(klines.klines.len(), 1);
-        assert_eq!(klines.klines[0].open_time, 1_700_000_000_000);
+        assert_eq!(klines.klines[0].open_time, 1_700_000_000_000_000);
         assert_eq!(klines.klines[0].close_price, 12_345);
         assert_eq!(i128::from_le_bytes(klines.klines[0].volume), 1_234_500);
         assert_eq!(klines.klines[0].num_trades, 100);

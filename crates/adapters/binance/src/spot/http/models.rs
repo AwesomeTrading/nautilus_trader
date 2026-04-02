@@ -26,9 +26,14 @@ use nautilus_model::{
 };
 use rust_decimal::Decimal;
 
-use crate::spot::sbe::spot::{
-    order_side::OrderSide, order_status::OrderStatus, order_type::OrderType,
-    self_trade_prevention_mode::SelfTradePreventionMode, time_in_force::TimeInForce,
+use crate::{
+    common::enums::{
+        BinanceOrderStatus, BinanceSelfTradePreventionMode, BinanceSide, BinanceTimeInForce,
+    },
+    spot::sbe::spot::{
+        order_side::OrderSide, order_status::OrderStatus, order_type::OrderType,
+        self_trade_prevention_mode::SelfTradePreventionMode, time_in_force::TimeInForce,
+    },
 };
 
 /// Price/quantity level in an order book.
@@ -603,20 +608,20 @@ pub struct BatchOrderSuccess {
     #[serde(rename = "cummulativeQuoteQty")]
     pub cummulative_quote_qty: String,
     /// Order status.
-    pub status: String,
+    pub status: BinanceOrderStatus,
     /// Time in force.
-    pub time_in_force: String,
+    pub time_in_force: BinanceTimeInForce,
     /// Order type.
     #[serde(rename = "type")]
     pub order_type: String,
     /// Order side.
-    pub side: String,
+    pub side: BinanceSide,
     /// Working time in milliseconds.
     #[serde(default)]
     pub working_time: Option<i64>,
     /// Self-trade prevention mode.
     #[serde(default)]
-    pub self_trade_prevention_mode: Option<String>,
+    pub self_trade_prevention_mode: Option<BinanceSelfTradePreventionMode>,
 }
 
 /// Error in a batch order response.
@@ -666,23 +671,23 @@ pub struct BatchCancelSuccess {
     #[serde(rename = "cummulativeQuoteQty")]
     pub cummulative_quote_qty: String,
     /// Order status.
-    pub status: String,
+    pub status: BinanceOrderStatus,
     /// Time in force.
-    pub time_in_force: String,
+    pub time_in_force: BinanceTimeInForce,
     /// Order type.
     #[serde(rename = "type")]
     pub order_type: String,
     /// Order side.
-    pub side: String,
+    pub side: BinanceSide,
     /// Self-trade prevention mode.
     #[serde(default)]
-    pub self_trade_prevention_mode: Option<String>,
+    pub self_trade_prevention_mode: Option<BinanceSelfTradePreventionMode>,
 }
 
 /// A single kline (candlestick) from Binance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BinanceKline {
-    /// Kline open time in milliseconds.
+    /// Kline open time in microseconds.
     pub open_time: i64,
     /// Open price mantissa.
     pub open_price: i64,
@@ -694,7 +699,7 @@ pub struct BinanceKline {
     pub close_price: i64,
     /// Volume (base asset) as 128-bit bytes.
     pub volume: [u8; 16],
-    /// Kline close time in milliseconds.
+    /// Kline close time in microseconds.
     pub close_time: i64,
     /// Quote volume as 128-bit bytes.
     pub quote_volume: [u8; 16],
@@ -767,6 +772,14 @@ mod tests {
             BatchOrderResult::Success(order) => {
                 assert_eq!(order.symbol, "BTCUSDT");
                 assert_eq!(order.order_id, 28);
+                assert_eq!(order.status, BinanceOrderStatus::Filled);
+                assert_eq!(order.time_in_force, BinanceTimeInForce::Gtc);
+                assert_eq!(order.order_type, "MARKET");
+                assert_eq!(order.side, BinanceSide::Sell);
+                assert_eq!(
+                    order.self_trade_prevention_mode,
+                    Some(BinanceSelfTradePreventionMode::None)
+                );
             }
             BatchOrderResult::Error(_) => panic!("Expected Success"),
         }
@@ -793,6 +806,14 @@ mod tests {
             BatchCancelResult::Success(cancel) => {
                 assert_eq!(cancel.symbol, "LTCBTC");
                 assert_eq!(cancel.order_id, 4);
+                assert_eq!(cancel.status, BinanceOrderStatus::Canceled);
+                assert_eq!(cancel.time_in_force, BinanceTimeInForce::Gtc);
+                assert_eq!(cancel.order_type, "LIMIT");
+                assert_eq!(cancel.side, BinanceSide::Buy);
+                assert_eq!(
+                    cancel.self_trade_prevention_mode,
+                    Some(BinanceSelfTradePreventionMode::None)
+                );
             }
             BatchCancelResult::Error(_) => panic!("Expected Success"),
         }

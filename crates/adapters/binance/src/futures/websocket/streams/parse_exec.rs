@@ -401,7 +401,9 @@ mod tests {
     use super::*;
     use crate::{
         common::{
-            consts::BINANCE_NAUTILUS_FUTURES_BROKER_ID, encoder::encode_broker_id,
+            consts::BINANCE_NAUTILUS_FUTURES_BROKER_ID,
+            encoder::encode_broker_id,
+            enums::{BinancePriceMatch, BinanceSelfTradePreventionMode},
             testing::load_fixture_string,
         },
         futures::websocket::streams::messages::{
@@ -456,6 +458,11 @@ mod tests {
         let msg: BinanceFuturesOrderUpdateMsg = load_user_data_fixture("order_update_trade.json");
         let ts_init = UnixNanos::from(1_000_000_000u64);
 
+        assert_eq!(
+            msg.order.stp_mode,
+            Some(BinanceSelfTradePreventionMode::ExpireTaker),
+        );
+
         let report = parse_futures_order_update_to_fill(
             &msg,
             account_id(),
@@ -496,6 +503,13 @@ mod tests {
     fn test_parse_algo_update_to_order_status_canceled() {
         let msg: BinanceFuturesAlgoUpdateMsg = load_user_data_fixture("algo_update_canceled.json");
         let ts_init = UnixNanos::from(1_000_000_000u64);
+
+        assert_eq!(
+            msg.algo_order.stp_mode,
+            Some(BinanceSelfTradePreventionMode::ExpireMaker),
+        );
+        assert_eq!(msg.algo_order.price_match, Some(BinancePriceMatch::None));
+
         let report = parse_futures_algo_update_to_order_status(
             &msg.algo_order,
             msg.event_time,

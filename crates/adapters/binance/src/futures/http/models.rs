@@ -1496,8 +1496,14 @@ mod tests {
         assert_eq!(order.order_id, 12345678);
         assert_eq!(order.symbol.as_str(), "BTCUSDT");
         assert_eq!(order.status, BinanceOrderStatus::New);
+        assert_eq!(order.time_in_force, BinanceTimeInForce::Gtc);
         assert_eq!(order.side, BinanceSide::Buy);
         assert_eq!(order.order_type, BinanceFuturesOrderType::Limit);
+        assert_eq!(order.price_match, Some(BinancePriceMatch::None));
+        assert_eq!(
+            order.self_trade_prevention_mode,
+            Some(BinanceSelfTradePreventionMode::None)
+        );
     }
 
     #[rstest]

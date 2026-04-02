@@ -741,7 +741,8 @@ impl Display for BinanceEnvironment {
 }
 
 /// Rate limit type for API request quotas.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BinanceRateLimitType {
     /// Weighted request limit.
     RequestWeight,
@@ -749,14 +750,24 @@ pub enum BinanceRateLimitType {
     Orders,
     /// Raw request count limit (spot).
     RawRequests,
+    /// Unknown or undocumented value.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Rate limit time interval.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum BinanceRateLimitInterval {
+    /// One second interval.
     Second,
+    /// One minute interval.
     Minute,
+    /// One day interval.
     Day,
+    /// Unknown or undocumented value.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Kline (candlestick) interval.
@@ -844,6 +855,7 @@ impl BinanceKlineInterval {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use serde_json::json;
 
     use super::*;
 
@@ -880,5 +892,43 @@ mod tests {
 
         assert!(BinanceProductType::Options.is_options());
         assert!(!BinanceProductType::Spot.is_options());
+    }
+
+    #[rstest]
+    #[case("\"REQUEST_WEIGHT\"", BinanceRateLimitType::RequestWeight)]
+    #[case("\"ORDERS\"", BinanceRateLimitType::Orders)]
+    #[case("\"RAW_REQUESTS\"", BinanceRateLimitType::RawRequests)]
+    #[case("\"UNDOCUMENTED\"", BinanceRateLimitType::Unknown)]
+    fn test_rate_limit_type_deserializes(
+        #[case] raw: &str,
+        #[case] expected: BinanceRateLimitType,
+    ) {
+        let value: BinanceRateLimitType = serde_json::from_str(raw).unwrap();
+        assert_eq!(value, expected);
+    }
+
+    #[rstest]
+    #[case("\"SECOND\"", BinanceRateLimitInterval::Second)]
+    #[case("\"MINUTE\"", BinanceRateLimitInterval::Minute)]
+    #[case("\"DAY\"", BinanceRateLimitInterval::Day)]
+    #[case("\"WEEK\"", BinanceRateLimitInterval::Unknown)]
+    fn test_rate_limit_interval_deserializes(
+        #[case] raw: &str,
+        #[case] expected: BinanceRateLimitInterval,
+    ) {
+        let value: BinanceRateLimitInterval = serde_json::from_str(raw).unwrap();
+        assert_eq!(value, expected);
+    }
+
+    #[rstest]
+    fn test_rate_limit_enums_serialize_to_binance_strings() {
+        assert_eq!(
+            serde_json::to_value(BinanceRateLimitType::RequestWeight).unwrap(),
+            json!("REQUEST_WEIGHT")
+        );
+        assert_eq!(
+            serde_json::to_value(BinanceRateLimitInterval::Minute).unwrap(),
+            json!("MINUTE")
+        );
     }
 }

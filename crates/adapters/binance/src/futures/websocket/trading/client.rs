@@ -49,7 +49,10 @@ use super::{
     messages::{BinanceFuturesWsTradingCommand, BinanceFuturesWsTradingMessage},
 };
 use crate::{
-    common::{consts::BINANCE_FUTURES_USD_WS_API_URL, credential::SigningCredential},
+    common::{
+        consts::{BINANCE_API_KEY_HEADER, BINANCE_FUTURES_USD_WS_API_URL},
+        credential::SigningCredential,
+    },
     futures::http::query::{
         BinanceCancelOrderParams, BinanceModifyOrderParams, BinanceNewOrderParams,
     },
@@ -165,7 +168,7 @@ impl BinanceFuturesWsTradingClient {
         let ping_handler: PingHandler = Arc::new(move |_| {});
 
         let headers = vec![(
-            "X-MBX-APIKEY".to_string(),
+            BINANCE_API_KEY_HEADER.to_string(),
             self.credential.api_key().to_string(),
         )];
 
@@ -304,12 +307,22 @@ impl BinanceFuturesWsTradingClient {
         params: BinanceCancelOrderParams,
     ) -> BinanceFuturesWsApiResult<String> {
         let id = self.next_request_id();
-        let cmd = BinanceFuturesWsTradingCommand::CancelOrder {
-            id: id.clone(),
-            params,
-        };
-        self.send_cmd(cmd).await?;
+        self.cancel_order_with_id(id.clone(), params).await?;
         Ok(id)
+    }
+
+    /// Cancels an order via the WebSocket Trading API using a pre-generated request ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler is unavailable.
+    pub async fn cancel_order_with_id(
+        &self,
+        id: String,
+        params: BinanceCancelOrderParams,
+    ) -> BinanceFuturesWsApiResult<()> {
+        let cmd = BinanceFuturesWsTradingCommand::CancelOrder { id, params };
+        self.send_cmd(cmd).await
     }
 
     /// Modifies an order via the WebSocket Trading API (in-place amendment).
@@ -322,12 +335,22 @@ impl BinanceFuturesWsTradingClient {
         params: BinanceModifyOrderParams,
     ) -> BinanceFuturesWsApiResult<String> {
         let id = self.next_request_id();
-        let cmd = BinanceFuturesWsTradingCommand::ModifyOrder {
-            id: id.clone(),
-            params,
-        };
-        self.send_cmd(cmd).await?;
+        self.modify_order_with_id(id.clone(), params).await?;
         Ok(id)
+    }
+
+    /// Modifies an order via the WebSocket Trading API using a pre-generated request ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler is unavailable.
+    pub async fn modify_order_with_id(
+        &self,
+        id: String,
+        params: BinanceModifyOrderParams,
+    ) -> BinanceFuturesWsApiResult<()> {
+        let cmd = BinanceFuturesWsTradingCommand::ModifyOrder { id, params };
+        self.send_cmd(cmd).await
     }
 
     /// Cancels all open orders for a symbol via the WebSocket Trading API.

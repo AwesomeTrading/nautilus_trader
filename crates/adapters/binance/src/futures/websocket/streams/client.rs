@@ -53,7 +53,7 @@ use super::{
 };
 use crate::common::{
     consts::{
-        BINANCE_RATE_LIMIT_KEY_SUBSCRIPTION, BINANCE_WS_CONNECTION_QUOTA,
+        BINANCE_API_KEY_HEADER, BINANCE_RATE_LIMIT_KEY_SUBSCRIPTION, BINANCE_WS_CONNECTION_QUOTA,
         BINANCE_WS_SUBSCRIPTION_QUOTA,
     },
     credential::SigningCredential,
@@ -442,7 +442,10 @@ impl BinanceFuturesWebSocketClient {
         let ping_handler: PingHandler = Arc::new(move |_| {});
 
         let headers = if let Some(ref cred) = self.credential {
-            vec![("X-MBX-APIKEY".to_string(), cred.api_key().to_string())]
+            vec![(
+                BINANCE_API_KEY_HEADER.to_string(),
+                cred.api_key().to_string(),
+            )]
         } else {
             vec![]
         };

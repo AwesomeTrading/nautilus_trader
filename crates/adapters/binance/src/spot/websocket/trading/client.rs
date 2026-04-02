@@ -49,7 +49,10 @@ use super::{
     messages::{BinanceSpotWsTradingCommand, BinanceSpotWsTradingMessage},
 };
 use crate::{
-    common::{consts::BINANCE_SPOT_SBE_WS_API_URL, credential::SigningCredential},
+    common::{
+        consts::{BINANCE_API_KEY_HEADER, BINANCE_SPOT_SBE_WS_API_URL},
+        credential::SigningCredential,
+    },
     spot::http::query::{CancelOrderParams, CancelReplaceOrderParams, NewOrderParams},
 };
 
@@ -202,7 +205,7 @@ impl BinanceSpotWsTradingClient {
         let ping_handler: PingHandler = Arc::new(move |_| {});
 
         let headers = vec![(
-            "X-MBX-APIKEY".to_string(),
+            BINANCE_API_KEY_HEADER.to_string(),
             self.credential.api_key().to_string(),
         )];
 
@@ -334,15 +337,25 @@ impl BinanceSpotWsTradingClient {
     /// Returns an error if the handler is unavailable.
     pub async fn cancel_order(&self, params: CancelOrderParams) -> BinanceWsApiResult<String> {
         let id = self.next_request_id();
-        let cmd = BinanceSpotWsTradingCommand::CancelOrder {
-            id: id.clone(),
-            params,
-        };
-        self.send_cmd(cmd).await?;
+        self.cancel_order_with_id(id.clone(), params).await?;
         Ok(id)
     }
 
-    /// Cancel and replace an order atomically via WebSocket API.
+    /// Cancels an order via WebSocket API using a pre-generated request ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler is unavailable.
+    pub async fn cancel_order_with_id(
+        &self,
+        id: String,
+        params: CancelOrderParams,
+    ) -> BinanceWsApiResult<()> {
+        let cmd = BinanceSpotWsTradingCommand::CancelOrder { id, params };
+        self.send_cmd(cmd).await
+    }
+
+    /// Cancels and replaces an order atomically via WebSocket API.
     ///
     /// # Errors
     ///
@@ -352,12 +365,23 @@ impl BinanceSpotWsTradingClient {
         params: CancelReplaceOrderParams,
     ) -> BinanceWsApiResult<String> {
         let id = self.next_request_id();
-        let cmd = BinanceSpotWsTradingCommand::CancelReplaceOrder {
-            id: id.clone(),
-            params,
-        };
-        self.send_cmd(cmd).await?;
+        self.cancel_replace_order_with_id(id.clone(), params)
+            .await?;
         Ok(id)
+    }
+
+    /// Cancels and replaces an order atomically via WebSocket API using a pre-generated request ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the handler is unavailable.
+    pub async fn cancel_replace_order_with_id(
+        &self,
+        id: String,
+        params: CancelReplaceOrderParams,
+    ) -> BinanceWsApiResult<()> {
+        let cmd = BinanceSpotWsTradingCommand::CancelReplaceOrder { id, params };
+        self.send_cmd(cmd).await
     }
 
     /// Cancels all open orders for a symbol via WebSocket API.

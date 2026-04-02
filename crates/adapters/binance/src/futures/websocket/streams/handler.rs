@@ -63,7 +63,7 @@ pub struct BinanceFuturesDataWsFeedHandler {
     raw_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>,
     #[allow(dead_code)]
     out_tx: tokio::sync::mpsc::UnboundedSender<BinanceFuturesWsStreamsMessage>,
-    client: Option<WebSocketClient>,
+    inner: Option<WebSocketClient>,
     subscriptions_state: SubscriptionState,
     request_id_counter: Arc<AtomicU64>,
     pending_requests: AHashMap<u64, Vec<String>>,
@@ -92,7 +92,7 @@ impl BinanceFuturesDataWsFeedHandler {
             cmd_rx,
             raw_rx,
             out_tx,
-            client: None,
+            inner: None,
             subscriptions_state,
             request_id_counter,
             pending_requests: AHashMap::new(),
@@ -127,13 +127,13 @@ impl BinanceFuturesDataWsFeedHandler {
     async fn handle_command(&mut self, cmd: BinanceFuturesWsStreamsCommand) {
         match cmd {
             BinanceFuturesWsStreamsCommand::SetClient(client) => {
-                self.client = Some(client);
+                self.inner = Some(client);
             }
             BinanceFuturesWsStreamsCommand::Disconnect => {
-                if let Some(client) = &self.client {
+                if let Some(client) = &self.inner {
                     let () = client.disconnect().await;
                 }
-                self.client = None;
+                self.inner = None;
             }
             BinanceFuturesWsStreamsCommand::Subscribe { streams } => {
                 self.send_subscribe(streams).await;
@@ -145,7 +145,7 @@ impl BinanceFuturesDataWsFeedHandler {
     }
 
     async fn send_subscribe(&mut self, streams: Vec<String>) {
-        let Some(client) = &self.client else {
+        let Some(client) = &self.inner else {
             log::warn!("Cannot subscribe: no client connected");
             return;
         };
@@ -181,7 +181,7 @@ impl BinanceFuturesDataWsFeedHandler {
     }
 
     async fn send_unsubscribe(&self, streams: Vec<String>) {
-        let Some(client) = &self.client else {
+        let Some(client) = &self.inner else {
             log::warn!("Cannot unsubscribe: no client connected");
             return;
         };

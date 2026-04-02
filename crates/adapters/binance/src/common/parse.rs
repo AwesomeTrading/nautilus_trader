@@ -43,6 +43,7 @@ use serde_json::Value;
 
 use crate::{
     common::{
+        consts::BINANCE,
         encoder::decode_broker_id,
         enums::{BinanceContractStatus, BinanceKlineInterval, BinanceTradingStatus},
     },
@@ -58,8 +59,6 @@ use crate::{
         },
     },
 };
-
-const BINANCE_VENUE: &str = "BINANCE";
 const CONTRACT_TYPE_PERPETUAL: &str = "PERPETUAL";
 
 /// Returns a currency from the internal map or creates a new crypto currency.
@@ -135,7 +134,7 @@ pub fn parse_usdm_instrument(
 
     let instrument_id = InstrumentId::new(
         Symbol::from_str_unchecked(format!("{}-PERP", symbol.symbol)),
-        Venue::new(BINANCE_VENUE),
+        Venue::new(BINANCE),
     );
     let raw_symbol = Symbol::new(symbol.symbol.as_str());
 
@@ -234,7 +233,7 @@ pub fn parse_coinm_instrument(
 
     let instrument_id = InstrumentId::new(
         Symbol::from_str_unchecked(format!("{}-PERP", symbol.symbol)),
-        Venue::new(BINANCE_VENUE),
+        Venue::new(BINANCE),
     );
     let raw_symbol = Symbol::new(symbol.symbol.as_str());
 
@@ -411,7 +410,7 @@ pub fn parse_spot_instrument_sbe(
 
     let instrument_id = InstrumentId::new(
         Symbol::from_str_unchecked(&symbol.symbol),
-        Venue::new(BINANCE_VENUE),
+        Venue::new(BINANCE),
     );
     let raw_symbol = Symbol::new(&symbol.symbol);
 
@@ -958,7 +957,7 @@ pub fn parse_klines_to_bars(
             Decimal::from_i128_with_scale(volume_mantissa, (-klines.qty_exponent as i32) as u32);
         let volume = Quantity::new(volume_dec.to_f64().unwrap_or(0.0), size_precision);
 
-        let ts_event = UnixNanos::from_millis(kline.open_time as u64);
+        let ts_event = UnixNanos::from_micros(kline.open_time as u64);
 
         let bar = Bar::new(bar_type, open, high, low, close, volume, ts_event, ts_init);
         bars.push(bar);
@@ -1498,13 +1497,13 @@ mod tests {
             price_exponent: -2,
             qty_exponent: -4,
             klines: vec![crate::spot::http::models::BinanceKline {
-                open_time: 1_700_000_000_000,
+                open_time: 1_700_000_000_000_000,
                 open_price: 12_000,
                 high_price: 12_500,
                 low_price: 11_900,
                 close_price: 12_345,
                 volume: 1_234_500_i128.to_le_bytes(),
-                close_time: 1_700_000_059_999,
+                close_time: 1_700_000_059_999_000,
                 quote_volume: 0_i128.to_le_bytes(),
                 num_trades: 100,
                 taker_buy_base_volume: 0_i128.to_le_bytes(),

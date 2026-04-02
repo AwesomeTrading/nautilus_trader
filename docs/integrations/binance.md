@@ -133,8 +133,8 @@ Only *limit* order types support `post_only`.
 #### Cancel all orders behavior
 
 When calling `cancel_all_orders()` from a strategy, the adapter includes
-orders in both open and inflight (SUBMITTED) states so that orders not yet
-acknowledged by Binance are also canceled.
+orders in both open and inflight (SUBMITTED) states so that the adapter also
+cancels orders not yet acknowledged by Binance.
 
 **Multi-strategy safety**: When multiple strategies trade the same instrument,
 the adapter compares orders owned by the requesting strategy against all orders
@@ -444,8 +444,8 @@ The sequence of events is as follows:
 ## Binance data differences
 
 The `ts_event` field on `QuoteTick` differs between Spot and Futures. Spot
-does not provide an event timestamp, so `ts_init` is used (meaning `ts_event`
-and `ts_init` are identical).
+does not provide an event timestamp, so the adapter uses `ts_init` (meaning
+`ts_event` and `ts_init` are identical).
 
 ## Binance specific data
 
@@ -643,6 +643,13 @@ For the latest rate limits, query `/api/v3/exchangeInfo` (Spot) or `/fapi/v1/exc
 
 ## Configuration
 
+:::note
+The configuration tables below describe the **Python adapter**. The Rust adapter
+uses `BinanceDataClientConfig` and `BinanceExecClientConfig` with different field
+names. See the Rust source at `crates/adapters/binance/src/config.rs` for the
+definitive list of Rust config options.
+:::
+
 ### Data client configuration options
 
 | Option                             | Default   | Description |
@@ -689,6 +696,8 @@ For the latest rate limits, query `/api/v3/exchangeInfo` (Spot) or `/fapi/v1/exc
 | `retry_delay_max_ms`                 | `None`    | Maximum delay (milliseconds) between retry attempts. |
 | `futures_leverages`                  | `None`    | Mapping of `BinanceSymbol` to initial leverage for futures accounts. |
 | `futures_margin_types`               | `None`    | Mapping of `BinanceSymbol` to futures margin type (isolated/cross). |
+| `use_ws_trading`                         | `True`  | Use the WebSocket trading API for order operations (Spot and USD-M Futures). When `False`, HTTP is used. |
+| `default_taker_fee`                      | `0.0004` | Default taker fee rate for commission estimation on exchange‑generated fills (liquidation, ADL, settlement). |
 | `log_rejected_due_post_only_as_warning` | `True` | Log post‑only rejections as warnings when `True`; otherwise as errors. |
 
 The most common use case is to configure a live `TradingNode` with Binance
@@ -1025,8 +1034,8 @@ same instrument simultaneously.
 
 To use hedge mode:
 
-- 1. Configure hedge mode on Binance before starting the strategy.
-- 2. Set `use_reduce_only=False` in `BinanceExecClientConfig` (`True` by default).
+1. Configure hedge mode on Binance before starting the strategy.
+2. Set `use_reduce_only=False` in `BinanceExecClientConfig` (`True` by default).
 
     ```python
     from nautilus_trader.adapters.binance import BINANCE
@@ -1055,7 +1064,7 @@ To use hedge mode:
     )
     ```
 
-- 3. When submitting an order, use the `LONG` or `SHORT` suffix in `position_id` to indicate position direction.
+3. When submitting an order, use the `LONG` or `SHORT` suffix in `position_id` to indicate position direction.
 
     ```python
     class EMACrossHedgeMode(Strategy):

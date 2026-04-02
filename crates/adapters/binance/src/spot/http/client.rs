@@ -73,7 +73,8 @@ use super::{
 use crate::{
     common::{
         consts::{
-            BINANCE_NAUTILUS_SPOT_BROKER_ID, BINANCE_SPOT_RATE_LIMITS, BinanceRateLimitQuota,
+            BINANCE_API_KEY_HEADER, BINANCE_NAUTILUS_SPOT_BROKER_ID, BINANCE_SPOT_RATE_LIMITS,
+            BinanceRateLimitQuota,
         },
         credential::SigningCredential,
         encoder::{decode_broker_id, encode_broker_id},
@@ -105,8 +106,7 @@ use crate::{
 /// SBE schema header value for Spot API.
 pub const SBE_SCHEMA_HEADER: &str = "3:3";
 
-/// Binance Spot API path.
-const SPOT_API_PATH: &str = "/api/v3";
+use crate::common::consts::BINANCE_SPOT_API_PATH as SPOT_API_PATH;
 
 /// Global rate limit key.
 const BINANCE_GLOBAL_RATE_KEY: &str = "binance:spot:global";
@@ -174,7 +174,7 @@ impl BinanceRawSpotHttpClient {
 
         let client = HttpClient::new(
             headers,
-            vec!["X-MBX-APIKEY".to_string()],
+            vec![BINANCE_API_KEY_HEADER.to_string()],
             keyed_quotas,
             default_quota,
             timeout_secs,
@@ -300,7 +300,10 @@ impl BinanceRawSpotHttpClient {
 
             let signature = cred.sign(&query);
             query.push_str(&format!("&signature={signature}"));
-            headers.insert("X-MBX-APIKEY".to_string(), cred.api_key().to_string());
+            headers.insert(
+                BINANCE_API_KEY_HEADER.to_string(),
+                cred.api_key().to_string(),
+            );
         }
 
         let url = self.build_url(path, &query);
@@ -417,7 +420,10 @@ impl BinanceRawSpotHttpClient {
         headers.insert("X-MBX-SBE".to_string(), SBE_SCHEMA_HEADER.to_string());
 
         if let Some(cred) = credential {
-            headers.insert("X-MBX-APIKEY".to_string(), cred.api_key().to_string());
+            headers.insert(
+                BINANCE_API_KEY_HEADER.to_string(),
+                cred.api_key().to_string(),
+            );
         }
         headers
     }
@@ -466,6 +472,7 @@ impl BinanceRawSpotHttpClient {
                 Quota::with_period(std::time::Duration::from_secs(SECONDS_IN_DAY))
                     .map(|q| q.allow_burst(burst))
             }
+            BinanceRateLimitInterval::Unknown => None,
         }
     }
 
@@ -759,7 +766,10 @@ impl BinanceRawSpotHttpClient {
         }
 
         let mut headers = HashMap::new();
-        headers.insert("X-MBX-APIKEY".to_string(), cred.api_key().to_string());
+        headers.insert(
+            BINANCE_API_KEY_HEADER.to_string(),
+            cred.api_key().to_string(),
+        );
 
         let keys = vec![BINANCE_GLOBAL_RATE_KEY.to_string()];
 
@@ -901,7 +911,10 @@ impl BinanceRawSpotHttpClient {
         let url = self.build_url(path, &query);
 
         let mut headers = HashMap::new();
-        headers.insert("X-MBX-APIKEY".to_string(), cred.api_key().to_string());
+        headers.insert(
+            BINANCE_API_KEY_HEADER.to_string(),
+            cred.api_key().to_string(),
+        );
 
         let keys = self.rate_limit_keys(true);
 
@@ -1242,7 +1255,10 @@ impl BinanceRawSpotHttpClient {
         let url = self.build_url(path, &query);
 
         let mut headers = HashMap::new();
-        headers.insert("X-MBX-APIKEY".to_string(), cred.api_key().to_string());
+        headers.insert(
+            BINANCE_API_KEY_HEADER.to_string(),
+            cred.api_key().to_string(),
+        );
 
         let keys = vec![BINANCE_GLOBAL_RATE_KEY.to_string()];
 
@@ -2039,5 +2055,17 @@ mod tests {
         assert!(config.default_quota.is_some());
         // Spot has 2 ORDERS quotas (SECOND and DAY)
         assert_eq!(config.order_keys.len(), 2);
+    }
+
+    #[rstest]
+    fn test_quota_from_unknown_interval_returns_none() {
+        let quota = BinanceRateLimitQuota {
+            rate_limit_type: BinanceRateLimitType::Orders,
+            interval: BinanceRateLimitInterval::Unknown,
+            interval_num: 1,
+            limit: 10,
+        };
+
+        assert!(BinanceRawSpotHttpClient::quota_from(&quota).is_none());
     }
 }
