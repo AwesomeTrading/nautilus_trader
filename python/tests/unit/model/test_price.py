@@ -20,7 +20,21 @@ from decimal import Decimal
 import pytest
 
 from nautilus_trader.model import FIXED_PRECISION
+from nautilus_trader.model import FIXED_SCALAR
+from nautilus_trader.model import HIGH_PRECISION
+from nautilus_trader.model import PRECISION_BYTES
 from nautilus_trader.model import Price
+
+
+def test_fixed_point_constants_are_consistent():
+    if HIGH_PRECISION:
+        assert FIXED_PRECISION == 16
+        assert FIXED_SCALAR == 1e16
+        assert PRECISION_BYTES == 16
+    else:
+        assert FIXED_PRECISION == 9
+        assert FIXED_SCALAR == 1e9
+        assert PRECISION_BYTES == 8
 
 
 def test_nan_raises():

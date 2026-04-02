@@ -15,12 +15,19 @@
 
 import pytest
 
+from nautilus_trader.model import AccountType
 from nautilus_trader.model import InstrumentClass
 from nautilus_trader.model import MarketStatus
 from nautilus_trader.model import OmsType
 from nautilus_trader.model import OtoTriggerMode
 from nautilus_trader.model import PoolLiquidityUpdateType
 from nautilus_trader.model import TradingState
+
+
+def test_model_enum_variants_are_iterable():
+    variants = list(AccountType.variants())
+    assert AccountType.CASH in variants
+    assert AccountType.MARGIN in variants
 
 
 @pytest.mark.parametrize(

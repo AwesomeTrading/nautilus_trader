@@ -19,6 +19,7 @@ from nautilus_trader.model import Bet
 from nautilus_trader.model import BetPosition
 from nautilus_trader.model import BetSide
 from nautilus_trader.model import OrderSide
+from nautilus_trader.model import calc_bets_pnl
 from nautilus_trader.model import inverse_probability_to_bet
 from nautilus_trader.model import probability_to_bet
 
@@ -73,6 +74,16 @@ def test_betting_helpers_create_expected_bets():
     assert inverse_bet.side == BetSide.BACK
     assert inverse_bet.price > Decimal(1)
     assert inverse_bet.stake > Decimal(0)
+
+
+def test_calc_bets_pnl():
+    bets = [
+        Bet.from_stake(Decimal("2.0"), Decimal(10), BetSide.BACK),
+        Bet.from_liability(Decimal("2.5"), Decimal(15), BetSide.LAY),
+    ]
+
+    assert calc_bets_pnl(bets) == Decimal("-5.0")
+    assert calc_bets_pnl(bets) == sum((bet.outcome_win_payoff() for bet in bets), Decimal(0))
 
 
 def test_bet_side_helpers():

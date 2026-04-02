@@ -13,6 +13,7 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+
 from nautilus_trader.model import AmmType
 from nautilus_trader.model import Block
 from nautilus_trader.model import Blockchain
@@ -24,6 +25,7 @@ from nautilus_trader.model import PoolFeeCollect
 from nautilus_trader.model import PoolFlash
 from nautilus_trader.model import PoolLiquidityUpdate
 from nautilus_trader.model import PoolLiquidityUpdateType
+from nautilus_trader.model import PoolProfiler
 from nautilus_trader.model import PoolSwap
 from nautilus_trader.model import Token
 from nautilus_trader.model import Transaction
@@ -139,6 +141,16 @@ def test_transaction_and_opaque_defi_surfaces():
     assert hasattr(Block, "number")
     assert hasattr(Block, "parent_hash")
     assert hasattr(Block, "timestamp")
+
+
+def test_pool_profiler_surface_methods():
+    assert isinstance(PoolProfiler, type)
+    assert PoolProfiler.__name__ == "PoolProfiler"
+    assert hasattr(PoolProfiler, "pool")
+    assert hasattr(PoolProfiler, "current_tick")
+    assert hasattr(PoolProfiler, "swap_exact_in")
+    assert hasattr(PoolProfiler, "swap_exact_out")
+    assert hasattr(PoolProfiler, "size_for_impact_bps_detailed")
 
 
 def _make_dex(chain):

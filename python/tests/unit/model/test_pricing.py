@@ -25,8 +25,11 @@ from nautilus_trader.model import OptionStrikeData
 from nautilus_trader.model import Price
 from nautilus_trader.model import Quantity
 from nautilus_trader.model import QuoteTick
+from nautilus_trader.model import StrikeRange
 from nautilus_trader.model import black_scholes_greeks
+from nautilus_trader.model import imply_vol
 from nautilus_trader.model import imply_vol_and_greeks
+from nautilus_trader.model import refine_vol_and_greeks
 
 
 def test_forward_price_properties():
@@ -139,3 +142,33 @@ def test_imply_vol_and_greeks_matches_input_price():
 
     assert implied.vol == pytest.approx(0.2, rel=1e-5)
     assert implied.delta == pytest.approx(baseline.delta)
+
+
+def test_imply_vol_matches_baseline_vol():
+    baseline = black_scholes_greeks(100.0, 0.01, 0.01, 0.2, True, 100.0, 0.5)
+    implied_vol = imply_vol(100.0, 0.01, 0.01, True, 100.0, 0.5, baseline.price)
+
+    assert implied_vol == pytest.approx(0.2, rel=1e-5)
+
+
+def test_refine_vol_and_greeks_matches_input_price():
+    baseline = black_scholes_greeks(100.0, 0.01, 0.01, 0.2, True, 100.0, 0.5)
+    refined = refine_vol_and_greeks(100.0, 0.01, 0.01, True, 100.0, 0.5, baseline.price, 0.3)
+
+    assert refined.vol == pytest.approx(0.2, rel=2e-4)
+    assert refined.price == pytest.approx(baseline.price, rel=2e-4)
+
+
+@pytest.mark.parametrize(
+    ("factory_name", "args"),
+    [
+        ("fixed", ([Price.from_str("50000"), Price.from_str("55000")],)),
+        ("atm_relative", (2, 1)),
+        ("atm_percent", (0.1,)),
+    ],
+)
+def test_strike_range_factories(factory_name, args):
+    factory = getattr(StrikeRange, factory_name)
+    strike_range = factory(*args)
+
+    assert isinstance(strike_range, StrikeRange)

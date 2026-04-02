@@ -18,6 +18,7 @@ from decimal import Decimal
 
 import pytest
 
+from nautilus_trader.model import AggressorSide
 from nautilus_trader.model import BookAction
 from nautilus_trader.model import BookLevel
 from nautilus_trader.model import BookOrder
@@ -35,8 +36,13 @@ from nautilus_trader.model import OwnBookOrder
 from nautilus_trader.model import OwnOrderBook
 from nautilus_trader.model import Price
 from nautilus_trader.model import Quantity
+from nautilus_trader.model import QuoteTick
 from nautilus_trader.model import TimeInForce
+from nautilus_trader.model import TradeId
 from nautilus_trader.model import TraderId
+from nautilus_trader.model import TradeTick
+from nautilus_trader.model import update_book_with_quote_tick
+from nautilus_trader.model import update_book_with_trade_tick
 
 
 @pytest.fixture
@@ -272,6 +278,48 @@ def test_order_book_midpoint(audusd_id):
     book.apply_delta(OrderBookDelta(audusd_id, BookAction.ADD, ask, 0, 2, 0, 0))
 
     assert book.midpoint() == pytest.approx(100.50)
+
+
+def test_update_book_with_quote_tick(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L1_MBP)
+    quote = QuoteTick(
+        instrument_id=audusd_id,
+        bid_price=Price.from_str("100.50"),
+        ask_price=Price.from_str("100.60"),
+        bid_size=Quantity.from_str("10"),
+        ask_size=Quantity.from_str("5"),
+        ts_event=1,
+        ts_init=2,
+    )
+
+    update_book_with_quote_tick(book, quote)
+
+    assert book.best_bid_price() == Price.from_str("100.50")
+    assert book.best_ask_price() == Price.from_str("100.60")
+    assert book.best_bid_size() == Quantity.from_str("10")
+    assert book.best_ask_size() == Quantity.from_str("5")
+    assert book.update_count == 1
+
+
+def test_update_book_with_trade_tick(audusd_id):
+    book = OrderBook(instrument_id=audusd_id, book_type=BookType.L1_MBP)
+    trade = TradeTick(
+        instrument_id=audusd_id,
+        price=Price.from_str("100.55"),
+        size=Quantity.from_str("7"),
+        aggressor_side=AggressorSide.BUYER,
+        trade_id=TradeId("TRADE-001"),
+        ts_event=1,
+        ts_init=2,
+    )
+
+    update_book_with_trade_tick(book, trade)
+
+    assert book.best_bid_price() == Price.from_str("100.55")
+    assert book.best_ask_price() == Price.from_str("100.55")
+    assert book.best_bid_size() == Quantity.from_str("7")
+    assert book.best_ask_size() == Quantity.from_str("7")
+    assert book.update_count == 1
 
 
 def test_order_book_reset(audusd_id):

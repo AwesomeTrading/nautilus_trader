@@ -18,6 +18,7 @@ import pickle
 import pytest
 
 from nautilus_trader.model import AccountId
+from nautilus_trader.model import ActorId
 from nautilus_trader.model import ClientId
 from nautilus_trader.model import ClientOrderId
 from nautilus_trader.model import ComponentId
@@ -50,6 +51,15 @@ def test_account_id_equality_and_value():
     assert aid1 != aid2
     assert aid1.value == "SIM-02851908"
     assert aid1 == AccountId("SIM-02851908")
+
+
+def test_actor_id_equality_and_value():
+    actor_id = ActorId("actor-001")
+    restored = ActorId.from_str("actor-001")
+
+    assert actor_id == restored
+    assert hash(actor_id) == hash(restored)
+    assert actor_id.value == "actor-001"
 
 
 def test_symbol_equality():
