@@ -78,6 +78,21 @@ runs:
           rm -rf "/c/Program Files (x86)/Microsoft Visual Studio/2019"
         fi
 
+    - name: Add swap space (Linux ARM)
+      if: >-
+        inputs.build-type != 'pre-commit' &&
+        inputs.free-disk-space == 'true' &&
+        runner.os == 'Linux' &&
+        (runner.arch == 'ARM64' || runner.arch == 'aarch64')
+      shell: bash
+      run: |
+        sudo swapoff -a || true
+        sudo rm -f /swapfile || true
+        sudo fallocate -l 8G /swapfile
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile
+        sudo swapon /swapfile
+
     - name: Install runner dependencies
       if: runner.os == 'Linux'
       shell: bash
