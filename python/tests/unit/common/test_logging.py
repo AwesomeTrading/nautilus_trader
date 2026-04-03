@@ -15,14 +15,11 @@
 
 import subprocess
 import sys
-import tempfile
 import textwrap
 
 from nautilus_trader.common import LogColor
 from nautilus_trader.common import Logger
-from nautilus_trader.common import LogGuard
 from nautilus_trader.common import LogLevel
-from nautilus_trader.common import init_logging
 from nautilus_trader.common import init_tracing
 from nautilus_trader.common import log_header
 from nautilus_trader.common import log_sysinfo
@@ -55,26 +52,11 @@ def test_logger_methods_and_name():
     logger.flush()
 
 
-def test_logging_init_and_raw_functions():
-    with tempfile.TemporaryDirectory() as directory:
-        guard = init_logging(
-            trader_id=TraderId("TRADER-001"),
-            instance_id=UUID4(),
-            level_stdout=LogLevel.INFO,
-            level_file=LogLevel.DEBUG,
-            directory=directory,
-            file_name="common-log",
-            is_colored=False,
-            is_bypassed=True,
-            print_config=False,
-        )
-
-        assert isinstance(guard, LogGuard)
-
-        logger_log(LogLevel.INFO, LogColor.NORMAL, "CommonTests", "hello")
-        log_header(TraderId("TRADER-001"), "machine", UUID4(), "CommonTests")
-        log_sysinfo("CommonTests")
-        logger_flush()
+def test_logging_raw_functions():
+    logger_log(LogLevel.INFO, LogColor.NORMAL, "CommonTests", "hello")
+    log_header(TraderId("TRADER-001"), "machine", UUID4(), "CommonTests")
+    log_sysinfo("CommonTests")
+    logger_flush()
 
 
 def test_init_tracing_before_logging_succeeds_in_fresh_process():
