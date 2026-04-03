@@ -134,6 +134,13 @@ impl TestContext {
             .unwrap();
     }
 
+    fn add_order_with_client_id(&self, order: OrderAny, client_id: ClientId) {
+        self.cache
+            .borrow_mut()
+            .add_order(order, None, Some(client_id), false)
+            .unwrap();
+    }
+
     fn add_position(&self, position: &Position) {
         self.cache
             .borrow_mut()
@@ -305,7 +312,49 @@ fn test_observe_order_report_clears_inflight_tracking() {
 }
 
 #[rstest]
-fn test_observe_fill_report_marks_fill_processed() {
+fn test_observe_pending_order_report_keeps_inflight_tracking() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 3,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let instrument_id = test_instrument_id();
+    let client_order_id = ClientOrderId::from("O-PENDING");
+
+    ctx.add_instrument(test_instrument());
+    let order =
+        create_submitted_order("O-PENDING", instrument_id, OrderSide::Buy, "1.0", "3000.00");
+    ctx.add_order(order);
+
+    ctx.manager.register_inflight(client_order_id);
+
+    // Venue reports PendingUpdate (interim acknowledgement, not terminal)
+    let order_report = create_order_status_report(
+        Some(client_order_id),
+        VenueOrderId::from("V-001"),
+        instrument_id,
+        OrderStatus::PendingUpdate,
+        Quantity::from("1.0"),
+        Quantity::from(0),
+    );
+    let report = ExecutionReport::Order(Box::new(order_report));
+
+    ctx.manager.observe_execution_report(&report);
+
+    // Inflight tracking should still be active
+    ctx.advance_time(200_000_000);
+    let result = ctx.manager.check_inflight_orders();
+
+    // Order is still tracked: should generate a query (retry 1 < max 3)
+    assert_eq!(result.queries.len(), 1);
+    assert!(result.events.is_empty());
+}
+
+#[rstest]
+fn test_observe_fill_report_does_not_mark_fill_processed() {
+    // Fill dedup marking is deferred to node.rs after dispatch to avoid
+    // permanently losing fills when the execution engine cannot apply them
     let mut ctx = TestContext::new();
     let instrument_id = test_instrument_id();
     let trade_id = TradeId::from("T-001");
@@ -330,11 +379,11 @@ fn test_observe_fill_report_marks_fill_processed() {
     );
     let report = ExecutionReport::Fill(Box::new(fill_report));
 
-    assert!(!ctx.manager.is_fill_recently_processed(&trade_id));
-
     ctx.manager.observe_execution_report(&report);
 
-    assert!(ctx.manager.is_fill_recently_processed(&trade_id));
+    // observe_execution_report should NOT mark fills as processed;
+    // that happens post-dispatch in the event loop
+    assert!(!ctx.manager.is_fill_recently_processed(&trade_id));
 }
 
 #[rstest]
@@ -1603,6 +1652,223 @@ fn test_inflight_no_query_at_max_retries() {
         "Should not generate queries at max retries"
     );
     assert!(matches!(result2.events[0], OrderEventAny::Rejected(_)));
+}
+
+#[rstest]
+fn test_inflight_query_preserves_client_id_routing() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 3,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let instrument_id = test_instrument_id();
+    let client_order_id = ClientOrderId::from("O-ROUTED");
+    let client_id = ClientId::from("EXEC-002");
+
+    ctx.add_instrument(test_instrument());
+    let order = create_submitted_order("O-ROUTED", instrument_id, OrderSide::Buy, "1.0", "3000.00");
+    ctx.add_order_with_client_id(order, client_id);
+
+    ctx.manager.register_inflight(client_order_id);
+    ctx.advance_time(200_000_000);
+
+    let result = ctx.manager.check_inflight_orders();
+    assert_eq!(result.queries.len(), 1);
+
+    if let TradingCommand::QueryOrder(query) = &result.queries[0] {
+        assert_eq!(
+            query.client_id,
+            Some(client_id),
+            "QueryOrder should preserve the execution client routing"
+        );
+        assert_eq!(query.client_order_id, client_order_id);
+    } else {
+        panic!("Expected QueryOrder, was {:?}", result.queries[0]);
+    }
+}
+
+#[rstest]
+fn test_inflight_query_throttled_within_threshold() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 5,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let instrument_id = test_instrument_id();
+    let client_order_id = ClientOrderId::from("O-THROTTLE");
+
+    ctx.add_instrument(test_instrument());
+    let order = create_submitted_order(
+        "O-THROTTLE",
+        instrument_id,
+        OrderSide::Buy,
+        "1.0",
+        "3000.00",
+    );
+    ctx.add_order(order);
+
+    ctx.manager.register_inflight(client_order_id);
+
+    // First check past threshold generates a query
+    ctx.advance_time(200_000_000);
+    let result1 = ctx.manager.check_inflight_orders();
+    assert_eq!(result1.queries.len(), 1);
+
+    // Immediate second check without advancing time is throttled
+    let result2 = ctx.manager.check_inflight_orders();
+    assert!(result2.queries.is_empty(), "Query should be throttled");
+    assert!(result2.events.is_empty());
+
+    // Advance past threshold again, query should fire
+    ctx.advance_time(200_000_000);
+    let result3 = ctx.manager.check_inflight_orders();
+    assert_eq!(result3.queries.len(), 1);
+}
+
+#[rstest]
+fn test_inflight_accepted_order_at_max_retries_no_event() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 1,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let instrument_id = test_instrument_id();
+    let client_order_id = ClientOrderId::from("O-ACCEPTED");
+    let venue_order_id = VenueOrderId::from("V-001");
+
+    ctx.add_instrument(test_instrument());
+    let order = create_accepted_order(
+        "O-ACCEPTED",
+        instrument_id,
+        OrderSide::Buy,
+        "1.0",
+        "3000.00",
+        venue_order_id,
+    );
+    ctx.add_order(order);
+
+    ctx.manager.register_inflight(client_order_id);
+    ctx.advance_time(200_000_000);
+
+    let result = ctx.manager.check_inflight_orders();
+
+    // Accepted orders are already resolved, no terminal event generated
+    assert!(result.events.is_empty());
+    assert!(result.queries.is_empty());
+
+    // Tracking should be cleared, subsequent check also empty
+    ctx.advance_time(200_000_000);
+    let result2 = ctx.manager.check_inflight_orders();
+    assert!(result2.events.is_empty());
+}
+
+#[rstest]
+fn test_inflight_order_not_in_cache_at_max_retries_no_event() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 1,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let client_order_id = ClientOrderId::from("O-MISSING");
+
+    // Register inflight without adding order to cache
+    ctx.manager.register_inflight(client_order_id);
+    ctx.advance_time(200_000_000);
+
+    let result = ctx.manager.check_inflight_orders();
+
+    assert!(result.events.is_empty());
+    assert!(result.queries.is_empty());
+
+    // Tracking cleared, subsequent check also empty
+    ctx.advance_time(200_000_000);
+    let result2 = ctx.manager.check_inflight_orders();
+    assert!(result2.events.is_empty());
+}
+
+#[rstest]
+fn test_inflight_terminal_event_clears_tracking() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 1,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let instrument_id = test_instrument_id();
+    let client_order_id = ClientOrderId::from("O-TERM");
+
+    ctx.add_instrument(test_instrument());
+    let order = create_submitted_order("O-TERM", instrument_id, OrderSide::Buy, "1.0", "3000.00");
+    ctx.add_order(order);
+
+    ctx.manager.register_inflight(client_order_id);
+    ctx.advance_time(200_000_000);
+
+    // First check generates terminal rejection
+    let result1 = ctx.manager.check_inflight_orders();
+    assert_eq!(result1.events.len(), 1);
+    assert!(matches!(result1.events[0], OrderEventAny::Rejected(_)));
+
+    // Second check should return empty (tracking was cleared)
+    ctx.advance_time(200_000_000);
+    let result2 = ctx.manager.check_inflight_orders();
+    assert!(result2.events.is_empty());
+    assert!(result2.queries.is_empty());
+}
+
+#[rstest]
+fn test_observe_fill_report_without_client_order_id_uses_cache_fallback() {
+    let config = ExecutionManagerConfig {
+        inflight_threshold_ms: 100,
+        inflight_max_retries: 5,
+        ..Default::default()
+    };
+    let mut ctx = TestContext::with_config(config);
+    let instrument_id = test_instrument_id();
+    let client_order_id = ClientOrderId::from("O-001");
+    let venue_order_id = VenueOrderId::from("V-001");
+    let trade_id = TradeId::from("T-FALLBACK");
+
+    ctx.add_instrument(test_instrument());
+
+    // Add order to cache so venue_order_id -> client_order_id mapping exists
+    let mut order =
+        create_submitted_order("O-001", instrument_id, OrderSide::Buy, "1.0", "3000.00");
+    let accepted = TestOrderEventStubs::accepted(&order, test_account_id(), venue_order_id);
+    order.apply(accepted).unwrap();
+    ctx.add_order(order);
+
+    // Register inflight so we can verify activity recording deferred the check
+    ctx.manager.register_inflight(client_order_id);
+
+    // Create fill report without client_order_id
+    let fill_report = FillReport::new(
+        test_account_id(),
+        instrument_id,
+        venue_order_id,
+        trade_id,
+        OrderSide::Buy,
+        Quantity::from("1.0"),
+        Price::from("3000.00"),
+        Money::new(0.0, Currency::USDT()),
+        LiquiditySide::Maker,
+        None, // No client_order_id: triggers cache fallback
+        None,
+        UnixNanos::from(2_000_000),
+        UnixNanos::from(2_000_000),
+        None,
+    );
+    let report = ExecutionReport::Fill(Box::new(fill_report));
+
+    // observe should resolve client_order_id via cache and record activity
+    ctx.manager.observe_execution_report(&report);
+
+    // Fill marking is deferred to post-dispatch in the event loop
+    assert!(!ctx.manager.is_fill_recently_processed(&trade_id));
 }
 
 #[tokio::test]

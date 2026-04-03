@@ -875,9 +875,10 @@ impl ExecutionManager {
                     self.clear_recon_tracking(&client_order_id, true);
                 } else if let Some(order) = self.get_order(&client_order_id) {
                     // Intermediate retry: query the venue for current order status
+                    let client_id = self.cache.borrow().client_id(&client_order_id).copied();
                     let query = TradingCommand::QueryOrder(QueryOrder::new(
                         order.trader_id(),
-                        None, // client_id determined by execution engine routing
+                        client_id,
                         order.strategy_id(),
                         order.instrument_id(),
                         order.client_order_id(),
@@ -1213,12 +1214,20 @@ impl ExecutionManager {
         match report {
             ExecutionReport::Order(order_report) => {
                 if let Some(client_order_id) = &order_report.client_order_id {
-                    self.clear_recon_tracking(client_order_id, true);
+                    // Only clear inflight tracking for non-pending states.
+                    // Pending reports (PendingUpdate, PendingCancel) are interim
+                    // acknowledgements; the order is still inflight until the
+                    // venue confirms the final state.
+                    if !matches!(
+                        order_report.order_status,
+                        OrderStatus::PendingUpdate | OrderStatus::PendingCancel
+                    ) {
+                        self.clear_recon_tracking(client_order_id, true);
+                    }
                     self.record_local_activity(*client_order_id);
                 }
             }
             ExecutionReport::Fill(fill_report) => {
-                self.mark_fill_processed(fill_report.trade_id);
                 let client_order_id = fill_report.client_order_id.or_else(|| {
                     self.cache
                         .borrow()

@@ -913,7 +913,9 @@ impl LiveNode {
                         residual_events += 1;
                     }
 
-                    let maybe_close_id = match &evt {
+                    let mut maybe_close_id = None;
+
+                    match &evt {
                         ExecutionEvent::Order(order_evt) => {
                             self.exec_manager.record_local_activity(order_evt.client_order_id());
                             match order_evt {
@@ -939,7 +941,7 @@ impl LiveNode {
                                 }
                                 _ => {}
                             }
-                            Some(order_evt.client_order_id())
+                            maybe_close_id = Some(order_evt.client_order_id());
                         }
                         ExecutionEvent::Report(report) => {
                             if let ExecutionReport::Fill(fill_report) = report
@@ -951,14 +953,13 @@ impl LiveNode {
                                     continue;
                             }
                             self.exec_manager.observe_execution_report(report);
-                            None
                         }
-                        ExecutionEvent::Account(_) => None,
-                    };
+                        ExecutionEvent::Account(_) => {}
+                    }
 
                     AsyncRunner::handle_exec_event(evt);
 
-                    // Post-dispatch cleanup: clear tracking when order closes
+                    // Post-dispatch: clear tracking when order closes
                     if let Some(coid) = maybe_close_id {
                         let is_closed = self.kernel.cache().borrow()
                             .order(&coid).is_some_and(|o| o.is_closed());
