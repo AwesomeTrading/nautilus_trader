@@ -17,6 +17,10 @@ import time
 
 import pytest
 
+from nautilus_trader.core import MILLISECONDS_IN_SECOND
+from nautilus_trader.core import NANOSECONDS_IN_MICROSECOND
+from nautilus_trader.core import NANOSECONDS_IN_MILLISECOND
+from nautilus_trader.core import NANOSECONDS_IN_SECOND
 from nautilus_trader.core import is_within_last_24_hours
 from nautilus_trader.core import last_weekday_nanos
 from nautilus_trader.core import micros_to_nanos
@@ -27,6 +31,17 @@ from nautilus_trader.core import nanos_to_secs
 from nautilus_trader.core import secs_to_millis
 from nautilus_trader.core import secs_to_nanos
 from nautilus_trader.core import unix_nanos_to_iso8601
+
+
+def test_time_constants_match_conversion_scale():
+    assert MILLISECONDS_IN_SECOND == 1_000
+    assert NANOSECONDS_IN_SECOND == 1_000_000_000
+    assert NANOSECONDS_IN_MILLISECOND == 1_000_000
+    assert NANOSECONDS_IN_MICROSECOND == 1_000
+    assert secs_to_millis(1) == MILLISECONDS_IN_SECOND
+    assert secs_to_nanos(1) == NANOSECONDS_IN_SECOND
+    assert millis_to_nanos(1) == NANOSECONDS_IN_MILLISECOND
+    assert micros_to_nanos(1) == NANOSECONDS_IN_MICROSECOND
 
 
 @pytest.mark.parametrize(

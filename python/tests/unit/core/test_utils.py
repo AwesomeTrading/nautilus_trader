@@ -15,9 +15,16 @@
 
 import pytest
 
+from nautilus_trader.core import NAUTILUS_USER_AGENT
+from nautilus_trader.core import NAUTILUS_VERSION
 from nautilus_trader.core import convert_to_snake_case
 from nautilus_trader.core import is_pycapsule
 from nautilus_trader.core import mask_api_key
+
+
+def test_version_constants_are_consistent():
+    assert NAUTILUS_VERSION
+    assert f"NautilusTrader/{NAUTILUS_VERSION}" == NAUTILUS_USER_AGENT
 
 
 @pytest.mark.parametrize(
