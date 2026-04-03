@@ -1066,10 +1066,6 @@ criteria = "safe-to-deploy"
 version = "0.8.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.evalexpr]]
-version = "11.3.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.event-listener]]
 version = "5.4.1"
 criteria = "safe-to-deploy"

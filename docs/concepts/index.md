@@ -23,6 +23,10 @@ How to implement trading strategies using the `Strategy` component.
 
 Instrument definitions for tradable assets and contracts.
 
+## Synthetics
+
+User-defined instruments whose prices are computed by evaluating a numeric expression over component instrument prices.
+
 ## Value types
 
 The immutable numeric types (`Price`, `Quantity`, `Money`) used throughout the platform,

@@ -48,7 +48,6 @@ arrow = { workspace = true }
 chrono = { workspace = true }
 derive_builder = { workspace = true }
 enum_dispatch = { workspace = true }
-evalexpr = { workspace = true }
 hex = { workspace = true }
 implied-vol = { workspace = true }
 indexmap = { workspace = true }
@@ -120,4 +119,9 @@ harness = false
 [[bench]]
 name = "quantity_criterion"
 path = "benches/quantity_criterion.rs"
+harness = false
+
+[[bench]]
+name = "expressions_criterion"
+path = "benches/expressions_criterion.rs"
 harness = false

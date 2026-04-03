@@ -67,6 +67,8 @@ pub mod reports;
 pub mod types;
 pub mod venues;
 
+pub(crate) mod expressions;
+
 #[cfg(feature = "ffi")]
 pub mod ffi;
 
