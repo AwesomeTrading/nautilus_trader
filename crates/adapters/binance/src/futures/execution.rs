@@ -448,20 +448,8 @@ impl BinanceFuturesExecutionClient {
             .and_then(|p| p.get_bool("close_position"))
             .unwrap_or(false);
 
-        // Convert trailing offset (basis points) to Binance callback rate (percentage).
-        // Binance accepts 1 decimal place (0.1% granularity = 10 bp increments).
         let callback_rate = trailing_offset
-            .map(|offset| {
-                let rate = offset / rust_decimal::Decimal::ONE_HUNDRED;
-                let rounded = rate.round_dp(1);
-                if rounded != rate {
-                    anyhow::bail!(
-                        "Trailing offset {offset} bp is not a multiple of 10 bp \
-                         (Binance requires 0.1% granularity)"
-                    );
-                }
-                Ok(rounded.to_string())
-            })
+            .map(trailing_offset_to_callback_rate_string)
             .transpose()?;
 
         let working_type = match trigger_type {
@@ -1646,12 +1634,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             }
 
             if let Some(offset) = order.trailing_offset() {
-                let rate = (offset / rust_decimal::Decimal::ONE_HUNDRED).round_dp(1);
-                if rate < rust_decimal::Decimal::new(1, 1)
-                    || rate > rust_decimal::Decimal::new(10, 0)
-                {
-                    anyhow::bail!("callbackRate {rate}% out of Binance range [0.1, 10.0]");
-                }
+                trailing_offset_to_callback_rate(offset)?;
             }
         }
 
@@ -2917,6 +2900,33 @@ fn dispatch_ws_trading_message(
     }
 }
 
+fn trailing_offset_to_callback_rate(offset: Decimal) -> anyhow::Result<Decimal> {
+    let rate = offset / rust_decimal::Decimal::ONE_HUNDRED;
+    let min_rate = rust_decimal::Decimal::new(1, 1);
+    let max_rate = rust_decimal::Decimal::new(100, 1);
+
+    if rate < min_rate || rate > max_rate {
+        anyhow::bail!("callbackRate {rate}% out of Binance range [{min_rate}, {max_rate}]");
+    }
+
+    Ok(rate)
+}
+
+fn trailing_offset_to_callback_rate_string(offset: Decimal) -> anyhow::Result<String> {
+    let rate = trailing_offset_to_callback_rate(offset)?;
+    Ok(format_callback_rate(rate))
+}
+
+fn format_callback_rate(rate: Decimal) -> String {
+    let normalized = rate.normalize();
+
+    if normalized.scale() == 0 {
+        format!("{normalized}.0")
+    } else {
+        normalized.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use nautilus_common::messages::{ExecutionEvent, ExecutionReport};
@@ -2953,6 +2963,27 @@ mod tests {
         let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
         let result = make_venue_position_id(false, instrument_id, side);
         assert_eq!(result, None);
+    }
+
+    #[rstest]
+    fn test_trailing_offset_to_callback_rate_preserves_precision() {
+        let rate = trailing_offset_to_callback_rate(Decimal::from(25)).unwrap();
+        assert_eq!(rate, Decimal::new(25, 2));
+    }
+
+    #[rstest]
+    fn test_trailing_offset_to_callback_rate_string_formats_whole_percent() {
+        let rate = trailing_offset_to_callback_rate_string(Decimal::from(100)).unwrap();
+        assert_eq!(rate, "1.0");
+    }
+
+    #[rstest]
+    fn test_trailing_offset_to_callback_rate_rejects_out_of_range_values() {
+        let error = trailing_offset_to_callback_rate(Decimal::from(5)).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "callbackRate 0.05% out of Binance range [0.1, 10.0]"
+        );
     }
 
     #[rstest]

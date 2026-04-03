@@ -978,7 +978,7 @@ class TestBinanceFuturesExecutionClient:
             instrument_id=ETHUSDT_PERP_BINANCE.id,
             order_side=OrderSide.SELL,
             quantity=Quantity.from_int(10),
-            trailing_offset=Decimal(100),
+            trailing_offset=Decimal(25),
             trailing_offset_type=TrailingOffsetType.BASIS_POINTS,
             activation_price=Price.from_str("10000.00"),
             trigger_type=TriggerType.MARK_PRICE,
@@ -1016,8 +1016,9 @@ class TestBinanceFuturesExecutionClient:
         else:
             assert request[1]["payload"]["reduceOnly"] == "True"
         assert request[1]["payload"]["clientAlgoId"] is not None
-        assert request[1]["payload"]["activationPrice"] == "10000.00"
-        assert request[1]["payload"]["callbackRate"] == "1.0"
+        assert request[1]["payload"]["activatePrice"] == "10000.00"
+        assert "activationPrice" not in request[1]["payload"]
+        assert Decimal(request[1]["payload"]["callbackRate"]) == Decimal("0.25")
         assert request[1]["payload"]["workingType"] == "MARK_PRICE"
         assert request[1]["payload"]["recvWindow"] == "5000"
         assert request[1]["payload"]["signature"] is not None
@@ -1312,7 +1313,7 @@ class TestBinanceFuturesExecutionClient:
         self.exec_client.submit_order(submit_order)
         await eventually(lambda: mock_send_request.call_args)
 
-        # Assert: Order submitted successfully with activationPrice omitted
+        # Assert: Order submitted successfully with activatePrice omitted
         # As of 2025-12-09, conditional orders use the algo order endpoint
         request = mock_send_request.call_args
         assert request[0][0] == HttpMethod.POST
@@ -1324,8 +1325,9 @@ class TestBinanceFuturesExecutionClient:
         assert payload["side"] == "SELL"
         assert payload["quantity"] == "10"
         assert payload["callbackRate"] == "1.0"
-        # Critical: activationPrice should NOT be in the payload when None
+        # Critical: activatePrice should not be in the payload when None
         # This allows Binance to use server-side current market price
+        assert "activatePrice" not in payload
         assert "activationPrice" not in payload
 
     @pytest.mark.asyncio

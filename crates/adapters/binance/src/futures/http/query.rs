@@ -602,7 +602,7 @@ pub struct BinanceNewAlgoOrderParams {
     #[builder(default)]
     pub reduce_only: Option<bool>,
     /// Activation price for TRAILING_STOP_MARKET orders.
-    #[serde(rename = "activationPrice", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "activatePrice", skip_serializing_if = "Option::is_none")]
     #[builder(default)]
     pub activation_price: Option<String>,
     /// Callback rate for TRAILING_STOP_MARKET orders (0.1 to 10, where 1 = 1%).
@@ -758,5 +758,27 @@ mod tests {
 
         assert_eq!(params.symbol.as_deref(), Some("BNBUSDT"));
         assert!(params.recv_window.is_none());
+    }
+
+    #[rstest]
+    fn test_new_algo_order_params_serialization_uses_activate_price() {
+        let params = BinanceNewAlgoOrderParamsBuilder::default()
+            .symbol("ETHUSDT")
+            .side(BinanceSide::Sell)
+            .order_type(BinanceFuturesOrderType::TrailingStopMarket)
+            .algo_type(BinanceAlgoType::Conditional)
+            .quantity("0.1")
+            .activation_price("10000.00")
+            .callback_rate("0.25")
+            .build()
+            .unwrap();
+
+        let serialized = serde_urlencoded::to_string(&params).unwrap();
+        let query: std::collections::HashMap<String, String> =
+            serde_urlencoded::from_str(&serialized).unwrap();
+
+        assert_eq!(query.get("activatePrice"), Some(&"10000.00".to_string()));
+        assert_eq!(query.get("callbackRate"), Some(&"0.25".to_string()));
+        assert!(!query.contains_key("activationPrice"));
     }
 }

@@ -136,6 +136,12 @@ mod tests {
     }
 
     #[rstest]
+    fn test_http_url_usdm_testnet() {
+        let url = get_http_base_url(BinanceProductType::UsdM, BinanceEnvironment::Testnet);
+        assert_eq!(url, "https://demo-fapi.binance.com");
+    }
+
+    #[rstest]
     fn test_http_url_coinm_mainnet() {
         let url = get_http_base_url(BinanceProductType::CoinM, BinanceEnvironment::Mainnet);
         assert_eq!(url, "https://dapi.binance.com");
@@ -169,5 +175,11 @@ mod tests {
     fn test_ws_url_usdm_mainnet() {
         let url = get_ws_base_url(BinanceProductType::UsdM, BinanceEnvironment::Mainnet);
         assert_eq!(url, "wss://fstream.binance.com/ws");
+    }
+
+    #[rstest]
+    fn test_ws_url_usdm_testnet() {
+        let url = get_ws_base_url(BinanceProductType::UsdM, BinanceEnvironment::Testnet);
+        assert_eq!(url, "wss://fstream.binancefuture.com/ws");
     }
 }

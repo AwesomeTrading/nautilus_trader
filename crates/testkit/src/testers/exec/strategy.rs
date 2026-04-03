@@ -622,9 +622,9 @@ impl ExecTester {
         // Determine trigger price based on order type
         let trigger_price = if matches!(
             self.config.stop_order_type,
-            OrderType::LimitIfTouched | OrderType::MarketIfTouched
+            OrderType::LimitIfTouched | OrderType::MarketIfTouched | OrderType::TrailingStopMarket
         ) {
-            // IF_TOUCHED buy: place BELOW market (buy on dip)
+            // IF_TOUCHED and trailing-stop buy: place BELOW market
             instrument.make_price(best_bid.as_f64() - stop_offset)
         } else {
             // STOP buy orders are placed ABOVE the market (stop loss on short)
@@ -699,9 +699,9 @@ impl ExecTester {
         // Determine trigger price based on order type
         let trigger_price = if matches!(
             self.config.stop_order_type,
-            OrderType::LimitIfTouched | OrderType::MarketIfTouched
+            OrderType::LimitIfTouched | OrderType::MarketIfTouched | OrderType::TrailingStopMarket
         ) {
-            // IF_TOUCHED sell: place ABOVE market (sell on rally)
+            // IF_TOUCHED and trailing-stop sell: place ABOVE market
             instrument.make_price(best_ask.as_f64() + stop_offset)
         } else {
             // STOP sell orders are placed BELOW the market (stop loss on long)
@@ -860,7 +860,7 @@ impl ExecTester {
 
         let factory = self.core.order_factory();
 
-        let order: OrderAny = match self.config.stop_order_type {
+        let mut order: OrderAny = match self.config.stop_order_type {
             OrderType::StopMarket => factory.stop_market(
                 self.config.instrument_id,
                 order_side,
@@ -956,8 +956,8 @@ impl ExecTester {
                     quantity,
                     trailing_offset,
                     Some(self.config.trailing_offset_type),
+                    None,
                     Some(trigger_price),
-                    None, // trigger_price (activation_price used as trigger)
                     Some(self.config.stop_trigger_type),
                     Some(time_in_force),
                     expire_time,
@@ -976,6 +976,10 @@ impl ExecTester {
                 anyhow::bail!("Unknown stop order type: {:?}", self.config.stop_order_type);
             }
         };
+
+        if let OrderAny::TrailingStopMarket(order) = &mut order {
+            order.activation_price = Some(trigger_price);
+        }
 
         if order_side == OrderSide::Buy {
             self.buy_stop_order = Some(order.clone());

@@ -28,7 +28,7 @@ use nautilus_model::{
     },
     enums::{
         AggressorSide, BookType, ContingencyType, OrderSide, OrderStatus, OrderType, TimeInForce,
-        TriggerType,
+        TrailingOffsetType, TriggerType,
     },
     identifiers::{ClientId, InstrumentId, StrategyId, TradeId, TraderId},
     instruments::{InstrumentAny, stubs::crypto_perpetual_ethusdt},
@@ -974,6 +974,76 @@ fn test_submit_limit_if_touched_order_creates_order(
     assert!(tester.sell_stop_order.is_some());
     let order = tester.sell_stop_order.unwrap();
     assert_eq!(order.order_type(), OrderType::LimitIfTouched);
+}
+
+#[rstest]
+fn test_submit_trailing_stop_market_order_creates_order_with_activation_price(
+    mut config: ExecTesterConfig,
+    instrument: InstrumentAny,
+) {
+    config.enable_stop_sells = true;
+    config.stop_order_type = OrderType::TrailingStopMarket;
+    config.trailing_offset = Some(Decimal::from(25));
+    config.trailing_offset_type = TrailingOffsetType::BasisPoints;
+    let cache = create_cache_with_instrument(&instrument);
+    let mut tester = ExecTester::new(config);
+    register_exec_tester(&mut tester, cache);
+    tester.instrument = Some(instrument);
+
+    let result = tester.submit_stop_order(OrderSide::Sell, Price::from("3200.0"), None);
+
+    assert!(result.is_ok());
+    assert!(tester.sell_stop_order.is_some());
+    let order = tester.sell_stop_order.unwrap();
+    assert_eq!(order.order_type(), OrderType::TrailingStopMarket);
+    assert_eq!(order.trigger_price(), Some(Price::from("3200.0")));
+    assert_eq!(order.activation_price(), Some(Price::from("3200.0")));
+}
+
+#[rstest]
+fn test_maintain_stop_buy_orders_trailing_stop_places_activation_below_market(
+    mut config: ExecTesterConfig,
+    instrument: InstrumentAny,
+) {
+    config.enable_limit_buys = false;
+    config.enable_limit_sells = false;
+    config.enable_stop_buys = true;
+    config.stop_order_type = OrderType::TrailingStopMarket;
+    config.trailing_offset = Some(Decimal::from(25));
+    let cache = create_cache_with_instrument(&instrument);
+    let mut tester = ExecTester::new(config);
+    register_exec_tester(&mut tester, cache);
+    tester.instrument = Some(instrument);
+
+    tester.maintain_orders(Price::from("3000.0"), Price::from("3000.5"));
+
+    let order = tester.buy_stop_order.unwrap();
+    assert_eq!(order.order_type(), OrderType::TrailingStopMarket);
+    assert_eq!(order.trigger_price(), Some(Price::from("2999.0")));
+    assert_eq!(order.activation_price(), Some(Price::from("2999.0")));
+}
+
+#[rstest]
+fn test_maintain_stop_sell_orders_trailing_stop_places_activation_above_market(
+    mut config: ExecTesterConfig,
+    instrument: InstrumentAny,
+) {
+    config.enable_limit_buys = false;
+    config.enable_limit_sells = false;
+    config.enable_stop_sells = true;
+    config.stop_order_type = OrderType::TrailingStopMarket;
+    config.trailing_offset = Some(Decimal::from(25));
+    let cache = create_cache_with_instrument(&instrument);
+    let mut tester = ExecTester::new(config);
+    register_exec_tester(&mut tester, cache);
+    tester.instrument = Some(instrument);
+
+    tester.maintain_orders(Price::from("3000.0"), Price::from("3000.5"));
+
+    let order = tester.sell_stop_order.unwrap();
+    assert_eq!(order.order_type(), OrderType::TrailingStopMarket);
+    assert_eq!(order.trigger_price(), Some(Price::from("3001.5")));
+    assert_eq!(order.activation_price(), Some(Price::from("3001.5")));
 }
 
 #[rstest]

@@ -17,8 +17,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use nautilus_core::UnixNanos;
 use nautilus_model::{
-    data::bar::BarType,
-    data::{HasTsInit, custom::CustomDataTrait},
+    data::{HasTsInit, bar::BarType, custom::CustomDataTrait},
     types::{Price, Quantity},
 };
 use rust_decimal::Decimal;

@@ -55,7 +55,7 @@ pub const BINANCE_OPTIONS_HTTP_URL: &str = "https://eapi.binance.com";
 pub const BINANCE_SPOT_TESTNET_HTTP_URL: &str = "https://testnet.binance.vision";
 
 /// Binance USD-M Futures API base URL (testnet).
-pub const BINANCE_FUTURES_USD_TESTNET_HTTP_URL: &str = "https://testnet.binancefuture.com";
+pub const BINANCE_FUTURES_USD_TESTNET_HTTP_URL: &str = "https://demo-fapi.binance.com";
 
 /// Binance COIN-M Futures API base URL (testnet).
 pub const BINANCE_FUTURES_COIN_TESTNET_HTTP_URL: &str = "https://testnet.binancefuture.com";
@@ -109,7 +109,7 @@ pub const BINANCE_SPOT_TESTNET_WS_URL: &str = "wss://stream.testnet.binance.visi
 pub const BINANCE_SPOT_DEMO_WS_URL: &str = "wss://demo-stream.binance.com/ws";
 
 /// Binance USD-M Futures WebSocket base URL (testnet).
-pub const BINANCE_FUTURES_USD_TESTNET_WS_URL: &str = "wss://stream.binancefuture.com/ws";
+pub const BINANCE_FUTURES_USD_TESTNET_WS_URL: &str = "wss://fstream.binancefuture.com/ws";
 
 /// Binance COIN-M Futures WebSocket base URL (testnet).
 pub const BINANCE_FUTURES_COIN_TESTNET_WS_URL: &str = "wss://dstream.binancefuture.com/ws";

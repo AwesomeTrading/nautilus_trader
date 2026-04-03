@@ -146,3 +146,9 @@ doc = false
 name = "binance-futures-exec-tester"
 path = "examples/futures/node_exec_tester.rs"
 doc = false
+
+# Run with `cargo run --example binance-futures-exec-trailing-stop-tester --package nautilus-binance`
+[[example]]
+name = "binance-futures-exec-trailing-stop-tester"
+path = "examples/futures/node_exec_trailing_stop_tester.rs"
+doc = false
