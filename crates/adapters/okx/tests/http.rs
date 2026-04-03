@@ -53,9 +53,9 @@ use nautilus_okx::{
         error::OKXHttpError,
         models::OKXAttachAlgoOrdRequest,
         query::{
-            GetAlgoOrdersParamsBuilder, GetInstrumentsParamsBuilder, GetOrderHistoryParams,
-            GetOrderListParams, GetOrderParamsBuilder, GetPositionTiersParamsBuilder,
-            GetPositionsParamsBuilder, GetTradeFeeParamsBuilder,
+            GetAlgoOrdersParamsBuilder, GetInstrumentsParamsBuilder, GetOptionSummaryParamsBuilder,
+            GetOrderHistoryParams, GetOrderListParams, GetOrderParamsBuilder,
+            GetPositionTiersParamsBuilder, GetPositionsParamsBuilder, GetTradeFeeParamsBuilder,
             GetTransactionDetailsParamsBuilder, SetPositionModeParamsBuilder,
         },
     },
@@ -71,6 +71,8 @@ struct TestServerState {
     last_pending_orders_query: Arc<tokio::sync::Mutex<Option<HashMap<String, String>>>>,
     last_order_history_query: Arc<tokio::sync::Mutex<Option<HashMap<String, String>>>>,
     last_order_detail_query: Arc<tokio::sync::Mutex<Option<HashMap<String, String>>>>,
+    option_summary_queries: Arc<tokio::sync::Mutex<Vec<HashMap<String, String>>>>,
+    option_summary_response: Arc<tokio::sync::Mutex<Option<Value>>>,
     algo_pending_queries: Arc<tokio::sync::Mutex<Vec<HashMap<String, String>>>>,
     algo_history_queries: Arc<tokio::sync::Mutex<Vec<HashMap<String, String>>>>,
     last_order_body: Arc<tokio::sync::Mutex<Option<Value>>>,
@@ -118,6 +120,10 @@ fn load_swap_instruments_any() -> Vec<InstrumentAny> {
     load_instruments_from("http_get_instruments_swap.json")
 }
 
+fn load_option_instruments_any() -> Vec<InstrumentAny> {
+    load_instruments_from("http_get_instruments_option.json")
+}
+
 fn load_instruments_from(filename: &str) -> Vec<InstrumentAny> {
     let payload = load_test_data(filename);
     let response: OKXResponse<OKXInstrument> = serde_json::from_value(payload).unwrap();
@@ -136,6 +142,7 @@ fn load_instruments_from(filename: &str) -> Vec<InstrumentAny> {
 fn create_router(state: Arc<TestServerState>) -> Router {
     let instruments_state = state.clone();
     let history_state = state.clone();
+    let option_summary_state = state.clone();
     let pending_state = state.clone();
     let order_history_state = state.clone();
     let order_detail_state = state.clone();
@@ -171,6 +178,19 @@ fn create_router(state: Arc<TestServerState>) -> Router {
         .route(
             "/api/v5/public/mark-price",
             get(|| async { Json(load_test_data("http_get_mark_price.json")) }),
+        )
+        .route(
+            "/api/v5/public/opt-summary",
+            get(move |Query(params): Query<HashMap<String, String>>| {
+                let state = option_summary_state.clone();
+                async move {
+                    state.option_summary_queries.lock().await.push(params);
+                    let override_resp = state.option_summary_response.lock().await.clone();
+                    let data = override_resp
+                        .unwrap_or_else(|| load_test_data("http_get_option_summary.json"));
+                    Json(data).into_response()
+                }
+            }),
         )
         .route(
             "/api/v5/market/history-trades",
@@ -3114,6 +3134,330 @@ async fn test_request_funding_rates() {
         rates[1].instrument_id,
         InstrumentId::from("BTC-USDT-SWAP.OKX")
     );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_http_get_option_summary_returns_data() {
+    let state = Arc::new(TestServerState::default());
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXRawHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    let params = GetOptionSummaryParamsBuilder::default()
+        .inst_family("BTC-USD")
+        .exp_time("241217")
+        .build()
+        .unwrap();
+    let summaries = client.get_option_summary(params).await.unwrap();
+
+    assert_eq!(summaries.len(), 4);
+    assert_eq!(summaries[0].inst_id, Ustr::from("BTC-USD-241217-92000-C"));
+
+    let queries = state.option_summary_queries.lock().await;
+    assert_eq!(queries.len(), 1);
+    assert_eq!(queries[0].get("instFamily"), Some(&"BTC-USD".to_string()));
+    assert_eq!(queries[0].get("expTime"), Some(&"241217".to_string()));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_for_single_instrument_uses_inst_family_and_exp_time() {
+    let state = Arc::new(TestServerState::default());
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    for instrument in load_option_instruments_any() {
+        client.cache_instrument(instrument);
+    }
+
+    let instrument_id = InstrumentId::from("BTC-USD-241217-92000-C.OKX");
+    let forward_prices = client
+        .request_forward_prices("BTC", Some(instrument_id))
+        .await
+        .unwrap();
+
+    assert_eq!(forward_prices.len(), 1);
+    assert_eq!(forward_prices[0].instrument_id, instrument_id);
+    assert_eq!(forward_prices[0].forward_price.to_string(), "97000");
+    assert_eq!(
+        forward_prices[0].underlying_index.as_deref(),
+        Some("BTC-USD")
+    );
+
+    let queries = state.option_summary_queries.lock().await;
+    assert_eq!(queries.len(), 1);
+    assert_eq!(queries[0].get("instFamily"), Some(&"BTC-USD".to_string()));
+    assert_eq!(queries[0].get("expTime"), Some(&"241217".to_string()));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_bulk_deduplicates_by_expiry() {
+    let state = Arc::new(TestServerState::default());
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    for instrument in load_option_instruments_any() {
+        client.cache_instrument(instrument);
+    }
+
+    let forward_prices = client.request_forward_prices("BTC", None).await.unwrap();
+
+    assert_eq!(forward_prices.len(), 1);
+    assert_eq!(
+        forward_prices[0].instrument_id,
+        InstrumentId::from("BTC-USD-241217-92000-C.OKX")
+    );
+    assert_eq!(forward_prices[0].forward_price.to_string(), "97000");
+
+    let queries = state.option_summary_queries.lock().await;
+    assert_eq!(queries.len(), 1);
+    assert_eq!(queries[0].get("instFamily"), Some(&"BTC-USD".to_string()));
+    assert!(!queries[0].contains_key("expTime"));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_errors_on_empty_cache() {
+    let state = Arc::new(TestServerState::default());
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    let result = client.request_forward_prices("BTC", None).await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("No cached OKX option families"),
+        "unexpected error: {err}"
+    );
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_skips_zero_fwd_px() {
+    let response = json!({
+        "code": "0",
+        "msg": "",
+        "data": [
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-92000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "0",
+                "ts": "1734166000000"
+            },
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-94000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "97000",
+                "ts": "1734166000000"
+            }
+        ]
+    });
+    let state = Arc::new(TestServerState::default());
+    *state.option_summary_response.lock().await = Some(response);
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    for instrument in load_option_instruments_any() {
+        client.cache_instrument(instrument);
+    }
+
+    let instrument_id = InstrumentId::from("BTC-USD-241217-94000-C.OKX");
+    let forward_prices = client
+        .request_forward_prices("BTC", Some(instrument_id))
+        .await
+        .unwrap();
+
+    assert_eq!(forward_prices.len(), 1);
+    assert_eq!(forward_prices[0].instrument_id, instrument_id);
+    assert_eq!(forward_prices[0].forward_price.to_string(), "97000");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_skips_non_option_inst_type() {
+    let response = json!({
+        "code": "0",
+        "msg": "",
+        "data": [
+            {
+                "instType": "SWAP",
+                "instId": "BTC-USD-241217-92000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "97000",
+                "ts": "1734166000000"
+            },
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-94000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "97000",
+                "ts": "1734166000000"
+            }
+        ]
+    });
+    let state = Arc::new(TestServerState::default());
+    *state.option_summary_response.lock().await = Some(response);
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    for instrument in load_option_instruments_any() {
+        client.cache_instrument(instrument);
+    }
+
+    let instrument_id = InstrumentId::from("BTC-USD-241217-94000-C.OKX");
+    let forward_prices = client
+        .request_forward_prices("BTC", Some(instrument_id))
+        .await
+        .unwrap();
+
+    assert_eq!(forward_prices.len(), 1);
+    assert_eq!(forward_prices[0].instrument_id, instrument_id);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_skips_invalid_fwd_px() {
+    let response = json!({
+        "code": "0",
+        "msg": "",
+        "data": [
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-92000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "not_a_number",
+                "ts": "1734166000000"
+            },
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-94000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "97000",
+                "ts": "1734166000000"
+            }
+        ]
+    });
+    let state = Arc::new(TestServerState::default());
+    *state.option_summary_response.lock().await = Some(response);
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    for instrument in load_option_instruments_any() {
+        client.cache_instrument(instrument);
+    }
+
+    let instrument_id = InstrumentId::from("BTC-USD-241217-94000-C.OKX");
+    let forward_prices = client
+        .request_forward_prices("BTC", Some(instrument_id))
+        .await
+        .unwrap();
+
+    assert_eq!(forward_prices.len(), 1);
+    assert_eq!(forward_prices[0].instrument_id, instrument_id);
+    assert_eq!(forward_prices[0].forward_price.to_string(), "97000");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_request_forward_prices_bulk_deduplicates_across_multiple_expiries() {
+    let response = json!({
+        "code": "0",
+        "msg": "",
+        "data": [
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-92000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "97000",
+                "ts": "1734166000000"
+            },
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-241217-94000-P",
+                "uly": "BTC-USD",
+                "bidVol": "0.45",
+                "askVol": "0.46",
+                "markVol": "0.455",
+                "fwdPx": "97000",
+                "ts": "1734166000000"
+            },
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-250117-100000-C",
+                "uly": "BTC-USD",
+                "bidVol": "0.50",
+                "askVol": "0.51",
+                "markVol": "0.505",
+                "fwdPx": "99000",
+                "ts": "1734166000000"
+            },
+            {
+                "instType": "OPTION",
+                "instId": "BTC-USD-250117-105000-P",
+                "uly": "BTC-USD",
+                "bidVol": "0.50",
+                "askVol": "0.51",
+                "markVol": "0.505",
+                "fwdPx": "99000",
+                "ts": "1734166000000"
+            }
+        ]
+    });
+    let state = Arc::new(TestServerState::default());
+    *state.option_summary_response.lock().await = Some(response);
+    let addr = start_test_server(state.clone()).await;
+    let base_url = format!("http://{addr}");
+    let client = OKXHttpClient::new(Some(base_url), 60, 3, 1000, 10_000, false, None).unwrap();
+
+    for instrument in load_option_instruments_any() {
+        client.cache_instrument(instrument);
+    }
+
+    let forward_prices = client.request_forward_prices("BTC", None).await.unwrap();
+
+    assert_eq!(forward_prices.len(), 2);
+    assert_eq!(
+        forward_prices[0].instrument_id,
+        InstrumentId::from("BTC-USD-241217-92000-C.OKX")
+    );
+    assert_eq!(forward_prices[0].forward_price.to_string(), "97000");
+    assert_eq!(
+        forward_prices[1].instrument_id,
+        InstrumentId::from("BTC-USD-250117-100000-C.OKX")
+    );
+    assert_eq!(forward_prices[1].forward_price.to_string(), "99000");
 }
 
 #[rstest]

@@ -30,15 +30,15 @@ use nautilus_common::{
     messages::{
         DataEvent,
         data::{
-            BarsResponse, BookResponse, DataResponse, FundingRatesResponse, InstrumentResponse,
-            InstrumentsResponse, RequestBars, RequestBookSnapshot, RequestFundingRates,
-            RequestInstrument, RequestInstruments, RequestTrades, SubscribeBars,
-            SubscribeBookDeltas, SubscribeFundingRates, SubscribeIndexPrices, SubscribeInstrument,
-            SubscribeInstrumentStatus, SubscribeInstruments, SubscribeMarkPrices,
-            SubscribeOptionGreeks, SubscribeQuotes, SubscribeTrades, TradesResponse,
-            UnsubscribeBars, UnsubscribeBookDeltas, UnsubscribeFundingRates,
-            UnsubscribeIndexPrices, UnsubscribeInstrumentStatus, UnsubscribeMarkPrices,
-            UnsubscribeOptionGreeks, UnsubscribeQuotes, UnsubscribeTrades,
+            BarsResponse, BookResponse, DataResponse, ForwardPricesResponse, FundingRatesResponse,
+            InstrumentResponse, InstrumentsResponse, RequestBars, RequestBookSnapshot,
+            RequestForwardPrices, RequestFundingRates, RequestInstrument, RequestInstruments,
+            RequestTrades, SubscribeBars, SubscribeBookDeltas, SubscribeFundingRates,
+            SubscribeIndexPrices, SubscribeInstrument, SubscribeInstrumentStatus,
+            SubscribeInstruments, SubscribeMarkPrices, SubscribeOptionGreeks, SubscribeQuotes,
+            SubscribeTrades, TradesResponse, UnsubscribeBars, UnsubscribeBookDeltas,
+            UnsubscribeFundingRates, UnsubscribeIndexPrices, UnsubscribeInstrumentStatus,
+            UnsubscribeMarkPrices, UnsubscribeOptionGreeks, UnsubscribeQuotes, UnsubscribeTrades,
         },
     },
 };
@@ -1646,6 +1646,58 @@ impl DataClient for OKXDataClient {
                     }
                 }
                 Err(e) => log::error!("Funding rates request failed: {e:?}"),
+            }
+        });
+
+        Ok(())
+    }
+
+    fn request_forward_prices(&self, request: RequestForwardPrices) -> anyhow::Result<()> {
+        let http = self.http_client.clone();
+        let sender = self.data_sender.clone();
+        let underlying = request.underlying.to_string();
+        let instrument_id = request.instrument_id;
+        let request_id = request.request_id;
+        let client_id = request.client_id.unwrap_or(self.client_id);
+        let params = request.params;
+        let clock = self.clock;
+        let venue = *OKX_VENUE;
+
+        get_runtime().spawn(async move {
+            match http
+                .request_forward_prices(&underlying, instrument_id)
+                .await
+                .context("failed to request forward prices from OKX")
+            {
+                Ok(forward_prices) => {
+                    let response = DataResponse::ForwardPrices(ForwardPricesResponse::new(
+                        request_id,
+                        client_id,
+                        venue,
+                        forward_prices,
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send forward prices response: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Forward prices request failed for {underlying}: {e:?}");
+                    let response = DataResponse::ForwardPrices(ForwardPricesResponse::new(
+                        request_id,
+                        client_id,
+                        venue,
+                        Vec::new(),
+                        clock.get_time_ns(),
+                        params,
+                    ));
+
+                    if let Err(e) = sender.send(DataEvent::Response(response)) {
+                        log::error!("Failed to send forward prices response: {e}");
+                    }
+                }
             }
         });
 

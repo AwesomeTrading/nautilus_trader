@@ -90,6 +90,29 @@ pub struct OKXMarkPrice {
     pub ts: u64,
 }
 
+/// Represents an option summary row from the GET /api/v5/public/opt-summary endpoint.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OKXOptionSummary {
+    /// Instrument type.
+    pub inst_type: OKXInstrumentType,
+    /// Instrument ID.
+    pub inst_id: Ustr,
+    /// Underlying index.
+    pub uly: Ustr,
+    /// Bid volatility.
+    pub bid_vol: String,
+    /// Ask volatility.
+    pub ask_vol: String,
+    /// Mark volatility.
+    pub mark_vol: String,
+    /// Forward price.
+    pub fwd_px: String,
+    /// Data timestamp in milliseconds.
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
+    pub ts: u64,
+}
+
 /// Represents an index price from the GET /api/v5/public/index-tickers endpoint.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

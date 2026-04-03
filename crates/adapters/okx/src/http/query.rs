@@ -98,6 +98,19 @@ pub struct GetInstrumentsParams {
     pub inst_id: Option<String>,
 }
 
+/// Parameters for the GET /api/v5/public/opt-summary endpoint.
+#[derive(Clone, Debug, Deserialize, Serialize, Default, Builder)]
+#[builder(default)]
+#[builder(setter(into, strip_option))]
+#[serde(rename_all = "camelCase")]
+pub struct GetOptionSummaryParams {
+    /// Instrument family. Only applicable to OPTION.
+    pub inst_family: String,
+    /// Contract expiry date in YYMMDD format, e.g. "250328".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exp_time: Option<String>,
+}
+
 /// Parameters for the GET /api/v5/market/history-trades endpoint.
 #[derive(Clone, Debug, Deserialize, Serialize, Default, Builder)]
 #[builder(default)]

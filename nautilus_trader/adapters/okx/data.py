@@ -31,6 +31,7 @@ from nautilus_trader.core import nautilus_pyo3
 from nautilus_trader.core.correctness import PyCondition
 from nautilus_trader.core.datetime import ensure_pydatetime_utc
 from nautilus_trader.data.messages import RequestBars
+from nautilus_trader.data.messages import RequestForwardPrices
 from nautilus_trader.data.messages import RequestFundingRates
 from nautilus_trader.data.messages import RequestInstrument
 from nautilus_trader.data.messages import RequestInstruments
@@ -651,6 +652,28 @@ class OKXDataClient(LiveMarketDataClient):
             request.end,
             request.params,
         )
+
+    async def _request_forward_prices(self, request: RequestForwardPrices) -> None:
+        sample_id = request.sample_instrument_id
+        pyo3_inst_id = None
+
+        if sample_id is not None:
+            pyo3_inst_id = nautilus_pyo3.InstrumentId.from_str(str(sample_id))
+
+        try:
+            forward_prices = await self._http_client.request_forward_prices(  # type: ignore[attr-defined]
+                underlying=request.underlying,
+                instrument_id=pyo3_inst_id,
+            )
+        except Exception as e:
+            self._log.error(f"Failed to request forward prices for {request.underlying}: {e}")
+            self._handle_forward_prices([], request.id, request.params or {})
+            return
+
+        self._log.info(
+            f"Received {len(forward_prices)} forward prices for {request.underlying}",
+        )
+        self._handle_forward_prices(forward_prices, request.id, request.params or {})
 
     # -- WEBSOCKET HANDLERS -----------------------------------------------------------------------
 

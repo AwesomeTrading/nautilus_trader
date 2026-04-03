@@ -18,7 +18,7 @@
 use chrono::{DateTime, Utc};
 use nautilus_core::python::{IntoPyObjectNautilusExt, to_pyruntime_err, to_pyvalue_err};
 use nautilus_model::{
-    data::BarType,
+    data::{BarType, forward::ForwardPrice},
     enums::{OrderSide, OrderType, PositionSide, TimeInForce, TriggerType},
     identifiers::{AccountId, ClientOrderId, InstrumentId, StrategyId, TraderId},
     python::instruments::{instrument_any_to_pyobject, pyobject_to_instrument_any},
@@ -412,6 +412,35 @@ impl OKXHttpClient {
 
             Python::attach(|py| {
                 let pylist = PyList::new(py, rates.into_iter().map(|r| r.into_py_any_unwrap(py)))?;
+                Ok(pylist.into_py_any_unwrap(py))
+            })
+        })
+    }
+
+    /// Requests forward prices for OKX options using the option summary endpoint.
+    #[pyo3(name = "request_forward_prices")]
+    #[pyo3(signature = (underlying, instrument_id=None))]
+    fn py_request_forward_prices<'py>(
+        &self,
+        py: Python<'py>,
+        underlying: String,
+        instrument_id: Option<InstrumentId>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let forward_prices: Vec<ForwardPrice> = client
+                .request_forward_prices(&underlying, instrument_id)
+                .await
+                .map_err(to_pyvalue_err)?;
+
+            Python::attach(|py| {
+                let pylist = PyList::new(
+                    py,
+                    forward_prices
+                        .into_iter()
+                        .map(|price| price.into_py_any_unwrap(py)),
+                )?;
                 Ok(pylist.into_py_any_unwrap(py))
             })
         })
