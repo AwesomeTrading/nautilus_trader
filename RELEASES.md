@@ -23,6 +23,7 @@ Released on TBD (UTC).
 - Added Binance `NewAdl`, `NewInsurance`, and `PendingNew` variants to `BinanceOrderStatus` (Rust)
 - Added Binance `Rpi` time-in-force, `PreSettle`/`Settling`/`Close` contract statuses, `None`/`Decrement`/`Transfer` STP modes, and income type variants (Rust)
 - Added Binance instrument status polling in Rust
+- Added Arrow schema support for `BinanceBar` and `BinanceFuturesMarkPriceUpdate` (#3749), thanks @twitu
 - Added Binance Futures `close_position` parameter for algo stop orders to close an entire position at trigger price (Python and Rust) (#3751), thanks for reporting @dodge-basic
 - Added Bybit native TP/SL params for order placement (#3754), thanks @jindrichsirucek
 - Added Bybit instrument status polling and subscription (#3738), thanks @filipmacek
@@ -61,6 +62,7 @@ Released on TBD (UTC).
 - Added Tardis live streaming support via `stream_options` config with automatic reconnection and exponential backoff
 - Added Tardis raw provider metadata to `Instrument.info` (#3730), thanks for reporting @volemont
 
+
 ### Breaking Changes
 - Removed deprecated `convert_quote_qty_to_base` from `ExecEngineConfig` and `LiveExecEngineConfig`; adapters now handle quote-to-base conversion directly
 - Removed `TARDIS_BASE_URL` constant from `nautilus_tardis::http` - use `nautilus_tardis::common::urls::TARDIS_HTTP_BASE_URL`
@@ -84,6 +86,8 @@ Released on TBD (UTC).
 - Documented `aws-lc-rs` non-FIPS mode rationale (FIPS 140-3 module requires Go toolchain)
 
 ### Fixes
+- Fixed position index blob pollution in `update_position` (#3791), thanks @YeeTsai
+- Fixed strategy receiving historical events during startup reconciliation (#3793), thanks @filipmacek
 - Fixed `Trader::add_exec_algorithm` not registering the `{id}.execute` msgbus endpoint, causing orders with `exec_algorithm_id` to be silently dropped
 - Fixed `Trader::clear_exec_algorithms` and `dispose_components` not deregistering `{id}.execute` msgbus endpoints for removed algorithms
 - Fixed `TopicRouter` stale index cache panic when unsubscribing one pattern invalidated indices for unrelated cached topics (#3755), thanks for reporting @Javdu10
@@ -112,6 +116,7 @@ Released on TBD (UTC).
 - Fixed option chains emitting data after expiry (#3735), thanks @filipmacek
 - Fixed `BettingInstrument.selection_handicap` PyO3 name
 - Fixed Betfair order modify `Quantity` serialization for partial cancel size reduction
+- Fixed Binance trailing stop params and testnet URLs (#3778), thanks @eliotOrderson
 - Fixed Binance Spot SBE schema version mismatch after Binance upgraded to schema 3:3 (released 2026-03-25)
 - Fixed Binance algo order update (#3665), thanks @qu1zzyboy
 - Fixed Binance SBE price/quantity precision derivation (#3670), thanks @husariancom
@@ -162,6 +167,7 @@ Released on TBD (UTC).
 - Fixed Interactive Brokers inactive order status handling to prevent silent dropping (#3723), thanks @pandashark
 - Fixed Interactive Brokers trailing stop order field parsing during reconciliation and open-order updates (#3771), thanks @faysou
 - Fixed Interactive Brokers spread instrument not found on restart reconciliation (#3753), thanks @davidsblom
+- Fixed Interactive Brokers adapter not reconnecting on error 326 during gateway restart (#3796), thanks @Johnkhk
 - Fixed Kraken post-only order rejection not setting `due_post_only` on `OrderRejected` events (Spot and Futures)
 - Fixed OKX option conditional order rejection emitting `OrderSubmitted` before `anyhow::bail!`, leaving orders stuck in `Submitted` state
 - Fixed OKX `MarketToLimit` orders not rejected for options in HTTP and WebSocket clients
@@ -262,14 +268,15 @@ Released on TBD (UTC).
 - Refined base catalog interface (#3703), thanks @faysou
 - Refined IB option symbols to be OCC compliant (#3731), thanks @faysou
 - Standardized `type_name()` across order events and instruments
+- Wired `ExecutionManager` into live event loop with full inflight lifecycle (Rust) (#3798), thanks @filipmacek
 - Optimized network client performance and add benchmarks
 - Upgraded Rust (MSRV) to 1.94.1
-- Upgraded `capnp` crate to v0.25.3
-- Upgraded `capnpc` crate to v0.25.2 (regenerated schemas with 4-space indents and version headers)
+- Upgraded `capnp` and `capnpc` crates to v0.25.3 (regenerated schemas with 4-space indents and version headers)
 - Upgraded `databento` crate to v0.45.0
 - Upgraded `datafusion` crate to v53.0.0
+- Upgraded `pyo3` crate to v0.28.3
 - Upgraded `redis` crate to v1.1.0
-- Upgraded `tokio` crate to v1.50.0
+- Upgraded `tokio` crate to v1.51.0
 - Upgraded `tokio-tungstenite` crate to v0.29.0
 
 ### Documentation

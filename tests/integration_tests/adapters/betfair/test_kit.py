@@ -132,7 +132,7 @@ class BetfairTestStubs:
             if rpc_method == "SportsAPING/v1.0/listMarketCatalogue":
                 kw = {"filter_": request.params.filter}
             if rpc_method in responses:
-                response = responses[rpc_method](**kw)  # type: ignore
+                response = responses[rpc_method](**kw)
                 if "id" in response:
                     response["id"] = request.id
                 resp = MagicMock(spec=ClientResponse)

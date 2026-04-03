@@ -142,6 +142,12 @@ criteria = "safe-to-deploy"
 delta = "0.25.0 -> 0.25.2"
 notes = "4-space indents in codegen, version comment in generated files, TryFrom preference. No new unsafe."
 
+[[audits.capnpc]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.25.2 -> 0.25.3"
+notes = "pub -> pub(crate) visibility narrowing in generated code and codegen internals. No logic changes, no new unsafe."
+
 [[audits.cmake]]
 who = "Chris Sellers <chris@cjdsellers.io>"
 criteria = "safe-to-deploy"
@@ -194,6 +200,12 @@ who = "Chris Sellers <chris@cjdsellers.io>"
 criteria = "safe-to-deploy"
 delta = "1.1.2 -> 1.1.3"
 
+[[audits.indexmap]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "2.13.0 -> 2.13.1"
+notes = "12 methods made const fn via pattern-match rewrites. No logic changes, no new unsafe."
+
 [[audits.itoa]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
@@ -223,6 +235,12 @@ who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "0.2.5 -> 0.2.6"
 notes = "Repository extraction from portable-atomic monorepo. Inlines version.rs build script, doc/lint updates. No logic changes."
+
+[[audits.pyo3]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "0.28.2 -> 0.28.3"
+notes = "5 bug fixes: enum into_pyobject deadlock, PyBytesWriter soundness (3.15 only), attach race (auto-initialize), Probe name collision, Py_NegativeRefcount FFI cfg. No new deps."
 
 [[audits.rustls-webpki]]
 who = "Nautech Systems <info@nautechsystems.io>"
@@ -258,6 +276,12 @@ who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "1.10.0 -> 1.11.0"
 notes = "Adds is_full, as_mut_inner, defmt support. Switches serde to serde_core. Delegates Debug to slice. No unsafe changes."
+
+[[audits.tokio]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.50.0 -> 1.51.0"
+notes = "LIFO slot made stealable for better work distribution, notify_waiters race fix, recv_many panic fix, LocalRuntime stabilized. No new deps."
 
 [[audits.tokio-macros]]
 who = "Nautech Systems <info@nautechsystems.io>"

@@ -89,7 +89,7 @@ dev = [
   "cython==3.2.4", # Pinned to 3.2.4 for stability
   "jupytext>=1.19.1,<2.0.0",
   "setuptools>=82",
-  "mypy==1.19.1,<2.0.0", # Pinned to 1.19.1 (keep in line with pre-commit)
+  "mypy==1.20.0,<2.0.0", # Pinned to 1.20.0 (keep in line with pre-commit)
   "pandas-stubs>=2.3.3,<3.0.0",
   "pre-commit>=4.5.1,<5.0.0",
   "ruff==0.15.8", # Pinned to 0.15.8 (keep in line with pre-commit)
@@ -118,7 +118,7 @@ docs = [
 ]
 
 [tool.uv]
-required-version = "==0.11.2"
+required-version = "==0.11.3"
 exclude-newer = "3 days"
 
 [tool.isort]
