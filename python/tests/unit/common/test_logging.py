@@ -56,9 +56,6 @@ def test_logger_methods_and_name():
 
 
 def test_logging_init_and_raw_functions():
-    if not tracing_is_initialized():
-        init_tracing()
-
     with tempfile.TemporaryDirectory() as directory:
         guard = init_logging(
             trader_id=TraderId("TRADER-001"),
