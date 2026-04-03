@@ -13,7 +13,10 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+import subprocess
+import sys
 import tempfile
+import textwrap
 
 from nautilus_trader.common import LogColor
 from nautilus_trader.common import Logger
@@ -53,6 +56,9 @@ def test_logger_methods_and_name():
 
 
 def test_logging_init_and_raw_functions():
+    if not tracing_is_initialized():
+        init_tracing()
+
     with tempfile.TemporaryDirectory() as directory:
         guard = init_logging(
             trader_id=TraderId("TRADER-001"),
@@ -74,6 +80,46 @@ def test_logging_init_and_raw_functions():
         logger_flush()
 
 
+def test_init_tracing_before_logging_succeeds_in_fresh_process():
+    script = textwrap.dedent(
+        """
+        import tempfile
+
+        from nautilus_trader.common import LogLevel
+        from nautilus_trader.common import init_logging
+        from nautilus_trader.common import init_tracing
+        from nautilus_trader.core import UUID4
+        from nautilus_trader.model import TraderId
+
+        init_tracing()
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
+            guard = init_logging(
+                trader_id=TraderId("TRADER-001"),
+                instance_id=UUID4(),
+                level_stdout=LogLevel.INFO,
+                level_file=LogLevel.DEBUG,
+                directory=directory,
+                file_name="common-log",
+                is_colored=False,
+                is_bypassed=True,
+                print_config=False,
+            )
+
+            assert guard is not None
+        """,
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_logging_clock_mode_functions_are_callable():
     logging_clock_set_static_mode()
     logging_clock_set_static_time(123)
@@ -81,6 +127,7 @@ def test_logging_clock_mode_functions_are_callable():
 
 
 def test_init_tracing_sets_initialized_flag():
-    init_tracing()
+    if not tracing_is_initialized():
+        init_tracing()
 
     assert tracing_is_initialized() is True

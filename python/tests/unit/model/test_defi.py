@@ -51,6 +51,13 @@ def test_defi_enum_exports():
     assert DexType.UNISWAP_V3 is not None
 
 
+def test_defi_public_module_names():
+    assert Blockchain.__module__ == "nautilus_trader.model"
+    assert Chain.__module__ == "nautilus_trader.model"
+    assert Dex.__module__ == "nautilus_trader.model"
+    assert DexType.__module__ == "nautilus_trader.model"
+
+
 def test_dex_and_token_properties():
     chain = Chain(Blockchain.BASE, 8453)
     dex = _make_dex(chain)

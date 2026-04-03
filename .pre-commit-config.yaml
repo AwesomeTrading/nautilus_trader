@@ -152,6 +152,14 @@ repos:
         types_or: [rust, python, cython]
         pass_filenames: false
 
+      - id: check-no-legacy-paths-v2
+        name: check no legacy paths v2
+        description: Fails on legacy nautilus_pyo3 references anywhere under python/
+        entry: bash .pre-commit-hooks/check_no_legacy_paths_v2.sh
+        language: system
+        files: ^python/
+        pass_filenames: false
+
   ##############################################################################
   #  Rust formatting and linting
   ##############################################################################

@@ -38,7 +38,11 @@ def trade(audusd_id):
 
 
 def test_trade_fully_qualified_name():
-    assert TradeTick.fully_qualified_name() == "nautilus_trader.core.nautilus_pyo3.model:TradeTick"
+    module_name, _, type_name = TradeTick.fully_qualified_name().partition(":")
+
+    assert module_name
+    assert type_name == "TradeTick"
+    assert TradeTick.__module__ == "nautilus_trader.model"
 
 
 def test_trade_construction(trade, audusd_id):

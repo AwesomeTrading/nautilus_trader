@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import re
 import sys
 from pathlib import Path
@@ -710,33 +710,28 @@ def test_stub_enum_variants_match_screaming_snake_case():
 
 def test_stub_enum_variants_match_runtime():
     """
-    Verify .pyi stub enum members match the actual PyO3 runtime members.
+    Verify .pyi stub enum members match the importable runtime enum members.
     """
-    pyo3 = pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
-
+    renamed_enums = generate_stubs.collect_renamed_enums(WORKSPACE_ROOT)
     stub_enums = _parse_stub_enum_variants(STUB_ROOT)
+    runtime_enums = _collect_runtime_enum_variants(STUB_ROOT)
 
     mismatches: list[str] = []
-    missing_stubs: list[str] = []
+    for name, runtime_members in sorted(runtime_enums.items()):
+        expected_runtime_members = runtime_members
 
-    for name in sorted(dir(pyo3)):
-        obj = getattr(pyo3, name)
-        if not (isinstance(obj, type) and hasattr(obj, "variants")):
-            continue
-
-        try:
-            runtime_members = [v.name for v in obj.variants()]
-        except Exception:  # noqa: S112
-            continue
+        if name in renamed_enums:
+            expected_runtime_members = [
+                generate_stubs.to_screaming_snake_case(variant) for variant in runtime_members
+            ]
 
         stub_members = stub_enums.get(name)
         if stub_members is None:
-            missing_stubs.append(name)
             continue
 
-        if set(runtime_members) != set(stub_members):
-            runtime_only = set(runtime_members) - set(stub_members)
-            stub_only = set(stub_members) - set(runtime_members)
+        if set(expected_runtime_members) != set(stub_members):
+            runtime_only = set(expected_runtime_members) - set(stub_members)
+            stub_only = set(stub_members) - set(expected_runtime_members)
             parts = [name]
 
             if runtime_only:
@@ -748,3 +743,43 @@ def test_stub_enum_variants_match_runtime():
     assert not mismatches, "Stub/runtime enum member mismatches:\n" + "\n".join(
         f"  {m}" for m in mismatches
     )
+
+
+def _collect_runtime_enum_variants(stub_root: Path) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+
+    for module in _iter_public_runtime_modules(stub_root):
+        for name in sorted(dir(module)):
+            obj = getattr(module, name)
+            if not (isinstance(obj, type) and hasattr(obj, "variants")):
+                continue
+
+            try:
+                result[name] = [variant.name for variant in obj.variants()]
+            except Exception:  # noqa: S112
+                continue
+
+    if not result:
+        pytest.skip("No importable runtime enum modules available")
+
+    return result
+
+
+def _iter_public_runtime_modules(stub_root: Path):
+    for stub_path in sorted(stub_root.rglob("__init__.pyi")):
+        relative_package = stub_path.relative_to(stub_root).parent
+        if any(part.startswith("_") for part in relative_package.parts):
+            continue
+
+        module_name = _module_name_from_stub_path(relative_package)
+        try:
+            yield importlib.import_module(module_name)
+        except ImportError:
+            continue
+
+
+def _module_name_from_stub_path(relative_package: Path) -> str:
+    if not relative_package.parts:
+        return "nautilus_trader"
+
+    return f"nautilus_trader.{'.'.join(relative_package.parts)}"

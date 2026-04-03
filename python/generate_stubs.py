@@ -1668,7 +1668,7 @@ def strip_docstrings(content: str) -> str:
 # These reference modules outside the v2 package and should not appear in stubs.
 _DOCSTRING_IMPORTS: set[str] = {
     "from nautilus_trader.model.custom import customdataclass_pyo3",
-    "from nautilus_trader.core.nautilus_pyo3.model import register_custom_data_class",
+    "from nautilus_trader.model import register_custom_data_class",
 }
 
 
