@@ -203,6 +203,10 @@ class ArrowSerializer:
                     batch_bytes = nautilus_pyo3.book_depth10_to_arrow_record_batch_bytes(
                         data,
                     )
+                elif data_cls.__name__ in _RUST_CUSTOM_SERIALIZERS:
+                    encoder_fn, converter_fn = _RUST_CUSTOM_SERIALIZERS[data_cls.__name__]
+                    pyo3_data = [converter_fn(item) for item in data]
+                    batch_bytes = encoder_fn(pyo3_data)
                 else:
                     raise RuntimeError(
                         f"Unsupported Rust defined data type for catalog write, was `{data_cls}`",
@@ -380,6 +384,33 @@ RUST_SERIALIZERS = {
     # InstrumentClose,  # TODO: Not implemented yet
 }
 RUST_STR_SERIALIZERS = {s.__name__ for s in RUST_SERIALIZERS}
+
+# Registry for adapter-specific custom data types with Rust Arrow serializers.
+# Maps class name to (encoder_fn, converter_fn) tuple where:
+#   encoder_fn: callable that takes a list of Rust pyo3 objects and returns Arrow IPC bytes
+#   converter_fn: callable that converts a Python object to a Rust pyo3 object
+_RUST_CUSTOM_SERIALIZERS: dict[str, tuple[Callable, Callable]] = {}
+
+# Maps class name to the Python type for Rust custom serializers.
+# Used by filename_to_class to resolve directory names back to types.
+_RUST_CUSTOM_TYPE_REGISTRY: dict[str, type] = {}
+
+
+def register_rust_custom_serializer(
+    class_name: str,
+    encoder_fn: Callable,
+    converter_fn: Callable,
+    data_cls: type | None = None,
+) -> None:
+    """
+    Register a Rust custom data serializer for Arrow encoding.
+    """
+    _RUST_CUSTOM_SERIALIZERS[class_name] = (encoder_fn, converter_fn)
+    RUST_STR_SERIALIZERS.add(class_name)
+
+    if data_cls is not None:
+        _RUST_CUSTOM_TYPE_REGISTRY[class_name] = data_cls
+
 
 # TODO - breaking while we don't have access to rust schemas
 # Check we have each type defined only once (rust or python)
