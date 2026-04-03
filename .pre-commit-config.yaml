@@ -194,7 +194,7 @@ repos:
         description: Enforces testing standardizations and conventions
         entry: bash .pre-commit-hooks/check_testing_conventions.sh
         language: system
-        types_or: [rust]
+        types_or: [rust, python]
         pass_filenames: false
 
       - id: check-nautilus-conventions

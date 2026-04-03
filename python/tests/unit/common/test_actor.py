@@ -13,6 +13,7 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+import inspect
 from decimal import Decimal
 
 import pytest
@@ -30,7 +31,6 @@ from nautilus_trader.model import BookAction
 from nautilus_trader.model import BookOrder
 from nautilus_trader.model import BookType
 from nautilus_trader.model import Chain
-from nautilus_trader.model import ClientId
 from nautilus_trader.model import DataType
 from nautilus_trader.model import Dex
 from nautilus_trader.model import FundingRateUpdate
@@ -60,7 +60,6 @@ from nautilus_trader.model import QuoteTick
 from nautilus_trader.model import Token
 from nautilus_trader.model import TradeId
 from nautilus_trader.model import TradeTick
-from nautilus_trader.model import Venue
 from tests.providers import TestInstrumentProvider
 from tests.unit.common.actor import TestActor
 from tests.unit.common.actor import TestActorConfig
@@ -118,56 +117,92 @@ HISTORICAL_CALLBACKS = [
     ("on_historical_index_prices", "historical_index_prices"),
 ]
 
-REGISTRATION_REQUIRED_METHODS = [
-    "shutdown_system",
-    "subscribe_data",
-    "request_data",
-    "unsubscribe_data",
-    "subscribe_instruments",
-    "subscribe_instrument",
-    "subscribe_book_deltas",
-    "subscribe_book_at_interval",
-    "subscribe_quotes",
-    "subscribe_trades",
-    "subscribe_bars",
-    "subscribe_mark_prices",
-    "subscribe_index_prices",
-    "subscribe_funding_rates",
-    "subscribe_instrument_status",
-    "subscribe_instrument_close",
-    "subscribe_order_fills",
-    "subscribe_order_cancels",
-    "subscribe_blocks",
-    "subscribe_pool",
-    "subscribe_pool_swaps",
-    "subscribe_pool_liquidity_updates",
-    "subscribe_pool_fee_collects",
-    "subscribe_pool_flash_events",
-    "request_instrument",
-    "request_instruments",
-    "request_book_snapshot",
-    "request_quotes",
-    "request_trades",
-    "request_bars",
-    "unsubscribe_instruments",
-    "unsubscribe_instrument",
-    "unsubscribe_book_deltas",
-    "unsubscribe_book_at_interval",
-    "unsubscribe_quotes",
-    "unsubscribe_trades",
-    "unsubscribe_bars",
-    "unsubscribe_mark_prices",
-    "unsubscribe_index_prices",
-    "unsubscribe_instrument_status",
-    "unsubscribe_instrument_close",
-    "unsubscribe_order_fills",
-    "unsubscribe_order_cancels",
-    "unsubscribe_blocks",
-    "unsubscribe_pool",
-    "unsubscribe_pool_swaps",
-    "unsubscribe_pool_liquidity_updates",
-    "unsubscribe_pool_fee_collects",
-    "unsubscribe_pool_flash_events",
+DATA_SUBSCRIPTION_PARAMETERS = ("data_type", "client_id", "params")
+DATA_REQUEST_PARAMETERS = ("data_type", "client_id", "start", "end", "limit", "params")
+VENUE_SUBSCRIPTION_PARAMETERS = ("venue", "client_id", "params")
+VENUE_REQUEST_PARAMETERS = ("venue", "start", "end", "client_id", "params")
+INSTRUMENT_SUBSCRIPTION_PARAMETERS = ("instrument_id", "client_id", "params")
+BOOK_DELTAS_SUBSCRIPTION_PARAMETERS = (
+    "instrument_id",
+    "book_type",
+    "depth",
+    "client_id",
+    "managed",
+    "params",
+)
+BOOK_INTERVAL_SUBSCRIPTION_PARAMETERS = (
+    "instrument_id",
+    "book_type",
+    "interval_ms",
+    "depth",
+    "client_id",
+    "params",
+)
+BOOK_INTERVAL_UNSUBSCRIBE_PARAMETERS = ("instrument_id", "interval_ms", "client_id", "params")
+BAR_SUBSCRIPTION_PARAMETERS = ("bar_type", "client_id", "params")
+ORDER_SUBSCRIPTION_PARAMETERS = ("instrument_id",)
+BLOCK_SUBSCRIPTION_PARAMETERS = ("chain", "client_id", "params")
+INSTRUMENT_REQUEST_PARAMETERS = ("instrument_id", "start", "end", "client_id", "params")
+BOOK_SNAPSHOT_REQUEST_PARAMETERS = ("instrument_id", "depth", "client_id", "params")
+INSTRUMENT_HISTORY_REQUEST_PARAMETERS = (
+    "instrument_id",
+    "start",
+    "end",
+    "limit",
+    "client_id",
+    "params",
+)
+BAR_REQUEST_PARAMETERS = ("bar_type", "start", "end", "limit", "client_id", "params")
+
+REGISTRATION_REQUIRED_SIGNATURES = [
+    ("subscribe_data", DATA_SUBSCRIPTION_PARAMETERS),
+    ("request_data", DATA_REQUEST_PARAMETERS),
+    ("unsubscribe_data", DATA_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_instruments", VENUE_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_instrument", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_book_deltas", BOOK_DELTAS_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_book_at_interval", BOOK_INTERVAL_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_quotes", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_trades", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_bars", BAR_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_mark_prices", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_index_prices", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_funding_rates", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_instrument_status", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_instrument_close", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_order_fills", ORDER_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_order_cancels", ORDER_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_blocks", BLOCK_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_pool", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_pool_swaps", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_pool_liquidity_updates", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_pool_fee_collects", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("subscribe_pool_flash_events", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("request_instrument", INSTRUMENT_REQUEST_PARAMETERS),
+    ("request_instruments", VENUE_REQUEST_PARAMETERS),
+    ("request_book_snapshot", BOOK_SNAPSHOT_REQUEST_PARAMETERS),
+    ("request_quotes", INSTRUMENT_HISTORY_REQUEST_PARAMETERS),
+    ("request_trades", INSTRUMENT_HISTORY_REQUEST_PARAMETERS),
+    ("request_bars", BAR_REQUEST_PARAMETERS),
+    ("unsubscribe_instruments", VENUE_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_instrument", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_book_deltas", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_book_at_interval", BOOK_INTERVAL_UNSUBSCRIBE_PARAMETERS),
+    ("unsubscribe_quotes", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_trades", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_bars", BAR_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_mark_prices", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_index_prices", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_instrument_status", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_instrument_close", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_order_fills", ORDER_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_order_cancels", ORDER_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_blocks", BLOCK_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_pool", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_pool_swaps", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_pool_liquidity_updates", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_pool_fee_collects", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
+    ("unsubscribe_pool_flash_events", INSTRUMENT_SUBSCRIPTION_PARAMETERS),
 ]
 
 
@@ -238,10 +273,23 @@ def test_data_actor_runtime_only_callbacks_reject_unavailable_public_types(
         getattr(actor, method_name)(object())
 
 
-@pytest.mark.parametrize("method_name", REGISTRATION_REQUIRED_METHODS)
-def test_data_actor_runtime_methods_require_registration(actor, method_name):
-    with pytest.raises(BaseException, match="registered"):
-        getattr(actor, method_name)(**_registration_kwargs(method_name))
+def test_data_actor_shutdown_system_signature_exposes_optional_reason(actor):
+    signature = inspect.signature(actor.shutdown_system)
+    parameter = signature.parameters["reason"]
+
+    assert list(signature.parameters) == ["reason"]
+    assert parameter.default is None
+
+
+@pytest.mark.parametrize(("method_name", "parameter_names"), REGISTRATION_REQUIRED_SIGNATURES)
+def test_data_actor_registration_gated_methods_expose_expected_signatures(
+    actor,
+    method_name,
+    parameter_names,
+):
+    signature = inspect.signature(getattr(actor, method_name))
+
+    assert tuple(signature.parameters) == parameter_names
 
 
 @pytest.fixture
@@ -300,169 +348,6 @@ def sample_objects():
         "historical_index_prices": [
             IndexPriceUpdate(instrument.id, Price.from_str("1.00000"), 1, 2),
         ],
-    }
-
-
-def _registration_kwargs(method_name):
-    context = _registration_context()
-
-    builders = {
-        "shutdown_system": _shutdown_system_kwargs,
-        "subscribe_data": _data_subscription_kwargs,
-        "request_data": _data_request_kwargs,
-        "unsubscribe_data": _data_subscription_kwargs,
-        "subscribe_instruments": _venue_subscription_kwargs,
-        "unsubscribe_instruments": _venue_subscription_kwargs,
-        "request_instruments": _venue_request_kwargs,
-        "subscribe_instrument": _instrument_subscription_kwargs,
-        "unsubscribe_instrument": _instrument_subscription_kwargs,
-        "subscribe_quotes": _instrument_subscription_kwargs,
-        "unsubscribe_quotes": _instrument_subscription_kwargs,
-        "subscribe_trades": _instrument_subscription_kwargs,
-        "unsubscribe_trades": _instrument_subscription_kwargs,
-        "subscribe_mark_prices": _instrument_subscription_kwargs,
-        "unsubscribe_mark_prices": _instrument_subscription_kwargs,
-        "subscribe_index_prices": _instrument_subscription_kwargs,
-        "unsubscribe_index_prices": _instrument_subscription_kwargs,
-        "subscribe_funding_rates": _instrument_subscription_kwargs,
-        "subscribe_instrument_status": _instrument_subscription_kwargs,
-        "unsubscribe_instrument_status": _instrument_subscription_kwargs,
-        "subscribe_instrument_close": _instrument_subscription_kwargs,
-        "unsubscribe_instrument_close": _instrument_subscription_kwargs,
-        "subscribe_pool": _instrument_subscription_kwargs,
-        "unsubscribe_pool": _instrument_subscription_kwargs,
-        "subscribe_pool_swaps": _instrument_subscription_kwargs,
-        "unsubscribe_pool_swaps": _instrument_subscription_kwargs,
-        "subscribe_pool_liquidity_updates": _instrument_subscription_kwargs,
-        "unsubscribe_pool_liquidity_updates": _instrument_subscription_kwargs,
-        "subscribe_pool_fee_collects": _instrument_subscription_kwargs,
-        "unsubscribe_pool_fee_collects": _instrument_subscription_kwargs,
-        "subscribe_pool_flash_events": _instrument_subscription_kwargs,
-        "unsubscribe_pool_flash_events": _instrument_subscription_kwargs,
-        "subscribe_order_fills": _order_subscription_kwargs,
-        "unsubscribe_order_fills": _order_subscription_kwargs,
-        "subscribe_order_cancels": _order_subscription_kwargs,
-        "unsubscribe_order_cancels": _order_subscription_kwargs,
-        "subscribe_book_deltas": _book_deltas_subscription_kwargs,
-        "unsubscribe_book_deltas": _instrument_subscription_kwargs,
-        "subscribe_book_at_interval": _book_interval_subscription_kwargs,
-        "unsubscribe_book_at_interval": _book_interval_unsubscribe_kwargs,
-        "subscribe_bars": _bar_subscription_kwargs,
-        "unsubscribe_bars": _bar_subscription_kwargs,
-        "request_instrument": _instrument_request_kwargs,
-        "request_book_snapshot": _book_snapshot_request_kwargs,
-        "request_quotes": _instrument_history_request_kwargs,
-        "request_trades": _instrument_history_request_kwargs,
-        "request_bars": _bar_request_kwargs,
-        "subscribe_blocks": _block_subscription_kwargs,
-        "unsubscribe_blocks": _block_subscription_kwargs,
-    }
-
-    try:
-        return builders[method_name](context)
-    except KeyError as exc:
-        raise ValueError(f"Unhandled method: {method_name}") from exc
-
-
-def _registration_context():
-    instrument_id = TestInstrumentProvider.audusd_sim().id
-    return {
-        "instrument_id": instrument_id,
-        "client_id": ClientId("CLIENT-001"),
-        "bar_type": BarType.from_str(f"{instrument_id}-1-MINUTE-LAST-EXTERNAL"),
-        "params": {"key": "value"},
-    }
-
-
-def _shutdown_system_kwargs(_context):
-    return {"reason": "test"}
-
-
-def _data_subscription_kwargs(context):
-    return {
-        "data_type": DataType("X"),
-        "client_id": context["client_id"],
-        "params": context["params"],
-    }
-
-
-def _data_request_kwargs(context):
-    return _data_subscription_kwargs(context) | {"start": 1, "end": 2, "limit": 3}
-
-
-def _venue_subscription_kwargs(context):
-    return {
-        "venue": Venue("SIM"),
-        "client_id": context["client_id"],
-        "params": context["params"],
-    }
-
-
-def _venue_request_kwargs(context):
-    return _venue_subscription_kwargs(context) | {"start": 1, "end": 2}
-
-
-def _instrument_subscription_kwargs(context):
-    return {
-        "instrument_id": context["instrument_id"],
-        "client_id": context["client_id"],
-        "params": context["params"],
-    }
-
-
-def _order_subscription_kwargs(context):
-    return {"instrument_id": context["instrument_id"]}
-
-
-def _book_deltas_subscription_kwargs(context):
-    return _instrument_subscription_kwargs(context) | {
-        "book_type": BookType.L2_MBP,
-        "depth": 5,
-        "managed": True,
-    }
-
-
-def _book_interval_subscription_kwargs(context):
-    return _instrument_subscription_kwargs(context) | {
-        "book_type": BookType.L2_MBP,
-        "interval_ms": 1_000,
-        "depth": 5,
-    }
-
-
-def _book_interval_unsubscribe_kwargs(context):
-    return _instrument_subscription_kwargs(context) | {"interval_ms": 1_000}
-
-
-def _bar_subscription_kwargs(context):
-    return {
-        "bar_type": context["bar_type"],
-        "client_id": context["client_id"],
-        "params": context["params"],
-    }
-
-
-def _instrument_request_kwargs(context):
-    return _instrument_subscription_kwargs(context) | {"start": 1, "end": 2}
-
-
-def _book_snapshot_request_kwargs(context):
-    return _instrument_subscription_kwargs(context) | {"depth": 5}
-
-
-def _instrument_history_request_kwargs(context):
-    return _instrument_subscription_kwargs(context) | {"start": 1, "end": 2, "limit": 3}
-
-
-def _bar_request_kwargs(context):
-    return _bar_subscription_kwargs(context) | {"start": 1, "end": 2, "limit": 3}
-
-
-def _block_subscription_kwargs(context):
-    return {
-        "chain": Blockchain.BASE,
-        "client_id": context["client_id"],
-        "params": context["params"],
     }
 
 

@@ -65,6 +65,15 @@ make pytest-v2
 The Makefile target isolates certain test modules in separate pytest processes to avoid
 global Rust state conflicts. Use `make pytest-v2` rather than invoking pytest directly.
 
+Local `make pytest-v2` runs use the debug extension from `make build-debug-v2`.
+CI `build-v2` tests a release wheel.
+Do not write `python/tests/` cases that probe Rust panic paths in process with
+`pytest.raises(BaseException)` or similar broad catches.
+Those tests can appear to pass against the debug build and abort the interpreter against the
+release wheel.
+For abort-prone PyO3 or FFI methods, verify the Python signature and parameter names, or isolate
+the call in a subprocess.
+
 For performance tests:
 
 ```bash

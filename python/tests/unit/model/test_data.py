@@ -13,6 +13,7 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
+import inspect
 import json
 
 import pytest
@@ -159,6 +160,9 @@ def test_register_custom_data_class_requires_from_json():
         register_custom_data_class(MissingFromJson)
 
 
-def test_drop_cvec_pycapsule_rejects_non_capsule():
-    with pytest.raises(BaseException, match=r"PyCapsule|ffi"):
-        drop_cvec_pycapsule(object())
+def test_drop_cvec_pycapsule_signature_accepts_capsule_object():
+    signature = inspect.signature(drop_cvec_pycapsule)
+    parameter = signature.parameters["capsule"]
+
+    assert list(signature.parameters) == ["capsule"]
+    assert parameter.default is inspect.Signature.empty
