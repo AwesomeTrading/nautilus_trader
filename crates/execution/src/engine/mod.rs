@@ -80,7 +80,7 @@ use crate::{
     client::ExecutionClientAdapter,
     reconciliation::{
         check_position_reconciliation, generate_external_order_status_events,
-        reconcile_fill_report as reconcile_fill, reconcile_order_report,
+        generate_reconciliation_order_events, reconcile_fill_report as reconcile_fill,
     },
 };
 
@@ -903,9 +903,10 @@ impl ExecutionEngine {
 
         if let Some(order) = order {
             let ts_now = self.clock.borrow().timestamp_ns();
-            if let Some(event) = reconcile_order_report(&order, report, instrument.as_ref(), ts_now)
-            {
-                self.handle_event(&event);
+            let events =
+                generate_reconciliation_order_events(&order, report, instrument.as_ref(), ts_now);
+            for event in &events {
+                self.handle_event(event);
             }
         } else {
             self.create_external_order(report, instrument.as_ref());

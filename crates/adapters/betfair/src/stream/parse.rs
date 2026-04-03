@@ -282,6 +282,8 @@ impl FillTracker {
             return None;
         }
 
+        let order_qty = resolve_stream_order_quantity(order_qty, uo);
+
         // Overfill guard
         if sm > order_qty {
             log::warn!(
@@ -431,7 +433,7 @@ pub fn parse_order_status_report(
 ) -> anyhow::Result<OrderStatusReport> {
     let order_side = OrderSide::from(uo.side);
     let order_type = OrderType::from(uo.ot);
-    let time_in_force = TimeInForce::from(uo.pt);
+    let time_in_force = parse_stream_time_in_force(uo)?;
 
     let size_matched = uo.sm.unwrap_or(Decimal::ZERO);
     let size_cancelled = uo.sc.unwrap_or(Decimal::ZERO);
@@ -442,7 +444,24 @@ pub fn parse_order_status_report(
     let size_closed = size_cancelled + size_lapsed + size_voided;
     let order_status = resolve_streaming_order_status(uo.status, size_matched, size_closed);
 
-    let quantity = Quantity::from_decimal_dp(uo.s, BETFAIR_QUANTITY_PRECISION)?;
+    let quantity_decimal = stream_order_quantity(uo);
+    anyhow::ensure!(
+        quantity_decimal > Decimal::ZERO,
+        "failed to resolve positive quantity for stream order update {} \
+         (order_type={:?}, persistence_type={:?}, size={}, bsp_liability={:?}, \
+         size_matched={:?}, size_remaining={:?}, size_cancelled={:?}, size_lapsed={:?}, size_voided={:?})",
+        uo.id,
+        uo.ot,
+        uo.pt,
+        uo.s,
+        uo.bsp,
+        uo.sm,
+        uo.sr,
+        uo.sc,
+        uo.sl,
+        uo.sv,
+    );
+    let quantity = Quantity::from_decimal_dp(quantity_decimal, BETFAIR_QUANTITY_PRECISION)?;
     let filled_qty = Quantity::from_decimal_dp(size_matched, BETFAIR_QUANTITY_PRECISION)?;
 
     let ts_accepted = parse_millis_timestamp(uo.pd);
@@ -478,8 +497,64 @@ pub fn parse_order_status_report(
     .with_price(price);
 
     report.avg_px = uo.avp;
+    if let Some(lsrc) = uo.lsrc {
+        report.cancel_reason = Some(lsrc.to_string());
+    }
 
     Ok(report)
+}
+
+fn parse_stream_time_in_force(uo: &UnmatchedOrder) -> anyhow::Result<TimeInForce> {
+    match uo.pt {
+        Some(persistence_type) => Ok(TimeInForce::from(persistence_type)),
+        None if matches!(
+            uo.ot,
+            crate::common::enums::StreamingOrderType::LimitOnClose
+                | crate::common::enums::StreamingOrderType::MarketOnClose
+        ) =>
+        {
+            Ok(TimeInForce::AtTheClose)
+        }
+        None => anyhow::bail!("missing persistence type for order update {}", uo.id),
+    }
+}
+
+fn stream_order_quantity(uo: &UnmatchedOrder) -> Decimal {
+    if uo.s > Decimal::ZERO {
+        return uo.s;
+    }
+
+    let lifecycle_qty = uo.sm.unwrap_or(Decimal::ZERO)
+        + uo.sr.unwrap_or(Decimal::ZERO)
+        + uo.sc.unwrap_or(Decimal::ZERO)
+        + uo.sl.unwrap_or(Decimal::ZERO)
+        + uo.sv.unwrap_or(Decimal::ZERO);
+
+    if lifecycle_qty > Decimal::ZERO {
+        return lifecycle_qty;
+    }
+
+    if uses_liability_based_stream_quantity(uo) {
+        return uo.bsp.unwrap_or(Decimal::ZERO);
+    }
+
+    Decimal::ZERO
+}
+
+fn resolve_stream_order_quantity(order_qty: Decimal, uo: &UnmatchedOrder) -> Decimal {
+    if order_qty > Decimal::ZERO {
+        order_qty
+    } else {
+        stream_order_quantity(uo)
+    }
+}
+
+fn uses_liability_based_stream_quantity(uo: &UnmatchedOrder) -> bool {
+    matches!(
+        uo.ot,
+        crate::common::enums::StreamingOrderType::LimitOnClose
+            | crate::common::enums::StreamingOrderType::MarketOnClose
+    )
 }
 
 /// Creates a [`FillReport`] for a Betfair order fill.
@@ -751,7 +826,7 @@ pub fn parse_race_progress(
 
 #[cfg(test)]
 mod tests {
-    use nautilus_model::enums::{MarketStatusAction, OrderStatus};
+    use nautilus_model::enums::{MarketStatusAction, OrderStatus, TimeInForce};
     use rstest::rstest;
 
     use super::*;
@@ -2010,7 +2085,7 @@ mod tests {
             s: size,
             side: StreamingSide::Back,
             status: StreamingOrderStatus::Executable,
-            pt: StreamingPersistenceType::Lapse,
+            pt: Some(StreamingPersistenceType::Lapse),
             ot: StreamingOrderType::Limit,
             pd: 1616568581000,
             bsp: None,
@@ -2286,6 +2361,202 @@ mod tests {
             UnixNanos::default(),
         );
         assert!(result.is_none(), "None sm should not produce a fill");
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_missing_persistence_type_for_market_on_close() {
+        let uo = UnmatchedOrder {
+            s: Decimal::ZERO,
+            pt: None,
+            ot: StreamingOrderType::MarketOnClose,
+            sr: Some(Decimal::new(10, 0)),
+            ..make_test_uo("999007", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let report = parse_order_status_report(
+            &uo,
+            InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+            AccountId::from("BETFAIR-001"),
+            UnixNanos::default(),
+            UnixNanos::default(),
+        )
+        .unwrap();
+
+        assert_eq!(report.quantity, Quantity::from("10.00"));
+        assert_eq!(report.time_in_force, TimeInForce::AtTheClose);
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_missing_persistence_type_for_limit_on_close() {
+        let uo = UnmatchedOrder {
+            s: Decimal::ZERO,
+            pt: None,
+            ot: StreamingOrderType::LimitOnClose,
+            sr: Some(Decimal::new(10, 0)),
+            ..make_test_uo("999013", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let report = parse_order_status_report(
+            &uo,
+            InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+            AccountId::from("BETFAIR-001"),
+            UnixNanos::default(),
+            UnixNanos::default(),
+        )
+        .unwrap();
+
+        assert_eq!(report.quantity, Quantity::from("10.00"));
+        assert_eq!(report.time_in_force, TimeInForce::AtTheClose);
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_market_on_close_uses_bsp_liability() {
+        let uo = UnmatchedOrder {
+            s: Decimal::ZERO,
+            bsp: Some(Decimal::new(20, 1)),
+            pt: None,
+            ot: StreamingOrderType::MarketOnClose,
+            ..make_test_uo("999010", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let report = parse_order_status_report(
+            &uo,
+            InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+            AccountId::from("BETFAIR-001"),
+            UnixNanos::default(),
+            UnixNanos::default(),
+        )
+        .unwrap();
+
+        assert_eq!(report.quantity, Quantity::from("2.00"));
+        assert_eq!(report.time_in_force, TimeInForce::AtTheClose);
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_fails_for_non_positive_quantity() {
+        let uo = UnmatchedOrder {
+            s: Decimal::ZERO,
+            sm: Some(Decimal::ZERO),
+            sr: Some(Decimal::ZERO),
+            sc: Some(Decimal::ZERO),
+            sl: Some(Decimal::ZERO),
+            sv: Some(Decimal::ZERO),
+            ..make_test_uo("999014", Decimal::ZERO, Some(Decimal::ZERO), None)
+        };
+
+        let result = parse_order_status_report(
+            &uo,
+            InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+            AccountId::from("BETFAIR-001"),
+            UnixNanos::default(),
+            UnixNanos::default(),
+        );
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("failed to resolve positive quantity for stream order update 999014")
+        );
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_includes_lapse_reason() {
+        let uo = UnmatchedOrder {
+            status: StreamingOrderStatus::ExecutionComplete,
+            sl: Some(Decimal::ONE),
+            lsrc: Some(crate::common::enums::LapseStatusReasonCode::SpInPlay),
+            ..make_test_uo("999012", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let report = parse_order_status_report(
+            &uo,
+            InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+            AccountId::from("BETFAIR-001"),
+            UnixNanos::default(),
+            UnixNanos::default(),
+        )
+        .unwrap();
+
+        assert_eq!(report.order_status, OrderStatus::Canceled);
+        assert_eq!(report.cancel_reason.as_deref(), Some("SP_IN_PLAY"));
+    }
+
+    #[rstest]
+    fn test_parse_order_status_report_missing_persistence_type_fails_for_limit_order() {
+        let uo = UnmatchedOrder {
+            pt: None,
+            ..make_test_uo("999008", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let result = parse_order_status_report(
+            &uo,
+            InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+            AccountId::from("BETFAIR-001"),
+            UnixNanos::default(),
+            UnixNanos::default(),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "missing persistence type for order update 999008"
+        );
+    }
+
+    #[rstest]
+    fn test_fill_tracker_uses_lifecycle_quantity_when_stream_size_is_zero() {
+        let mut tracker = FillTracker::new();
+        let uo = UnmatchedOrder {
+            s: Decimal::ZERO,
+            sr: Some(Decimal::new(10, 0)),
+            sm: Some(Decimal::new(5, 0)),
+            avp: Some(Decimal::new(20, 1)),
+            ..make_test_uo("999009", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let fill = tracker
+            .maybe_fill_report(
+                &uo,
+                uo.s,
+                InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+                AccountId::from("BETFAIR-001"),
+                Currency::from("GBP"),
+                UnixNanos::default(),
+                UnixNanos::default(),
+            )
+            .expect("zero stream size should fall back to lifecycle quantities");
+
+        assert_eq!(fill.last_qty, Quantity::from("5.00"));
+    }
+
+    #[rstest]
+    fn test_fill_tracker_uses_bsp_liability_when_stream_size_is_zero() {
+        let mut tracker = FillTracker::new();
+        let uo = UnmatchedOrder {
+            s: Decimal::ZERO,
+            bsp: Some(Decimal::new(20, 1)),
+            pt: None,
+            ot: StreamingOrderType::MarketOnClose,
+            sm: Some(Decimal::new(10, 1)),
+            avp: Some(Decimal::new(20, 1)),
+            ..make_test_uo("999011", Decimal::new(10, 0), Some(Decimal::ZERO), None)
+        };
+
+        let fill = tracker
+            .maybe_fill_report(
+                &uo,
+                uo.s,
+                InstrumentId::from("1.234567-123456-0.0.BETFAIR"),
+                AccountId::from("BETFAIR-001"),
+                Currency::from("GBP"),
+                UnixNanos::default(),
+                UnixNanos::default(),
+            )
+            .expect("zero stream size should fall back to bsp liability");
+
+        assert_eq!(fill.last_qty, Quantity::from("1.00"));
     }
 
     #[rstest]

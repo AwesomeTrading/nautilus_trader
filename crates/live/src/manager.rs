@@ -2206,6 +2206,17 @@ impl ExecutionManager {
             .client_order_id
             .unwrap_or_else(|| ClientOrderId::from(report.venue_order_id.as_str()));
 
+        if !report.quantity.is_positive() {
+            log::error!(
+                "Skipping external order {} ({}) for {}: non-positive quantity in report {:?}",
+                client_order_id,
+                report.venue_order_id,
+                report.instrument_id,
+                report,
+            );
+            return (Vec::new(), None);
+        }
+
         let ts_now = self.clock.borrow().timestamp_ns();
 
         let initialized = OrderInitialized::new(

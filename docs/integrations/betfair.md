@@ -58,6 +58,11 @@ export BETFAIR_CERTS_DIR=<path_to_certificate_dir>
 We recommend using environment variables to manage your credentials.
 :::
 
+:::note
+Current Rust note: Rust currently reads `BETFAIR_USERNAME`, `BETFAIR_PASSWORD`, and
+`BETFAIR_APP_KEY`. It does not yet read `BETFAIR_CERTS_DIR`.
+:::
+
 ## SSL Certificates
 
 Betfair recommends [non-interactive (bot) login](https://betfair-developer-docs.atlassian.net/wiki/spaces/1smk3cen4v3lu3yomq5qye0ni/pages/2687915/Non-Interactive+bot+login)
@@ -113,6 +118,14 @@ The Betfair adapter provides three primary components:
 - `BetfairDataClient`: streams real-time market data from the Exchange Streaming API.
 - `BetfairExecutionClient`: submits orders (bets) and tracks execution status via the REST API.
 
+## Implementation status
+
+NautilusTrader currently ships a stable Python Betfair adapter and an in-progress Rust parity path.
+
+This page remains the stable guide. It now calls out the main Rust differences inline. Use the
+[Betfair v2 transition guide](betfair_v2.md) for the current Rust-first behavior in
+`crates/adapters/betfair` and for the planned cutover path.
+
 ## Orders capability
 
 Betfair operates as a betting exchange with unique characteristics compared to traditional financial exchanges:
@@ -121,7 +134,7 @@ Betfair operates as a betting exchange with unique characteristics compared to t
 
 | Order Type             | Supported | Notes                               |
 |------------------------|-----------|-------------------------------------|
-| `MARKET`               | -         | Not applicable to betting exchange. |
+| `MARKET`               | ✓*        | Python maps regular market orders to aggressive `LIMIT`; Rust supports BSP `AT_THE_CLOSE` only. |
 | `LIMIT`                | ✓         | Orders placed at specific odds.     |
 | `STOP_MARKET`          | -         | *Not supported*.                    |
 | `STOP_LIMIT`           | -         | *Not supported*.                    |
@@ -149,6 +162,10 @@ Betfair operates as a betting exchange with unique characteristics compared to t
 :::note
 Betfair uses a persistence model rather than traditional time-in-force. The adapter maps `FOK` to
 Betfair's `FILL_OR_KILL`, while `IOC` uses `FILL_OR_KILL` with `min_fill_size=0` to allow partial fills.
+
+The current adapters also support BSP on-close order flows. Rust only accepts `MARKET` orders in
+`AT_THE_CLOSE` mode. Rust also maps `LIMIT` orders in `AT_THE_CLOSE` or `AT_THE_OPEN` mode to
+Betfair `LIMIT_ON_CLOSE` instructions.
 :::
 
 ### Advanced order features
@@ -163,9 +180,9 @@ Betfair's `FILL_OR_KILL`, while `IOC` uses `FILL_OR_KILL` with `min_fill_size=0`
 
 | Operation          | Supported | Notes                |
 |--------------------|-----------|----------------------|
-| Batch Submit       | -         | *Not supported*.     |
+| Batch Submit       | ✓         | Supports `SubmitOrderList` in Python and Rust. |
 | Batch Modify       | -         | *Not supported*.     |
-| Batch Cancel       | -         | *Not supported*.     |
+| Batch Cancel       | ✓         | Supports batched cancel requests in Python and Rust. |
 
 ### Position management
 
@@ -233,10 +250,14 @@ The execution client processes order updates from the Betfair Exchange Streaming
 Two configuration options control how updates are filtered:
 
 - **`stream_market_ids_filter`**: Filters at the market level (early exit, silent skip).
-- **`ignore_external_orders`**: Filters at the order level (controls warning vs debug logging).
+- **`ignore_external_orders`**: Filters at the order level. Python also uses it to control the
+  log level for full-image cache checks. Rust currently only skips OCM updates with no `rfo`.
 
-Note that `stream_market_ids_filter` is independent of reconciliation scope (`reconcile_market_ids_only`).
-Stream filtering affects live updates only; reconciliation uses its own market filter.
+The flowchart below matches the stable Python execution path.
+
+Python keeps `stream_market_ids_filter` separate from reconciliation scope (`reconcile_market_ids_only`).
+Rust currently falls back to `stream_market_ids_filter` during reconciliation when
+`reconcile_market_ids_only=False` and no explicit `reconcile_market_ids` are configured.
 
 ```mermaid
 flowchart TD
@@ -252,9 +273,11 @@ flowchart TD
     H -->|False| J[Warning log, skip]
 ```
 
-The same `stream_market_ids_filter` is also applied during full-image reconciliation in `check_cache_against_order_image`.
+Python also applies `stream_market_ids_filter` during full-image reconciliation in
+`check_cache_against_order_image`. Rust currently reconciles through `generate_mass_status()` and
+does not yet perform the same full-image cache check.
 
-When `ignore_external_orders=True`, the client silently skips orders and fills not found in cache:
+When `ignore_external_orders=True`, the Python adapter skips orders and fills not found in cache:
 
 | Scenario                       | Description                                         |
 |--------------------------------|-----------------------------------------------------|
@@ -462,6 +485,16 @@ When `stream_conflate_ms` is `None`, Betfair applies its default conflation beha
 Set `stream_conflate_ms=0` explicitly to guarantee no conflation and receive every price update.
 :::
 
+:::note
+Current Rust differences:
+
+- Rust does not yet expose `certs_dir`.
+- Rust does not use `instrument_config`; it scopes instruments with direct filter fields on `BetfairDataConfig`.
+- Rust uses a fixed 36,000 second keep-alive interval.
+- Rust currently requires `stream_heartbeat_ms`; it does not accept `None` to omit the heartbeat.
+
+:::
+
 ### Execution client configuration options
 
 | Option                       | Default  | Description |
@@ -475,6 +508,7 @@ Set `stream_conflate_ms=0` explicitly to guarantee no conflation and receive eve
 | `calculate_account_state`    | `True`   | Calculate account state locally from events when `True`. |
 | `request_account_state_secs` | `300`    | Interval (seconds) to poll Betfair for account state (`0` disables). |
 | `reconcile_market_ids_only`  | `False`  | When `True`, reconciliation only covers `instrument_config.market_ids` (no effect if unset). |
+| `reconcile_market_ids`       | `None`   | Rust only. Explicit market IDs to use for reconciliation when `reconcile_market_ids_only=True`. |
 | `stream_market_ids_filter`   | `None`   | List of market IDs to process from stream; others are silently skipped. |
 | `ignore_external_orders`     | `False`  | When `True`, ignore stream orders missing from the local cache. |
 | `use_market_version`         | `False`  | When `True`, attach the latest market version to order requests for price protection. |
@@ -487,6 +521,19 @@ If you set `stream_market_ids_filter`, ensure it includes all markets you trade.
 markets excluded from this filter will miss live fill and cancel updates from the stream.
 :::
 
+:::note
+Current Rust differences:
+
+- Rust does not yet expose `certs_dir` or `instrument_config`.
+- Rust uses `calculate_account_state` as the gate for periodic account-state polling.
+- Rust uses `reconcile_market_ids` when `reconcile_market_ids_only=True`.
+- If `reconcile_market_ids_only=False`, Rust currently falls back to `stream_market_ids_filter`
+  for startup reconciliation when `reconcile_market_ids` is unset.
+- Rust currently applies `ignore_external_orders` only to OCM updates with no `rfo`.
+- Rust currently requires `stream_heartbeat_ms`; it does not accept `None` to omit the heartbeat.
+
+:::
+
 ## Session management
 
 Betfair sessions typically expire every 12-24 hours. The adapter automatically handles session
@@ -494,7 +541,8 @@ reconnection when `NO_SESSION` or `INVALID_SESSION_INFORMATION` errors occur:
 
 - The HTTP client reconnects and obtains a new session token.
 - The streaming client re-authenticates and resubscribes to markets.
-- The keep-alive mechanism (`keep_alive_secs`, default 10 hours) proactively extends sessions.
+- The keep-alive mechanism proactively extends sessions. Python exposes `keep_alive_secs`. Rust
+  currently uses a fixed 10-hour interval.
 
 :::info
 Session errors during account state polling or keep-alive trigger automatic reconnection.

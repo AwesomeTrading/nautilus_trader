@@ -81,16 +81,19 @@ dotenvy = { workspace = true }
 rstest = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 
+# Run with `cargo run -p nautilus-betfair --example betfair-data-tester`
 [[example]]
 name = "betfair-data-tester"
 path = "examples/node_data_tester.rs"
 doc = false
 
+# Run with `cargo run -p nautilus-betfair --example betfair-exec-tester`
 [[example]]
 name = "betfair-exec-tester"
 path = "examples/node_exec_tester.rs"
 doc = false
 
+# Run with `cargo run -p nautilus-betfair --example betfair-load-file`
 [[example]]
 name = "betfair-load-file"
 path = "examples/load_betfair_file.rs"

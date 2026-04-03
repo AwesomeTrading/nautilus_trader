@@ -35,23 +35,25 @@ use nautilus_common::{
         DataEvent,
         execution::{
             BatchCancelOrders, CancelAllOrders, CancelOrder, GenerateFillReports,
-            GenerateOrderStatusReports, ModifyOrder, SubmitOrder, SubmitOrderList,
+            GenerateFillReportsBuilder, GenerateOrderStatusReports,
+            GenerateOrderStatusReportsBuilder, ModifyOrder, SubmitOrder, SubmitOrderList,
         },
     },
 };
 use nautilus_core::{
     MUTEX_POISONED, UnixNanos,
+    datetime::NANOSECONDS_IN_SECOND,
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
     data::Data,
-    enums::{AccountType, OmsType, OrderType, TimeInForce},
+    enums::{AccountType, OmsType, OrderStatus, OrderType, TimeInForce},
     identifiers::{AccountId, ClientId, ClientOrderId, InstrumentId, Venue, VenueOrderId},
     instruments::InstrumentAny,
     orders::Order,
-    reports::{FillReport, OrderStatusReport},
+    reports::{ExecutionMassStatus, FillReport, OrderStatusReport},
     types::{AccountBalance, Currency, MarginBalance},
 };
 use nautilus_network::socket::TcpMessageHandler;
@@ -111,6 +113,8 @@ pub struct OcmState {
     pub fill_tracker: FillTracker,
     /// Maps customer_order_ref (rfo) to ClientOrderId for stream resolution.
     pub customer_order_refs: AHashMap<String, ClientOrderId>,
+    /// Client order IDs that already received an OCM order status update.
+    pub stream_reported_client_orders: AHashSet<ClientOrderId>,
     /// Bet IDs that have received a terminal event (cancel, lapse, fill-complete).
     pub terminal_orders: AHashSet<String>,
     /// Old bet IDs from replace operations, to suppress late stream updates.
@@ -546,6 +550,10 @@ impl BetfairExecutionClient {
             }
         }
 
+        if let Some(client_oid) = resolved_client_order_id {
+            state.stream_reported_client_orders.insert(client_oid);
+        }
+
         // Emit fill reports before order status reports so reconciliation does
         // not infer a duplicate fill from the cumulative filled_qty on the
         // status report.
@@ -568,6 +576,23 @@ impl BetfairExecutionClient {
                 fill_report.last_px,
             );
             emitter.send_fill_report(fill_report);
+        }
+
+        if report.order_status == OrderStatus::Canceled
+            && let Some(reason) = report.cancel_reason.as_deref()
+        {
+            log::info!(
+                "Betfair order {} ({}) canceled: reason={}, matched={}, canceled={}, lapsed={}, voided={}",
+                report
+                    .client_order_id
+                    .unwrap_or_else(|| ClientOrderId::from(uo.id.as_str())),
+                uo.id,
+                reason,
+                uo.sm.unwrap_or(Decimal::ZERO),
+                uo.sc.unwrap_or(Decimal::ZERO),
+                uo.sl.unwrap_or(Decimal::ZERO),
+                uo.sv.unwrap_or(Decimal::ZERO),
+            );
         }
 
         emitter.send_order_status_report(report);
@@ -853,6 +878,55 @@ impl ExecutionClient for BetfairExecutionClient {
 
         log::info!("Disconnected: client_id={}", self.core.client_id);
         Ok(())
+    }
+
+    async fn generate_mass_status(
+        &self,
+        lookback_mins: Option<u64>,
+    ) -> anyhow::Result<Option<ExecutionMassStatus>> {
+        log::info!("Generating ExecutionMassStatus (lookback_mins={lookback_mins:?})");
+
+        let ts_now = self.clock.get_time_ns();
+        let start = lookback_mins.map(|mins| {
+            let lookback_ns = mins
+                .saturating_mul(60)
+                .saturating_mul(NANOSECONDS_IN_SECOND);
+            UnixNanos::from(ts_now.as_u64().saturating_sub(lookback_ns))
+        });
+
+        let order_cmd = GenerateOrderStatusReportsBuilder::default()
+            .ts_init(ts_now)
+            .open_only(false)
+            .start(start)
+            .build()
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        let fill_cmd = GenerateFillReportsBuilder::default()
+            .ts_init(ts_now)
+            .start(start)
+            .build()
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        let (order_reports, fill_reports) = tokio::try_join!(
+            self.generate_order_status_reports(&order_cmd),
+            self.generate_fill_reports(fill_cmd),
+        )?;
+
+        log::info!("Received {} OrderStatusReports", order_reports.len());
+        log::info!("Received {} FillReports", fill_reports.len());
+
+        let mut mass_status = ExecutionMassStatus::new(
+            self.core.client_id,
+            self.core.account_id,
+            *BETFAIR_VENUE,
+            ts_now,
+            None,
+        );
+
+        mass_status.add_order_reports(order_reports);
+        mass_status.add_fill_reports(fill_reports);
+
+        Ok(Some(mass_status))
     }
 
     async fn generate_order_status_reports(
@@ -1181,6 +1255,7 @@ impl ExecutionClient for BetfairExecutionClient {
         let http_client = Arc::clone(&self.http_client);
         let emitter = self.emitter.clone();
         let clock = self.clock;
+        let ocm_state = Arc::clone(&self.ocm_state);
 
         self.spawn_task("submit-order", async move {
             let report: PlaceExecutionReport = match http_client
@@ -1248,7 +1323,10 @@ impl ExecutionClient for BetfairExecutionClient {
                     if let Some(bet_id) = &ir.bet_id {
                         let venue_order_id = VenueOrderId::from(bet_id.as_str());
                         let ts_event = clock.get_time_ns();
-                        emitter.emit_order_accepted(&order, venue_order_id, ts_event);
+
+                        if should_emit_http_accept(&ocm_state, &client_order_id) {
+                            emitter.emit_order_accepted(&order, venue_order_id, ts_event);
+                        }
                     }
                 } else if report.status == ExecutionReportStatus::Failure
                     || report.status == ExecutionReportStatus::ProcessedWithErrors
@@ -1915,6 +1993,7 @@ impl ExecutionClient for BetfairExecutionClient {
         let http_client = Arc::clone(&self.http_client);
         let emitter = self.emitter.clone();
         let clock = self.clock;
+        let ocm_state = Arc::clone(&self.ocm_state);
 
         self.spawn_task("submit-order-list", async move {
             let report: PlaceExecutionReport = match http_client
@@ -1984,7 +2063,10 @@ impl ExecutionClient for BetfairExecutionClient {
                             if let Some(bet_id) = &ir.bet_id {
                                 let venue_order_id = VenueOrderId::from(bet_id.as_str());
                                 let ts_event = clock.get_time_ns();
-                                emitter.emit_order_accepted(order, venue_order_id, ts_event);
+
+                                if should_emit_http_accept(&ocm_state, client_oid) {
+                                    emitter.emit_order_accepted(order, venue_order_id, ts_event);
+                                }
                             }
                         }
                         InstructionReportStatus::Timeout => {
@@ -2017,6 +2099,28 @@ impl ExecutionClient for BetfairExecutionClient {
 
         Ok(())
     }
+}
+
+fn should_emit_http_accept(
+    ocm_state: &Arc<Mutex<OcmState>>,
+    client_order_id: &ClientOrderId,
+) -> bool {
+    let Ok(state) = ocm_state.lock() else {
+        log::error!("OcmState mutex poisoned");
+        return true;
+    };
+
+    if state
+        .stream_reported_client_orders
+        .contains(client_order_id)
+    {
+        log::info!(
+            "Suppressing late HTTP acceptance for {client_order_id}: OCM already reported order state"
+        );
+        return false;
+    }
+
+    true
 }
 
 #[cfg(test)]
@@ -2081,6 +2185,24 @@ mod tests {
         let rfo_legacy = make_customer_order_ref_legacy(id);
         assert!(state.resolve_client_order_id(Some(&rfo_current)).is_none());
         assert!(state.resolve_client_order_id(Some(&rfo_legacy)).is_none());
+    }
+
+    #[rstest]
+    fn test_should_emit_http_accept_without_stream_report() {
+        let state = Arc::new(Mutex::new(OcmState::default()));
+        let client_oid = ClientOrderId::from("O-001");
+
+        assert!(should_emit_http_accept(&state, &client_oid));
+    }
+
+    #[rstest]
+    fn test_should_not_emit_http_accept_after_stream_report() {
+        let client_oid = ClientOrderId::from("O-001");
+        let mut inner = OcmState::default();
+        inner.stream_reported_client_orders.insert(client_oid);
+        let state = Arc::new(Mutex::new(inner));
+
+        assert!(!should_emit_http_accept(&state, &client_oid));
     }
 
     #[rstest]
@@ -2282,7 +2404,7 @@ mod tests {
             s: Decimal::new(20, 0),
             side: crate::common::enums::StreamingSide::Back,
             status: crate::common::enums::StreamingOrderStatus::Executable,
-            pt: crate::common::enums::StreamingPersistenceType::Lapse,
+            pt: Some(crate::common::enums::StreamingPersistenceType::Lapse),
             ot: crate::common::enums::StreamingOrderType::Limit,
             pd: 1617863365000,
             bsp: None,
@@ -2340,7 +2462,7 @@ mod tests {
             s: Decimal::new(20, 0),
             side: crate::common::enums::StreamingSide::Lay,
             status: crate::common::enums::StreamingOrderStatus::Executable,
-            pt: crate::common::enums::StreamingPersistenceType::Persist,
+            pt: Some(crate::common::enums::StreamingPersistenceType::Persist),
             ot: crate::common::enums::StreamingOrderType::Limit,
             pd: 1617863365000,
             bsp: None,
@@ -2400,7 +2522,7 @@ mod tests {
             s: Decimal::new(10, 0),
             side: crate::common::enums::StreamingSide::Back,
             status: crate::common::enums::StreamingOrderStatus::Executable,
-            pt: crate::common::enums::StreamingPersistenceType::Lapse,
+            pt: Some(crate::common::enums::StreamingPersistenceType::Lapse),
             ot: crate::common::enums::StreamingOrderType::Limit,
             pd: 1617863365000,
             bsp: None,

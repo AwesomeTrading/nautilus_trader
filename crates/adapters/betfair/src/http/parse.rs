@@ -27,7 +27,7 @@ use rust_decimal::Decimal;
 use crate::{
     common::{
         consts::{BETFAIR_PRICE_PRECISION, BETFAIR_QUANTITY_PRECISION},
-        enums::resolve_order_status,
+        enums::{BetfairOrderType, resolve_order_status},
         parse::{make_instrument_id, parse_betfair_timestamp},
     },
     http::models::CurrentOrderSummary,
@@ -59,13 +59,35 @@ pub fn parse_current_order_report(
     let size_closed = size_cancelled + size_lapsed + size_voided;
     let order_status = resolve_order_status(order.status, size_matched, size_closed);
 
-    // Prefer lifecycle sum when price_size.size is zero (e.g. MOC/LOC orders)
+    // Prefer lifecycle sum when price_size.size is zero. Use bsp_liability for
+    // on-close orders that report liability without stake/size.
     let total_size = order.price_size.size;
+    let lifecycle_qty = size_matched + size_remaining + size_cancelled + size_lapsed + size_voided;
     let qty = if total_size > Decimal::ZERO {
         total_size
+    } else if lifecycle_qty > Decimal::ZERO {
+        lifecycle_qty
+    } else if uses_liability_based_quantity(order) && order.bsp_liability > Decimal::ZERO {
+        order.bsp_liability
     } else {
-        size_matched + size_remaining + size_cancelled + size_lapsed + size_voided
+        Decimal::ZERO
     };
+    anyhow::ensure!(
+        qty > Decimal::ZERO,
+        "failed to resolve positive quantity for current order {} \
+         (order_type={:?}, persistence_type={:?}, price_size={}, bsp_liability={}, \
+         size_matched={}, size_remaining={}, size_cancelled={}, size_lapsed={}, size_voided={})",
+        order.bet_id,
+        order.order_type,
+        order.persistence_type,
+        order.price_size.size,
+        order.bsp_liability,
+        size_matched,
+        size_remaining,
+        size_cancelled,
+        size_lapsed,
+        size_voided,
+    );
     let quantity = Quantity::from_decimal_dp(qty, BETFAIR_QUANTITY_PRECISION)?;
     let filled_qty = Quantity::from_decimal_dp(size_matched, BETFAIR_QUANTITY_PRECISION)?;
 
@@ -102,6 +124,15 @@ pub fn parse_current_order_report(
     report.avg_px = order.average_price_matched;
 
     Ok(report)
+}
+
+fn uses_liability_based_quantity(order: &CurrentOrderSummary) -> bool {
+    matches!(
+        order.order_type,
+        BetfairOrderType::LimitOnClose
+            | BetfairOrderType::MarketOnClose
+            | BetfairOrderType::MarketAtTheClose
+    )
 }
 
 /// Parses a Betfair [`CurrentOrderSummary`] into a Nautilus [`FillReport`].
@@ -282,6 +313,99 @@ mod tests {
         assert_eq!(report.filled_qty, Quantity::from("30.00"));
         assert_eq!(report.quantity, Quantity::from("50.00"));
         assert_eq!(report.avg_px, Some(Decimal::new(24, 1)));
+    }
+
+    #[rstest]
+    fn test_parse_current_order_market_on_close_uses_bsp_liability() {
+        let data = r#"{
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "currentOrders": [
+              {
+                "betId": "424009603606",
+                "marketId": "1.256134154",
+                "selectionId": 86018523,
+                "handicap": 0.0,
+                "priceSize": {
+                  "price": 1.01,
+                  "size": 0.0
+                },
+                "bspLiability": 2.0,
+                "side": "BACK",
+                "status": "EXECUTABLE",
+                "persistenceType": "MARKET_ON_CLOSE",
+                "orderType": "MARKET_ON_CLOSE",
+                "placedDate": "2026-04-03T00:51:29.000Z",
+                "averagePriceMatched": 0.0,
+                "sizeMatched": 0.0,
+                "sizeRemaining": 0.0,
+                "sizeLapsed": 0.0,
+                "sizeCancelled": 0.0,
+                "sizeVoided": 0.0
+              }
+            ],
+            "moreAvailable": false
+          }
+        }"#;
+        let resp: CurrentOrderSummaryReport = parse_jsonrpc(data);
+        let order = &resp.current_orders[0];
+
+        let report =
+            parse_current_order_report(order, AccountId::from("BETFAIR-001"), UnixNanos::default())
+                .unwrap();
+
+        assert_eq!(report.order_type, OrderType::Market);
+        assert_eq!(report.time_in_force, TimeInForce::AtTheClose);
+        assert_eq!(report.quantity, Quantity::from("2.00"));
+    }
+
+    #[rstest]
+    fn test_parse_current_order_zero_quantity_sources_fails() {
+        let data = r#"{
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "currentOrders": [
+              {
+                "betId": "424009603607",
+                "marketId": "1.256134154",
+                "selectionId": 86018523,
+                "handicap": 0.0,
+                "priceSize": {
+                  "price": 1.01,
+                  "size": 0.0
+                },
+                "bspLiability": 0.0,
+                "side": "BACK",
+                "status": "EXECUTABLE",
+                "persistenceType": "LAPSE",
+                "orderType": "LIMIT",
+                "placedDate": "2026-04-03T00:51:29.000Z",
+                "averagePriceMatched": 0.0,
+                "sizeMatched": 0.0,
+                "sizeRemaining": 0.0,
+                "sizeLapsed": 0.0,
+                "sizeCancelled": 0.0,
+                "sizeVoided": 0.0
+              }
+            ],
+            "moreAvailable": false
+          }
+        }"#;
+        let resp: CurrentOrderSummaryReport = parse_jsonrpc(data);
+        let order = &resp.current_orders[0];
+
+        let result =
+            parse_current_order_report(order, AccountId::from("BETFAIR-001"), UnixNanos::default());
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("failed to resolve positive quantity for current order 424009603607")
+        );
     }
 
     #[rstest]

@@ -21,7 +21,7 @@
 //! - `BETFAIR_USERNAME`: Your Betfair username
 //! - `BETFAIR_PASSWORD`: Your Betfair password
 //! - `BETFAIR_APP_KEY`: Your Betfair application key
-//! - `BETFAIR_MARKET_ID`: Optional market ID override. Defaults to `1.254209667`
+//! - `BETFAIR_MARKET_ID`: Required active market ID to load and test
 //! - `BETFAIR_INSTRUMENT_ID`: Optional instrument ID override after market preload
 //!
 //! Market IDs can be found from `https://www.betfair.com.au/exchange/plus/`
@@ -29,6 +29,7 @@
 use std::sync::Arc;
 
 use nautilus_betfair::{
+    common::enums::RunnerStatus,
     config::{BetfairDataConfig, BetfairExecConfig},
     factories::{BetfairDataClientFactory, BetfairExecutionClientFactory},
     http::client::BetfairHttpClient,
@@ -44,18 +45,23 @@ use nautilus_model::{
 };
 use nautilus_testkit::testers::{ExecTester, ExecTesterConfig};
 use nautilus_trading::strategy::StrategyConfig;
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
-    let market_id =
-        std::env::var("BETFAIR_MARKET_ID").unwrap_or_else(|_| "1.254209667".to_string());
-    let (account_currency, instruments) = load_market_context(&market_id).await?;
-    let instrument_id = select_exec_instrument(&instruments)?;
-    let instrument_ids = instrument_ids(&instruments);
+    let market_id = std::env::var("BETFAIR_MARKET_ID").expect("BETFAIR_MARKET_ID must be set");
+    let (account_currency, instruments, http_client) = load_market_context(&market_id).await?;
+    let instrument_id = select_exec_instrument(&http_client, &market_id, &instruments).await?;
+    http_client.disconnect().await;
+    let instrument_choices = instrument_choices(&instruments);
 
-    println!("Found instruments for market {market_id}: {instrument_ids:?}");
+    println!("Found instruments for market {market_id}:");
+    for choice in &instrument_choices {
+        println!("  {choice}");
+    }
     println!("Using execution instrument: {instrument_id}");
 
     let environment = Environment::Live;
@@ -125,7 +131,9 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn load_market_context(market_id: &str) -> anyhow::Result<(String, Vec<InstrumentAny>)> {
+async fn load_market_context(
+    market_id: &str,
+) -> anyhow::Result<(String, Vec<InstrumentAny>, Arc<BetfairHttpClient>)> {
     let credential = BetfairDataConfig::default().credential()?;
     let http_client = Arc::new(BetfairHttpClient::new(
         credential,
@@ -158,7 +166,6 @@ async fn load_market_context(market_id: &str) -> anyhow::Result<(String, Vec<Ins
     );
 
     provider.load_all(None).await?;
-    http_client.disconnect().await;
 
     let instruments: Vec<InstrumentAny> =
         provider.store().list_all().into_iter().cloned().collect();
@@ -166,14 +173,22 @@ async fn load_market_context(market_id: &str) -> anyhow::Result<(String, Vec<Ins
     if instruments.is_empty() {
         anyhow::bail!(
             "No instruments found for BETFAIR_MARKET_ID={market_id}, find an active market ID \
-             from https://www.betfair.com.au/exchange/plus/ and ensure the market is still available"
+             from https://www.betfair.com.au/exchange/plus/ and confirm the market is still available"
         );
     }
 
-    Ok((account_currency.code.as_str().to_string(), instruments))
+    Ok((
+        account_currency.code.as_str().to_string(),
+        instruments,
+        http_client,
+    ))
 }
 
-fn select_exec_instrument(instruments: &[InstrumentAny]) -> anyhow::Result<InstrumentId> {
+async fn select_exec_instrument(
+    http_client: &BetfairHttpClient,
+    market_id: &str,
+    instruments: &[InstrumentAny],
+) -> anyhow::Result<InstrumentId> {
     if let Ok(instrument_id) = std::env::var("BETFAIR_INSTRUMENT_ID") {
         let instrument_id = InstrumentId::from(instrument_id.as_str());
 
@@ -187,12 +202,106 @@ fn select_exec_instrument(instruments: &[InstrumentAny]) -> anyhow::Result<Instr
         anyhow::bail!("BETFAIR_INSTRUMENT_ID={instrument_id} was not found in the loaded market");
     }
 
-    instruments
-        .first()
-        .map(InstrumentAny::id)
-        .ok_or_else(|| anyhow::anyhow!("No Betfair instruments available for execution testing"))
+    match instruments {
+        [] => anyhow::bail!("No Betfair instruments available for execution testing"),
+        [instrument] => Ok(instrument.id()),
+        _ => match auto_select_active_instrument(http_client, market_id, instruments).await? {
+            Some(instrument_id) => Ok(instrument_id),
+            None => {
+                let available = instrument_choices(instruments).join("\n  ");
+                anyhow::bail!(
+                    "Could not auto-select an active Betfair runner for market {market_id}.\n\n  \
+                     Set BETFAIR_INSTRUMENT_ID to one of:\n  {available}"
+                );
+            }
+        },
+    }
 }
 
-fn instrument_ids(instruments: &[InstrumentAny]) -> Vec<InstrumentId> {
-    instruments.iter().map(InstrumentAny::id).collect()
+async fn auto_select_active_instrument(
+    http_client: &BetfairHttpClient,
+    market_id: &str,
+    instruments: &[InstrumentAny],
+) -> anyhow::Result<Option<InstrumentId>> {
+    let params = ListMarketBookParams {
+        market_ids: vec![market_id.to_string()],
+    };
+
+    let books: Vec<MarketBook> = http_client
+        .send_betting("SportsAPING/v1.0/listMarketBook", &params)
+        .await?;
+
+    let Some(book) = books.first() else {
+        return Ok(None);
+    };
+
+    let mut active_runners: Vec<&RunnerBook> = book
+        .runners
+        .iter()
+        .filter(|runner| runner.status == RunnerStatus::Active)
+        .collect();
+
+    active_runners.sort_by(|a, b| {
+        b.total_matched
+            .partial_cmp(&a.total_matched)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for runner in active_runners {
+        let handicap = runner.handicap.unwrap_or(Decimal::ZERO);
+
+        if let Some(instrument_id) = instruments.iter().find_map(|instrument| match instrument {
+            InstrumentAny::Betting(betting)
+                if betting.selection_id == runner.selection_id
+                    && (betting.selection_handicap
+                        - handicap.to_string().parse::<f64>().unwrap_or(0.0))
+                    .abs()
+                        < f64::EPSILON =>
+            {
+                Some(betting.id)
+            }
+            _ => None,
+        }) {
+            return Ok(Some(instrument_id));
+        }
+    }
+
+    Ok(None)
+}
+
+fn instrument_choices(instruments: &[InstrumentAny]) -> Vec<String> {
+    let mut choices: Vec<String> = instruments
+        .iter()
+        .map(|instrument| match instrument {
+            InstrumentAny::Betting(betting) => {
+                format!("{} ({})", betting.id, betting.selection_name)
+            }
+            _ => instrument.id().to_string(),
+        })
+        .collect();
+    choices.sort();
+    choices
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListMarketBookParams {
+    market_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MarketBook {
+    runners: Vec<RunnerBook>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunnerBook {
+    selection_id: u64,
+    #[serde(default)]
+    handicap: Option<Decimal>,
+    status: RunnerStatus,
+    #[serde(default)]
+    total_matched: f64,
 }

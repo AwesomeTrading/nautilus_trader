@@ -518,7 +518,10 @@ pub struct UnmatchedOrder {
     /// Order status (E=Executable, EC=ExecutionComplete).
     pub status: StreamingOrderStatus,
     /// Persistence type (L=Lapse, P=Persist, MOC=MarketOnClose).
-    pub pt: StreamingPersistenceType,
+    ///
+    /// Betfair can omit this on some BSP market-on-close order updates.
+    #[serde(default)]
+    pub pt: Option<StreamingPersistenceType>,
     /// Order type (L=Limit, LOC=LimitOnClose, MOC=MarketOnClose).
     pub ot: StreamingOrderType,
     /// Placed date (epoch millis).
@@ -1023,6 +1026,48 @@ mod tests {
                 assert_eq!(uo.sv.unwrap(), rust_decimal::Decimal::from(50));
                 assert_eq!(uo.sm.unwrap(), rust_decimal::Decimal::from(50));
                 assert_eq!(uo.s, rust_decimal::Decimal::from(100));
+            }
+            other => panic!("Expected OrderChange, was {other:?}"),
+        }
+    }
+
+    #[rstest]
+    fn test_stream_decode_ocm_missing_persistence_type_for_market_on_close() {
+        let data = r#"{
+            "op":"ocm",
+            "id":1,
+            "pt":1775175455685,
+            "clk":"clk-1",
+            "oc":[{
+                "id":"1.256134154",
+                "orc":[{
+                    "id":77465280,
+                    "uo":[{
+                        "id":"424009603606",
+                        "p":1.01,
+                        "s":2.00,
+                        "side":"B",
+                        "status":"E",
+                        "ot":"MOC",
+                        "pd":1775175455000,
+                        "sr":2.00
+                    }]
+                }]
+            }]
+        }"#;
+
+        let msg = stream_decode(data.as_bytes()).unwrap();
+
+        match msg {
+            StreamMessage::OrderChange(ocm) => {
+                let oc = ocm.oc.as_ref().unwrap();
+                let orc = oc[0].orc.as_ref().unwrap();
+                let uo = &orc[0].uo.as_ref().unwrap()[0];
+                assert_eq!(uo.pt, None);
+                assert_eq!(
+                    uo.ot,
+                    crate::common::enums::StreamingOrderType::MarketOnClose
+                );
             }
             other => panic!("Expected OrderChange, was {other:?}"),
         }
