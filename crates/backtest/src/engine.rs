@@ -410,24 +410,26 @@ impl BacktestEngine {
     ///
     /// # Errors
     ///
-    /// Returns an error if the strategy is already registered or the trader is running.
+    /// Returns an error if the strategy is already registered or the trader is in an invalid
+    /// state for strategy registration.
     pub fn add_strategy<T>(&mut self, strategy: T) -> anyhow::Result<()>
     where
         T: Strategy + Component + Debug + 'static,
     {
-        self.kernel.trader.add_strategy(strategy)
+        self.kernel.trader.borrow_mut().add_strategy(strategy)
     }
 
     /// Adds an actor to the backtest engine.
     ///
     /// # Errors
     ///
-    /// Returns an error if the actor is already registered or the trader is running.
+    /// Returns an error if the actor is already registered or the trader is in an invalid
+    /// state for actor registration.
     pub fn add_actor<T>(&mut self, actor: T) -> anyhow::Result<()>
     where
         T: DataActor + Component + Debug + 'static,
     {
-        self.kernel.trader.add_actor(actor)
+        self.kernel.trader.borrow_mut().add_actor(actor)
     }
 
     /// Adds an execution algorithm to the backtest engine.
@@ -439,7 +441,10 @@ impl BacktestEngine {
     where
         T: ExecutionAlgorithm + Component + Debug + 'static,
     {
-        self.kernel.trader.add_exec_algorithm(exec_algorithm)
+        self.kernel
+            .trader
+            .borrow_mut()
+            .add_exec_algorithm(exec_algorithm)
     }
 
     /// Run a backtest.
@@ -665,7 +670,7 @@ impl BacktestEngine {
     pub fn reset(&mut self) {
         log::debug!("Resetting");
 
-        if self.kernel.trader.is_running() {
+        if self.kernel.trader.borrow().is_running() {
             self.end();
         }
 
@@ -680,7 +685,7 @@ impl BacktestEngine {
         self.kernel.risk_engine.borrow_mut().reset();
 
         // Reset trader
-        if let Err(e) = self.kernel.trader.reset() {
+        if let Err(e) = self.kernel.trader.borrow_mut().reset() {
             log::error!("Error resetting trader: {e:?}");
         }
 
@@ -739,7 +744,7 @@ impl BacktestEngine {
     ///
     /// Returns an error if any strategy fails to dispose.
     pub fn clear_strategies(&mut self) -> anyhow::Result<()> {
-        self.kernel.trader.clear_strategies()
+        self.kernel.trader.borrow_mut().clear_strategies()
     }
 
     /// Clear all execution algorithms from the engine's internal trader.
@@ -748,7 +753,7 @@ impl BacktestEngine {
     ///
     /// Returns an error if any execution algorithm fails to dispose.
     pub fn clear_exec_algorithms(&mut self) -> anyhow::Result<()> {
-        self.kernel.trader.clear_exec_algorithms()
+        self.kernel.trader.borrow_mut().clear_exec_algorithms()
     }
 
     /// Dispose of the backtest engine, releasing all resources.
@@ -1012,7 +1017,7 @@ impl BacktestEngine {
 
     fn collect_all_clocks(&self) -> Vec<Rc<RefCell<dyn Clock>>> {
         let mut clocks = vec![self.kernel.clock.clone()];
-        clocks.extend(self.kernel.trader.get_component_clocks());
+        clocks.extend(self.kernel.trader.borrow().get_component_clocks());
         clocks
     }
 

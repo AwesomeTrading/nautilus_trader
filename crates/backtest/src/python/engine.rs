@@ -341,7 +341,14 @@ impl PyBacktestEngine {
             })
             .map_err(to_pyruntime_err)?;
 
-        if self.0.kernel().trader.actor_ids().contains(&actor_id) {
+        if self
+            .0
+            .kernel()
+            .trader
+            .borrow()
+            .actor_ids()
+            .contains(&actor_id)
+        {
             return Err(to_pyruntime_err(format!(
                 "Actor '{actor_id}' is already registered"
             )));
@@ -354,6 +361,7 @@ impl PyBacktestEngine {
             .0
             .kernel_mut()
             .trader
+            .borrow_mut()
             .create_component_clock(component_id);
 
         Python::attach(|py| -> anyhow::Result<()> {
@@ -384,6 +392,7 @@ impl PyBacktestEngine {
         self.0
             .kernel_mut()
             .trader
+            .borrow_mut()
             .add_actor_id_for_lifecycle(actor_id)
             .map_err(to_pyruntime_err)?;
 
@@ -472,7 +481,14 @@ impl PyBacktestEngine {
             })
             .map_err(to_pyruntime_err)?;
 
-        if self.0.kernel().trader.strategy_ids().contains(&strategy_id) {
+        if self
+            .0
+            .kernel()
+            .trader
+            .borrow()
+            .strategy_ids()
+            .contains(&strategy_id)
+        {
             return Err(to_pyruntime_err(format!(
                 "Strategy '{strategy_id}' is already registered"
             )));
@@ -486,6 +502,7 @@ impl PyBacktestEngine {
             .0
             .kernel_mut()
             .trader
+            .borrow_mut()
             .create_component_clock(component_id);
 
         Python::attach(|py| -> anyhow::Result<()> {
@@ -516,6 +533,7 @@ impl PyBacktestEngine {
         self.0
             .kernel_mut()
             .trader
+            .borrow_mut()
             .add_strategy_id_with_subscriptions::<PyStrategyInner>(strategy_id)
             .map_err(to_pyruntime_err)?;
 

@@ -1150,7 +1150,7 @@ impl LiveNode {
             );
         }
 
-        self.kernel.trader.add_actor(actor)
+        self.kernel.trader.borrow_mut().add_actor(actor)
     }
 
     /// Adds an actor to the live node using a factory function.
@@ -1175,7 +1175,10 @@ impl LiveNode {
             );
         }
 
-        self.kernel.trader.add_actor_from_factory(factory)
+        self.kernel
+            .trader
+            .borrow_mut()
+            .add_actor_from_factory(factory)
     }
 
     /// Adds a strategy to the trader.
@@ -1213,7 +1216,7 @@ impl LiveNode {
             );
         }
 
-        self.kernel.trader.add_strategy(strategy)
+        self.kernel.trader.borrow_mut().add_strategy(strategy)
     }
 
     /// Adds an execution algorithm to the trader.
@@ -1236,7 +1239,10 @@ impl LiveNode {
             );
         }
 
-        self.kernel.trader.add_exec_algorithm(exec_algorithm)
+        self.kernel
+            .trader
+            .borrow_mut()
+            .add_exec_algorithm(exec_algorithm)
     }
 
     // Runs up to three reconciliation sub-checks (inflight, open orders,

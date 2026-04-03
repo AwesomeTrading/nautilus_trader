@@ -164,7 +164,13 @@ impl BacktestNode {
             .map_err(to_pyruntime_err)?;
 
         // Validate no duplicate before any mutations
-        if engine.kernel().trader.actor_ids().contains(&actor_id) {
+        if engine
+            .kernel()
+            .trader
+            .borrow()
+            .actor_ids()
+            .contains(&actor_id)
+        {
             return Err(to_pyruntime_err(format!(
                 "Actor '{actor_id}' is already registered"
             )));
@@ -178,6 +184,7 @@ impl BacktestNode {
         let clock = engine
             .kernel_mut()
             .trader
+            .borrow_mut()
             .create_component_clock(component_id);
 
         // Phase 3: Register the actor with its dedicated clock
@@ -216,6 +223,7 @@ impl BacktestNode {
         engine
             .kernel_mut()
             .trader
+            .borrow_mut()
             .add_actor_id_for_lifecycle(actor_id)
             .map_err(to_pyruntime_err)?;
 
@@ -314,7 +322,13 @@ impl BacktestNode {
             .map_err(to_pyruntime_err)?;
 
         // Validate no duplicate before any mutations
-        if engine.kernel().trader.strategy_ids().contains(&strategy_id) {
+        if engine
+            .kernel()
+            .trader
+            .borrow()
+            .strategy_ids()
+            .contains(&strategy_id)
+        {
             return Err(to_pyruntime_err(format!(
                 "Strategy '{strategy_id}' is already registered"
             )));
@@ -329,6 +343,7 @@ impl BacktestNode {
         let clock = engine
             .kernel_mut()
             .trader
+            .borrow_mut()
             .create_component_clock(component_id);
 
         // Phase 3: Register the strategy with its dedicated clock
@@ -366,6 +381,7 @@ impl BacktestNode {
         engine
             .kernel_mut()
             .trader
+            .borrow_mut()
             .add_strategy_id_with_subscriptions::<PyStrategyInner>(strategy_id)
             .map_err(to_pyruntime_err)?;
 
