@@ -79,6 +79,7 @@ use nautilus_core::{
 use nautilus_model::{
     events::OrderEventAny,
     identifiers::{StrategyId, TraderId},
+    orders::Order,
 };
 use nautilus_system::{config::NautilusKernelConfig, kernel::NautilusKernel};
 use nautilus_trading::{ExecutionAlgorithm, strategy::Strategy};
@@ -912,22 +913,81 @@ impl LiveNode {
                         residual_events += 1;
                     }
 
-                    if let ExecutionEvent::Order(ref order_evt) = evt {
-                        self.exec_manager.record_local_activity(order_evt.client_order_id());
-                        if let OrderEventAny::Filled(fill) = order_evt {
-                            self.exec_manager.record_position_activity(
-                                fill.instrument_id,
-                                fill.ts_event,
-                            );
+                    let maybe_close_id = match &evt {
+                        ExecutionEvent::Order(order_evt) => {
+                            self.exec_manager.record_local_activity(order_evt.client_order_id());
+                            match order_evt {
+                                OrderEventAny::Filled(fill) => {
+                                    self.exec_manager.record_position_activity(
+                                        fill.instrument_id,
+                                        fill.ts_event,
+                                    );
+                                    self.exec_manager.mark_fill_processed(fill.trade_id);
+                                }
+                                OrderEventAny::Accepted(_) => {
+                                    self.exec_manager.clear_recon_tracking(
+                                        &order_evt.client_order_id(), true,
+                                    );
+                                }
+                                OrderEventAny::Rejected(_)
+                                | OrderEventAny::Canceled(_)
+                                | OrderEventAny::Expired(_)
+                                | OrderEventAny::Denied(_) => {
+                                    self.exec_manager.clear_recon_tracking(
+                                        &order_evt.client_order_id(), true,
+                                    );
+                                }
+                                _ => {}
+                            }
+                            Some(order_evt.client_order_id())
                         }
-                    }
+                        ExecutionEvent::Report(report) => {
+                            if let ExecutionReport::Fill(fill_report) = report
+                                && self.exec_manager.is_fill_recently_processed(&fill_report.trade_id) {
+                                    log::debug!(
+                                        "Skipping recently processed fill report: {}",
+                                        fill_report.trade_id,
+                                    );
+                                    continue;
+                            }
+                            self.exec_manager.observe_execution_report(report);
+                            None
+                        }
+                        ExecutionEvent::Account(_) => None,
+                    };
 
                     AsyncRunner::handle_exec_event(evt);
+
+                    // Post-dispatch cleanup: clear tracking when order closes
+                    if let Some(coid) = maybe_close_id {
+                        let is_closed = self.kernel.cache().borrow()
+                            .order(&coid).is_some_and(|o| o.is_closed());
+                        if is_closed {
+                            self.exec_manager.clear_recon_tracking(&coid, true);
+                        }
+                    }
                 }
                 Some(cmd) = exec_cmd_rx.recv() => {
                     if is_shutting_down {
                         log::debug!("Residual exec command: {cmd:?}");
                         residual_events += 1;
+                    }
+                    match &cmd {
+                        TradingCommand::SubmitOrder(submit) => {
+                            self.exec_manager.register_inflight(submit.client_order_id);
+                        }
+                        TradingCommand::SubmitOrderList(submit) => {
+                            for order_init in &submit.order_inits {
+                                self.exec_manager.register_inflight(order_init.client_order_id);
+                            }
+                        }
+                        TradingCommand::ModifyOrder(modify) => {
+                            self.exec_manager.register_inflight(modify.client_order_id);
+                        }
+                        TradingCommand::CancelOrder(cancel) => {
+                            self.exec_manager.register_inflight(cancel.client_order_id);
+                        }
+                        _ => {}
                     }
                     AsyncRunner::handle_exec_command(cmd);
                 }
@@ -973,6 +1033,7 @@ impl LiveNode {
             if let OrderEventAny::Filled(fill) = event {
                 self.exec_manager
                     .record_position_activity(fill.instrument_id, fill.ts_event);
+                self.exec_manager.mark_fill_processed(fill.trade_id);
             }
             self.kernel.exec_engine.borrow_mut().process(event);
         }
@@ -1272,8 +1333,11 @@ impl LiveNode {
             if self.state() == NodeState::ShuttingDown {
                 return Ok(());
             }
-            let events = self.exec_manager.check_inflight_orders();
-            self.process_reconciliation_events(&events);
+            let result = self.exec_manager.check_inflight_orders();
+            self.process_reconciliation_events(&result.events);
+            for cmd in result.queries {
+                AsyncRunner::handle_exec_command(cmd);
+            }
             *ts_last_inflight = ts_now;
         }
 

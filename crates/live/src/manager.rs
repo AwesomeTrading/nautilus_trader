@@ -28,7 +28,13 @@ use nautilus_common::{
     clock::Clock,
     enums::{LogColor, LogLevel},
     log_info,
-    messages::execution::report::{GenerateOrderStatusReports, GeneratePositionStatusReports},
+    messages::{
+        ExecutionReport,
+        execution::{
+            QueryOrder, TradingCommand,
+            report::{GenerateOrderStatusReports, GeneratePositionStatusReports},
+        },
+    },
 };
 use nautilus_core::{
     UUID4, UnixNanos,
@@ -49,7 +55,7 @@ use nautilus_execution::{
 };
 use nautilus_model::{
     enums::{OrderSide, OrderStatus, OrderType, TimeInForce},
-    events::{OrderEventAny, OrderFilled, OrderInitialized},
+    events::{OrderCanceled, OrderEventAny, OrderFilled, OrderInitialized},
     identifiers::{
         AccountId, ClientOrderId, InstrumentId, PositionId, StrategyId, TradeId, TraderId,
         VenueOrderId,
@@ -88,6 +94,15 @@ pub struct ReconciliationResult {
     pub events: Vec<OrderEventAny>,
     /// External orders that need to be registered with execution clients.
     pub external_orders: Vec<ExternalOrderMetadata>,
+}
+
+/// Result of inflight order checks containing terminal events and intermediate queries.
+#[derive(Debug, Default)]
+pub struct InflightCheckResult {
+    /// Terminal events (rejection/cancellation) for orders that exceeded max retries.
+    pub events: Vec<OrderEventAny>,
+    /// Intermediate venue queries for orders still within retry budget.
+    pub queries: Vec<TradingCommand>,
 }
 
 /// Configuration for execution manager.
@@ -245,18 +260,6 @@ impl ExecutionManagerConfig {
         self.trader_id = trader_id;
         self
     }
-}
-
-/// Execution report for continuous reconciliation.
-/// This is a simplified report type used during runtime reconciliation.
-#[derive(Debug, Clone, Copy)]
-pub struct ExecutionReport {
-    pub client_order_id: ClientOrderId,
-    pub venue_order_id: Option<VenueOrderId>,
-    pub status: OrderStatus,
-    pub filled_qty: Quantity,
-    pub avg_px: Option<f64>,
-    pub ts_event: UnixNanos,
 }
 
 /// Information about an inflight order check.
@@ -792,64 +795,13 @@ impl ExecutionManager {
         }
     }
 
-    /// Reconciles a single execution report during runtime.
+    /// Checks inflight orders and returns terminal events and intermediate venue queries.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the average price cannot be converted to a valid `Decimal`.
-    pub fn reconcile_report(
-        &mut self,
-        report: ExecutionReport,
-    ) -> anyhow::Result<Vec<OrderEventAny>> {
-        let mut events = Vec::new();
-
-        self.clear_recon_tracking(&report.client_order_id, true);
-
-        if let Some(order) = self.get_order(&report.client_order_id) {
-            let Some(account_id) = order.account_id() else {
-                log::error!("Cannot process fill report: order has no account_id");
-                return Ok(vec![]);
-            };
-            let Some(venue_order_id) = report.venue_order_id else {
-                log::error!("Cannot process fill report: report has no venue_order_id");
-                return Ok(vec![]);
-            };
-            let mut order_report = OrderStatusReport::new(
-                account_id,
-                order.instrument_id(),
-                Some(report.client_order_id),
-                venue_order_id,
-                order.order_side(),
-                order.order_type(),
-                order.time_in_force(),
-                report.status,
-                order.quantity(),
-                report.filled_qty,
-                report.ts_event, // Use ts_event as ts_accepted
-                report.ts_event, // Use ts_event as ts_last
-                self.clock.borrow().timestamp_ns(),
-                Some(UUID4::new()),
-            );
-
-            if let Some(avg_px) = report.avg_px {
-                order_report = order_report.with_avg_px(avg_px)?;
-            }
-
-            let instrument = self.get_instrument(&order.instrument_id());
-
-            if let Some(event) =
-                self.reconcile_order_report(&order, &order_report, instrument.as_ref())
-            {
-                events.push(event);
-            }
-        }
-
-        Ok(events)
-    }
-
-    /// Checks inflight orders and returns events for any that need reconciliation.
-    pub fn check_inflight_orders(&mut self) -> Vec<OrderEventAny> {
-        let mut events = Vec::new();
+    /// For retries below `inflight_max_retries`, generates `QueryOrder` commands to poll
+    /// the venue for the order's current status. At max retries, generates terminal events
+    /// (rejection or cancellation) based on the order's status.
+    pub fn check_inflight_orders(&mut self) -> InflightCheckResult {
+        let mut result = InflightCheckResult::default();
         let current_time = self.clock.borrow().timestamp_ns();
         let threshold_ns = self.config.inflight_threshold_ms * NANOSECONDS_IN_MILLISECOND;
 
@@ -884,22 +836,61 @@ impl ExecutionManager {
                     .insert(client_order_id, check.retry_count);
 
                 if check.retry_count >= self.config.inflight_max_retries {
-                    // Generate rejection after max retries
                     let ts_now = self.clock.borrow().timestamp_ns();
 
-                    if let Some(order) = self.get_order(&client_order_id)
-                        && let Some(event) =
-                            create_reconciliation_rejected(&order, Some("INFLIGHT_TIMEOUT"), ts_now)
-                    {
-                        events.push(event);
+                    if let Some(order) = self.get_order(&client_order_id) {
+                        match order.status() {
+                            OrderStatus::Submitted => {
+                                // Generate rejection for submitted orders that never got accepted
+                                if let Some(event) = create_reconciliation_rejected(
+                                    &order,
+                                    Some("INFLIGHT_TIMEOUT"),
+                                    ts_now,
+                                ) {
+                                    result.events.push(event);
+                                }
+                            }
+                            OrderStatus::PendingUpdate | OrderStatus::PendingCancel => {
+                                // Generate cancellation for orders stuck in pending modify/cancel
+                                let event = OrderEventAny::Canceled(OrderCanceled::new(
+                                    order.trader_id(),
+                                    order.strategy_id(),
+                                    order.instrument_id(),
+                                    order.client_order_id(),
+                                    UUID4::new(),
+                                    ts_now,
+                                    ts_now,
+                                    true, // reconciliation
+                                    order.venue_order_id(),
+                                    order.account_id(),
+                                ));
+                                result.events.push(event);
+                            }
+                            _ => {
+                                // Order already resolved, just clear tracking
+                            }
+                        }
                     }
                     // Remove from inflight checks regardless of whether order exists
                     self.clear_recon_tracking(&client_order_id, true);
+                } else if let Some(order) = self.get_order(&client_order_id) {
+                    // Intermediate retry: query the venue for current order status
+                    let query = TradingCommand::QueryOrder(QueryOrder::new(
+                        order.trader_id(),
+                        None, // client_id determined by execution engine routing
+                        order.strategy_id(),
+                        order.instrument_id(),
+                        order.client_order_id(),
+                        order.venue_order_id(),
+                        UUID4::new(),
+                        current_time,
+                    ));
+                    result.queries.push(query);
                 }
             }
         }
 
-        events
+        result
     }
 
     /// Checks open orders consistency between cache and venue.
@@ -1206,6 +1197,50 @@ impl ExecutionManager {
     pub fn record_position_activity(&mut self, instrument_id: InstrumentId, ts_event: UnixNanos) {
         self.position_local_activity_ns
             .insert(instrument_id, ts_event);
+    }
+
+    /// Observes an incoming execution report and updates tracking state.
+    ///
+    /// This should be called **before** the report is dispatched to the execution
+    /// engine, so that the manager's state is current when periodic checks run.
+    ///
+    /// Updates performed per report variant:
+    /// - `Order`: clears inflight tracking and records local activity
+    /// - `Fill`: marks fill as processed, records order and position activity
+    /// - `Position`: records position activity
+    /// - `MassStatus`: no-op (handled separately via startup reconciliation)
+    pub fn observe_execution_report(&mut self, report: &ExecutionReport) {
+        match report {
+            ExecutionReport::Order(order_report) => {
+                if let Some(client_order_id) = &order_report.client_order_id {
+                    self.clear_recon_tracking(client_order_id, true);
+                    self.record_local_activity(*client_order_id);
+                }
+            }
+            ExecutionReport::Fill(fill_report) => {
+                self.mark_fill_processed(fill_report.trade_id);
+                let client_order_id = fill_report.client_order_id.or_else(|| {
+                    self.cache
+                        .borrow()
+                        .client_order_id(&fill_report.venue_order_id)
+                        .copied()
+                });
+
+                if let Some(coid) = client_order_id {
+                    self.record_local_activity(coid);
+                }
+                self.record_position_activity(fill_report.instrument_id, fill_report.ts_event);
+            }
+            ExecutionReport::Position(position_report) => {
+                self.record_position_activity(
+                    position_report.instrument_id,
+                    position_report.ts_last,
+                );
+            }
+            ExecutionReport::MassStatus(_) => {
+                // Handled separately via reconcile_execution_mass_status
+            }
+        }
     }
 
     /// Checks if a fill has been recently processed (for deduplication).
