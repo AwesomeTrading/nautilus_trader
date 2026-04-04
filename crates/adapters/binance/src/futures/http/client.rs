@@ -75,8 +75,8 @@ use crate::common::{
     encoder::encode_broker_id,
     enums::{
         BinanceAlgoType, BinanceEnvironment, BinanceFuturesOrderType, BinancePositionSide,
-        BinanceProductType, BinanceRateLimitInterval, BinanceRateLimitType, BinanceSide,
-        BinanceTimeInForce, BinanceWorkingType,
+        BinancePriceMatch, BinanceProductType, BinanceRateLimitInterval, BinanceRateLimitType,
+        BinanceSide, BinanceTimeInForce, BinanceWorkingType,
     },
     models::BinanceErrorResponse,
     parse::{parse_coinm_instrument, parse_usdm_instrument},
@@ -1586,6 +1586,7 @@ impl BinanceFuturesHttpClient {
         reduce_only: bool,
         post_only: bool,
         position_side: Option<BinancePositionSide>,
+        price_match: Option<BinancePriceMatch>,
     ) -> anyhow::Result<OrderStatusReport> {
         let symbol = format_binance_symbol(&instrument_id);
         let size_precision = self.get_size_precision(&symbol)?;
@@ -1618,7 +1619,11 @@ impl BinanceFuturesHttpClient {
         );
 
         let qty_str = quantity.to_string();
-        let price_str = price.map(|p| p.to_string());
+        let price_str = if price_match.is_some() {
+            None
+        } else {
+            price.map(|p| p.to_string())
+        };
         let stop_price_str = trigger_price.map(|p| p.to_string());
         let client_id_str = encode_broker_id(&client_order_id, BINANCE_NAUTILUS_FUTURES_BROKER_ID);
 
@@ -1645,7 +1650,7 @@ impl BinanceFuturesHttpClient {
             new_order_resp_type: None,
             good_till_date: None,
             recv_window: None,
-            price_match: None,
+            price_match,
             self_trade_prevention_mode: None,
         };
 

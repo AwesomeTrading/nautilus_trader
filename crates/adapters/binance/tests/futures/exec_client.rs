@@ -42,7 +42,7 @@ use nautilus_common::{
     },
     testing::wait_until_async,
 };
-use nautilus_core::UnixNanos;
+use nautilus_core::{Params, UnixNanos};
 use nautilus_live::ExecutionClientCore;
 use nautilus_model::{
     accounts::{AccountAny, MarginAccount},
@@ -394,6 +394,152 @@ async fn start_exec_test_server_with_algo_capture() -> (
 ) {
     let captured_query = Arc::new(std::sync::Mutex::new(None));
     let router = create_exec_test_router_with_algo_capture(&captured_query);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, router.into_make_service())
+            .await
+            .unwrap();
+    });
+
+    let health_url = format!("http://{addr}/fapi/v1/ping");
+    let http_client =
+        HttpClient::new(HashMap::new(), Vec::new(), Vec::new(), None, None, None).unwrap();
+    wait_until_async(
+        || {
+            let url = health_url.clone();
+            let client = http_client.clone();
+            async move { client.get(url, None, None, Some(1), None).await.is_ok() }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    (addr, captured_query)
+}
+
+fn create_exec_test_router_with_order_capture(
+    captured_query: &Arc<std::sync::Mutex<Option<HashMap<String, String>>>>,
+) -> Router {
+    let captured = captured_query.clone();
+
+    // Build a fresh router but override the /fapi/v1/order POST to capture query params
+    Router::new()
+        .route("/fapi/v1/ping", get(|| async { json_response(&json!({})) }))
+        .route(
+            "/fapi/v1/exchangeInfo",
+            get(|| async {
+                json_response(&json!({
+                    "timezone": "UTC",
+                    "serverTime": 1700000000000_i64,
+                    "rateLimits": [],
+                    "exchangeFilters": [],
+                    "symbols": [{
+                        "symbol": "BTCUSDT",
+                        "pair": "BTCUSDT",
+                        "contractType": "PERPETUAL",
+                        "deliveryDate": 4133404800000_i64,
+                        "onboardDate": 1569398400000_i64,
+                        "status": "TRADING",
+                        "baseAsset": "BTC",
+                        "quoteAsset": "USDT",
+                        "marginAsset": "USDT",
+                        "pricePrecision": 2,
+                        "quantityPrecision": 3,
+                        "baseAssetPrecision": 8,
+                        "quotePrecision": 8,
+                        "maintMarginPercent": "2.5000",
+                        "requiredMarginPercent": "5.0000",
+                        "underlyingType": "COIN",
+                        "settlePlan": 0,
+                        "triggerProtect": "0.0500",
+                        "filters": [
+                            {"filterType": "PRICE_FILTER", "minPrice": "0.10", "maxPrice": "1000000", "tickSize": "0.10"},
+                            {"filterType": "LOT_SIZE", "minQty": "0.001", "maxQty": "1000", "stepSize": "0.001"},
+                            {"filterType": "MIN_NOTIONAL", "notional": "5"}
+                        ],
+                        "orderTypes": ["LIMIT", "MARKET", "STOP", "STOP_MARKET", "TAKE_PROFIT", "TAKE_PROFIT_MARKET", "TRAILING_STOP_MARKET"],
+                        "timeInForce": ["GTC", "IOC", "FOK", "GTD"]
+                    }]
+                }))
+            }),
+        )
+        .route(
+            "/fapi/v1/positionSide/dual",
+            get(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&json!({"dualSidePosition": false}))
+            }),
+        )
+        .route(
+            "/fapi/v1/listenKey",
+            post(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&json!({"listenKey": "test_listen_key"}))
+            })
+            .put(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&json!({}))
+            }),
+        )
+        .route(
+            "/fapi/v2/account",
+            get(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&load_fixture("account_info_v2.json"))
+            }),
+        )
+        .route(
+            "/fapi/v2/positionRisk",
+            get(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&load_fixture("position_risk.json"))
+            }),
+        )
+        .route(
+            "/fapi/v1/openOrders",
+            get(|headers: HeaderMap| async move {
+                if !has_auth_headers(&headers) {
+                    return unauthorized_response();
+                }
+                json_response(&json!([]))
+            }),
+        )
+        .route(
+            "/fapi/v1/order",
+            post({
+                move |headers: HeaderMap, Query(query): Query<HashMap<String, String>>| {
+                    let captured = captured.clone();
+                    async move {
+                        if !has_auth_headers(&headers) {
+                            return unauthorized_response();
+                        }
+                        *captured.lock().unwrap() = Some(query);
+                        json_response(&load_fixture("order_response.json"))
+                    }
+                }
+            }),
+        )
+        .route("/ws", get(handle_ws))
+}
+
+async fn start_exec_test_server_with_order_capture() -> (
+    SocketAddr,
+    Arc<std::sync::Mutex<Option<HashMap<String, String>>>>,
+) {
+    let captured_query = Arc::new(std::sync::Mutex::new(None));
+    let router = create_exec_test_router_with_order_capture(&captured_query);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
@@ -1114,6 +1260,116 @@ async fn test_connect_disconnect_reconnect() {
     // Reconnect
     client.connect().await.unwrap();
     assert!(client.is_connected());
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_submit_order_with_price_match_sends_price_match_and_omits_price() {
+    let (addr, captured_query) = start_exec_test_server_with_order_capture().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx, cache) = create_test_execution_client(base_url_http, base_url_ws);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.start().unwrap();
+    client.connect().await.unwrap();
+
+    let instrument_id = InstrumentId::from("BTCUSDT-PERP.BINANCE");
+    let client_order_id = ClientOrderId::new("price-match-test-001");
+    let trader_id = TraderId::from("TESTER-001");
+    let strategy_id = StrategyId::from("TEST-STRATEGY");
+
+    let order = LimitOrder::new(
+        trader_id,
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        OrderSide::Buy,
+        Quantity::from("0.001"),
+        Price::from("50000.00"),
+        TimeInForce::Gtc,
+        None,  // expire_time
+        false, // post_only (must be false for price_match)
+        false, // reduce_only
+        false, // quote_quantity
+        None,  // display_qty
+        None,  // emulation_trigger
+        None,  // trigger_instrument_id
+        None,  // contingency_type
+        None,  // order_list_id
+        None,  // linked_order_ids
+        None,  // parent_order_id
+        None,  // exec_algorithm_id
+        None,  // exec_algorithm_params
+        None,  // exec_spawn_id
+        None,  // tags
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let order_any = OrderAny::Limit(order);
+    cache
+        .borrow_mut()
+        .add_order(order_any.clone(), None, None, false)
+        .unwrap();
+
+    let mut params = Params::new();
+    params.insert(
+        "price_match".to_string(),
+        serde_json::Value::String("OPPONENT_5".to_string()),
+    );
+
+    let submit_cmd = SubmitOrder::new(
+        trader_id,
+        Some(ClientId::from("BINANCE")),
+        strategy_id,
+        instrument_id,
+        client_order_id,
+        order_any.init_event().clone(),
+        None, // exec_algorithm_id
+        None, // position_id
+        Some(params),
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    client.submit_order(&submit_cmd).unwrap();
+
+    wait_until_async(
+        || {
+            let captured_query = captured_query.clone();
+            async move { captured_query.lock().unwrap().is_some() }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    let query = captured_query.lock().unwrap().clone().unwrap();
+    assert_eq!(
+        query.get("priceMatch"),
+        Some(&"OPPONENT_5".to_string()),
+        "priceMatch should be OPPONENT_5"
+    );
+    assert!(
+        !query.contains_key("price"),
+        "price must be omitted when priceMatch is set"
+    );
+    assert_eq!(query.get("type"), Some(&"LIMIT".to_string()));
+    assert_eq!(query.get("side"), Some(&"BUY".to_string()));
+    assert_eq!(query.get("quantity"), Some(&"0.001".to_string()));
+
+    // Drain the submitted event to confirm the order was processed
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Order(OrderEventAny::Submitted(_))));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
 }
 
 fn create_test_execution_client_with_ws_trading(

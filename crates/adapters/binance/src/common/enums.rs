@@ -471,22 +471,49 @@ pub enum BinancePriceMatch {
     /// Match opposing side.
     Opponent,
     /// Match opposing side with 5 tick offset.
+    #[serde(rename = "OPPONENT_5")]
     Opponent5,
     /// Match opposing side with 10 tick offset.
+    #[serde(rename = "OPPONENT_10")]
     Opponent10,
     /// Match opposing side with 20 tick offset.
+    #[serde(rename = "OPPONENT_20")]
     Opponent20,
     /// Join current queue on same side.
     Queue,
     /// Join queue with 5 tick offset.
+    #[serde(rename = "QUEUE_5")]
     Queue5,
     /// Join queue with 10 tick offset.
+    #[serde(rename = "QUEUE_10")]
     Queue10,
     /// Join queue with 20 tick offset.
+    #[serde(rename = "QUEUE_20")]
     Queue20,
     /// Unknown or undocumented value.
     #[serde(other)]
     Unknown,
+}
+
+impl BinancePriceMatch {
+    /// Parses a price match mode from a string param value.
+    ///
+    /// Accepts uppercase Binance API values like `"OPPONENT"`, `"OPPONENT_5"`, `"QUEUE_10"`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the value is not a recognized price match mode.
+    pub fn from_param(s: &str) -> anyhow::Result<Self> {
+        let value = s.to_uppercase();
+        serde_json::from_value(serde_json::Value::String(value))
+            .map_err(|_| anyhow::anyhow!("Invalid price_match value: {s:?}"))
+            .and_then(|pm: Self| {
+                if pm == Self::None || pm == Self::Unknown {
+                    anyhow::bail!("Invalid price_match value: {s:?}")
+                }
+                Ok(pm)
+            })
+    }
 }
 
 /// Self-trade prevention mode.
@@ -975,5 +1002,56 @@ mod tests {
             serde_json::to_value(BinanceRateLimitInterval::Minute).unwrap(),
             json!("MINUTE")
         );
+    }
+
+    #[rstest]
+    #[case("\"NONE\"", BinancePriceMatch::None)]
+    #[case("\"OPPONENT\"", BinancePriceMatch::Opponent)]
+    #[case("\"OPPONENT_5\"", BinancePriceMatch::Opponent5)]
+    #[case("\"OPPONENT_10\"", BinancePriceMatch::Opponent10)]
+    #[case("\"OPPONENT_20\"", BinancePriceMatch::Opponent20)]
+    #[case("\"QUEUE\"", BinancePriceMatch::Queue)]
+    #[case("\"QUEUE_5\"", BinancePriceMatch::Queue5)]
+    #[case("\"QUEUE_10\"", BinancePriceMatch::Queue10)]
+    #[case("\"QUEUE_20\"", BinancePriceMatch::Queue20)]
+    #[case("\"SOMETHING_NEW\"", BinancePriceMatch::Unknown)]
+    fn test_price_match_deserializes(#[case] raw: &str, #[case] expected: BinancePriceMatch) {
+        let value: BinancePriceMatch = serde_json::from_str(raw).unwrap();
+        assert_eq!(value, expected);
+    }
+
+    #[rstest]
+    #[case(BinancePriceMatch::None, "NONE")]
+    #[case(BinancePriceMatch::Opponent, "OPPONENT")]
+    #[case(BinancePriceMatch::Opponent5, "OPPONENT_5")]
+    #[case(BinancePriceMatch::Opponent10, "OPPONENT_10")]
+    #[case(BinancePriceMatch::Opponent20, "OPPONENT_20")]
+    #[case(BinancePriceMatch::Queue, "QUEUE")]
+    #[case(BinancePriceMatch::Queue5, "QUEUE_5")]
+    #[case(BinancePriceMatch::Queue10, "QUEUE_10")]
+    #[case(BinancePriceMatch::Queue20, "QUEUE_20")]
+    fn test_price_match_serializes(#[case] variant: BinancePriceMatch, #[case] expected: &str) {
+        let serialized = serde_json::to_value(variant).unwrap();
+        assert_eq!(serialized, json!(expected));
+    }
+
+    #[rstest]
+    #[case("OPPONENT", BinancePriceMatch::Opponent)]
+    #[case("opponent", BinancePriceMatch::Opponent)]
+    #[case("OPPONENT_5", BinancePriceMatch::Opponent5)]
+    #[case("opponent_5", BinancePriceMatch::Opponent5)]
+    #[case("QUEUE_20", BinancePriceMatch::Queue20)]
+    #[case("queue_20", BinancePriceMatch::Queue20)]
+    fn test_price_match_from_param_valid(#[case] input: &str, #[case] expected: BinancePriceMatch) {
+        let result = BinancePriceMatch::from_param(input).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case("NONE")]
+    #[case("invalid")]
+    #[case("")]
+    fn test_price_match_from_param_invalid(#[case] input: &str) {
+        assert!(BinancePriceMatch::from_param(input).is_err());
     }
 }

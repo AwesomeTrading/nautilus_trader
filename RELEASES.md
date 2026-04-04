@@ -226,6 +226,14 @@ Released on TBD (UTC).
 - Added pending cancel/update to event emitter in Rust (#3739), thanks @Javdu10
 - Added `LimitIfTouched`, `MarketToLimit`, `TrailingStopMarket`, and `TrailingStopLimit` to `transform_order_to_pyo3` Cython-to-PyO3 order converter
 - Added PyO3 type assertions to adapter submit-order tests (Hyperliquid, Bybit, Kraken, Architect AX) to catch Cython/PyO3 type boundary regressions
+- Added Binance missing `BinanceFilterType` variants and `RawRequests` rate limit type for complete API enum coverage (Rust)
+- Added Binance unit tests for liquidation, ADL, settlement, and insurance fill parsing with `is_exchange_generated` detection (Rust)
+- Added Binance parametrized tests for `resolve_commission` fallback and `make_venue_position_id` (Rust)
+- Added Binance Futures priceMatch (BBO) order support (Rust)
+- Added Bybit `BybitWsFrame` enum separating wire-level deserialization from public `BybitWsMessage` API per adapter spec pattern
+- Added Bybit frame classification and subscription correlation test coverage (25 handler tests)
+- Added Databento feed handler integration tests with mock LSG server
+- Added Databento MBO buffering unit tests and proptests
 - Added OKX `QuoteCache` integration and option greeks subscription lifecycle tests
 - Added OKX reconciliation pagination cap warnings when fetches hit the maximum page limit
 - Added OKX trade-level fill dedup via `emitted_trades` DashSet with atomic insert for cross-stream safety
@@ -234,14 +242,7 @@ Released on TBD (UTC).
 - Added OKX execution client integration tests for trade dedup, algo cancel rejections, batch cancel failures, and concurrent dedup
 - Added OKX HTTP mock test for `place_algo_order` `sCode` rejection path
 - Added OKX `OKXPriceType`, `OKXSettlementState`, `OKXQuickMarginType` enums for type-safe field deserialization
-- Added Bybit `BybitWsFrame` enum separating wire-level deserialization from public `BybitWsMessage` API per adapter spec pattern
-- Added Bybit frame classification and subscription correlation test coverage (25 handler tests)
-- Added Databento feed handler integration tests with mock LSG server
-- Added Databento MBO buffering unit tests and proptests
 - Added Tardis HTTP and WebSocket mock server integration tests
-- Added Binance missing `BinanceFilterType` variants and `RawRequests` rate limit type for complete API enum coverage (Rust)
-- Added Binance unit tests for liquidation, ADL, settlement, and insurance fill parsing with `is_exchange_generated` detection (Rust)
-- Added Binance parametrized tests for `resolve_commission` fallback and `make_venue_position_id` (Rust)
 - Replaced Binance `WsDispatchState` `DashSet` dedup with `FifoCache` from `nautilus_common` for bounded FIFO eviction with proper `remove()` cleanup
 - Replaced Bybit topic string constants with `BybitWsPublicChannel` and `BybitWsPrivateChannel` enum references
 - Replaced `AtomicMap` and `AtomicSet` type aliases with newtypes wrapping `ArcSwap` for ergonomic read-heavy concurrent collections

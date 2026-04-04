@@ -31,6 +31,7 @@ use nautilus_model::{
     enums::{OrderSide, OrderType},
     events::{OrderAccepted, OrderEventAny},
     identifiers::{AccountId, ClientOrderId, InstrumentId, StrategyId, VenueOrderId},
+    types::Price,
 };
 
 /// The type of operation a pending WS API request represents.
@@ -63,6 +64,7 @@ pub struct OrderIdentity {
     pub strategy_id: StrategyId,
     pub order_side: OrderSide,
     pub order_type: OrderType,
+    pub price: Option<Price>,
 }
 
 /// Tracks order lifecycle state for dispatch routing.

@@ -110,8 +110,8 @@ use crate::{
         },
         encoder::{decode_broker_id, encode_broker_id},
         enums::{
-            BinanceEnvironment, BinancePositionSide, BinanceProductType, BinanceSide,
-            BinanceTimeInForce, BinanceWorkingType,
+            BinanceEnvironment, BinancePositionSide, BinancePriceMatch, BinanceProductType,
+            BinanceSide, BinanceTimeInForce, BinanceWorkingType,
         },
         symbol::format_binance_symbol,
     },
@@ -438,6 +438,7 @@ impl BinanceFuturesExecutionClient {
                 strategy_id,
                 order_side,
                 order_type,
+                price,
             },
         );
 
@@ -448,6 +449,13 @@ impl BinanceFuturesExecutionClient {
             .as_ref()
             .and_then(|p| p.get_bool("close_position"))
             .unwrap_or(false);
+
+        let price_match = cmd
+            .params
+            .as_ref()
+            .and_then(|p| p.get_str("price_match"))
+            .map(BinancePriceMatch::from_param)
+            .transpose()?;
 
         let callback_rate = trailing_offset
             .map(trailing_offset_to_callback_rate_string)
@@ -494,7 +502,11 @@ impl BinanceFuturesExecutionClient {
                     None
                 },
                 quantity: Some(quantity.to_string()),
-                price: price.map(|p| p.to_string()),
+                price: if price_match.is_some() {
+                    None
+                } else {
+                    price.map(|p| p.to_string())
+                },
                 new_client_order_id: Some(client_id_str),
                 stop_price: trigger_price.map(|p| p.to_string()),
                 reduce_only: if reduce_only { Some(true) } else { None },
@@ -507,7 +519,7 @@ impl BinanceFuturesExecutionClient {
                 new_order_resp_type: None,
                 good_till_date: None,
                 recv_window: None,
-                price_match: None,
+                price_match,
                 self_trade_prevention_mode: None,
             };
 
@@ -588,6 +600,7 @@ impl BinanceFuturesExecutionClient {
                         reduce_only,
                         post_only,
                         position_side,
+                        price_match,
                     )
                     .await
             };
@@ -1719,6 +1732,19 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             }
         }
 
+        if let Some(pm_str) = cmd.params.as_ref().and_then(|p| p.get_str("price_match")) {
+            BinancePriceMatch::from_param(pm_str)?;
+            let order_type = order.order_type();
+            anyhow::ensure!(
+                !order.is_post_only(),
+                "price_match cannot be combined with post-only orders"
+            );
+            anyhow::ensure!(
+                order_type == OrderType::Limit,
+                "price_match is not supported for order type {order_type:?}"
+            );
+        }
+
         log::debug!("OrderSubmitted client_order_id={}", order.client_order_id());
         self.emitter.emit_order_submitted(&order);
 
@@ -2324,6 +2350,43 @@ fn dispatch_order_update(
                     false,
                 );
                 emitter.send_order_event(OrderEventAny::Accepted(accepted));
+
+                // Detect venue-assigned price changes (e.g. priceMatch orders)
+                if let Some(submitted_price) = identity.price {
+                    let venue_price: f64 = order.original_price.parse().unwrap_or(0.0);
+                    if venue_price > 0.0 {
+                        let venue_price = Price::new(venue_price, price_precision);
+                        let submitted_at_precision =
+                            Price::new(submitted_price.as_f64(), price_precision);
+
+                        if venue_price != submitted_at_precision {
+                            let quantity: f64 = order.original_qty.parse().unwrap_or(0.0);
+                            let trigger_price: f64 = order.stop_price.parse().unwrap_or(0.0);
+                            let updated = OrderUpdated::new(
+                                emitter.trader_id(),
+                                identity.strategy_id,
+                                identity.instrument_id,
+                                client_order_id,
+                                Quantity::new(quantity, size_precision),
+                                UUID4::new(),
+                                ts_event,
+                                ts_init,
+                                false,
+                                Some(venue_order_id),
+                                Some(account_id),
+                                Some(venue_price),
+                                if trigger_price > 0.0 {
+                                    Some(Price::new(trigger_price, price_precision))
+                                } else {
+                                    None
+                                },
+                                None,
+                                false,
+                            );
+                            emitter.send_order_event(OrderEventAny::Updated(updated));
+                        }
+                    }
+                }
             }
             BinanceExecutionType::Trade => {
                 let dedup_key = (order.symbol, order.trade_id);
@@ -3425,6 +3488,7 @@ mod tests {
                 strategy_id: StrategyId::from("TEST-STRATEGY"),
                 order_side: OrderSide::Buy,
                 order_type: OrderType::Limit,
+                price: None,
             },
         );
         dispatch_state

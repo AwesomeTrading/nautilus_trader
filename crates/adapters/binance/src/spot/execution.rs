@@ -244,6 +244,7 @@ impl BinanceSpotExecutionClient {
                 strategy_id,
                 order_side,
                 order_type,
+                price,
             },
         );
 
@@ -2111,6 +2112,7 @@ mod tests {
                 strategy_id: StrategyId::from("TEST-STRATEGY"),
                 order_side: OrderSide::Buy,
                 order_type: OrderType::Limit,
+                price: None,
             },
         );
         dispatch_state
