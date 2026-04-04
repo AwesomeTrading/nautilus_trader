@@ -7524,3 +7524,92 @@ fn test_l1_no_aggressor_trades_track_price(
         "NoAggressor trades should track price like other aggressor sides"
     );
 }
+
+#[rstest]
+fn test_stale_trade_tick_does_not_mutate_book(instrument_eth_usdt: InstrumentAny) {
+    let cache = Rc::new(RefCell::new(Cache::default()));
+    let clock = Rc::new(RefCell::new(TestClock::new()));
+    let mut engine = OrderMatchingEngine::new(
+        instrument_eth_usdt.clone(),
+        1,
+        FillModelAny::default(),
+        FeeModelAny::default(),
+        BookType::L1_MBP,
+        OmsType::Netting,
+        AccountType::Cash,
+        clock,
+        cache,
+        OrderMatchingEngineConfig {
+            trade_execution: true,
+            ..Default::default()
+        },
+    );
+
+    let quote = QuoteTick::new(
+        instrument_eth_usdt.id(),
+        Price::from("1000.00"),
+        Price::from("1000.00"),
+        Quantity::from("1.000"),
+        Quantity::from("1.000"),
+        UnixNanos::from(2),
+        UnixNanos::from(2),
+    );
+    engine.process_quote_tick(&quote);
+
+    let stale_trade = TradeTick::new(
+        instrument_eth_usdt.id(),
+        Price::from("1100.00"),
+        Quantity::from("1.000"),
+        AggressorSide::Buyer,
+        TradeId::new("1"),
+        UnixNanos::from(1),
+        UnixNanos::from(1),
+    );
+    engine.process_trade_tick(&stale_trade);
+
+    assert_eq!(engine.best_bid_price(), Some(Price::from("1000.00")));
+    assert_eq!(engine.best_ask_price(), Some(Price::from("1000.00")));
+}
+
+#[rstest]
+fn test_stale_quote_tick_does_not_mutate_book(instrument_eth_usdt: InstrumentAny) {
+    let cache = Rc::new(RefCell::new(Cache::default()));
+    let clock = Rc::new(RefCell::new(TestClock::new()));
+    let mut engine = OrderMatchingEngine::new(
+        instrument_eth_usdt.clone(),
+        1,
+        FillModelAny::default(),
+        FeeModelAny::default(),
+        BookType::L1_MBP,
+        OmsType::Netting,
+        AccountType::Cash,
+        clock,
+        cache,
+        OrderMatchingEngineConfig::default(),
+    );
+
+    let trade = TradeTick::new(
+        instrument_eth_usdt.id(),
+        Price::from("1000.00"),
+        Quantity::from("1.000"),
+        AggressorSide::Buyer,
+        TradeId::new("1"),
+        UnixNanos::from(2),
+        UnixNanos::from(2),
+    );
+    engine.process_trade_tick(&trade);
+
+    let stale_quote = QuoteTick::new(
+        instrument_eth_usdt.id(),
+        Price::from("1100.00"),
+        Price::from("1200.00"),
+        Quantity::from("1.000"),
+        Quantity::from("1.000"),
+        UnixNanos::from(1),
+        UnixNanos::from(1),
+    );
+    engine.process_quote_tick(&stale_quote);
+
+    assert_eq!(engine.best_bid_price(), Some(Price::from("1000.00")));
+    assert_eq!(engine.best_ask_price(), Some(Price::from("1000.00")));
+}

@@ -4408,6 +4408,16 @@ cdef class OrderMatchingEngine:
             )
 
         if self.book_type == BookType.L1_MBP:
+            # Stale update: skip book mutation and cache updates
+            if tick._mem.ts_event < orderbook_ts_last(&self._book._mem):
+                self._log.warning(
+                    f"Skipping stale quote: ts_event {tick.ts_event} < "
+                    f"book.ts_last {orderbook_ts_last(&self._book._mem)} "
+                    f"for {tick.instrument_id}",
+                )
+                self.iterate(tick.ts_init)
+                return
+
             if self._queue_position:
                 self._decrement_l1_queue_on_quote(
                     tick._mem.bid_price.raw,
@@ -4467,6 +4477,16 @@ cdef class OrderMatchingEngine:
             )
 
         if self.book_type == BookType.L1_MBP:
+            # Stale update: skip book mutation and trade execution
+            if tick._mem.ts_event < orderbook_ts_last(&self._book._mem):
+                self._log.warning(
+                    f"Skipping stale trade: ts_event {tick.ts_event} < "
+                    f"book.ts_last {orderbook_ts_last(&self._book._mem)} "
+                    f"for {tick.instrument_id}",
+                )
+                self.iterate(tick.ts_init)
+                return
+
             self._book.update_trade_tick(tick)
 
         cdef AggressorSide aggressor_side = AggressorSide.NO_AGGRESSOR

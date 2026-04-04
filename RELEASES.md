@@ -86,6 +86,7 @@ Released on TBD (UTC).
 - Documented `aws-lc-rs` non-FIPS mode rationale (FIPS 140-3 module requires Go toolchain)
 
 ### Fixes
+- Fixed `OrderBook` L1 stale event mutation corrupting bid/ask (#3790), thanks for reporting @linimin
 - Fixed position index blob pollution in `update_position` (#3791), thanks @YeeTsai
 - Fixed strategy receiving historical events during startup reconciliation (#3793), thanks @filipmacek
 - Fixed `Trader::add_exec_algorithm` not registering the `{id}.execute` msgbus endpoint, causing orders with `exec_algorithm_id` to be silently dropped

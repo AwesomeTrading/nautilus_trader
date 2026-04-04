@@ -2953,8 +2953,8 @@ class TestSimulatedExchangeMarginAccount:
             instrument=_USDJPY_SIM,
             bid_price=90.000,
             ask_price=90.001,
-            ts_event=100_000,
-            ts_init=100_000,
+            ts_event=2_000_000_000,
+            ts_init=2_000_000_000,
         )
 
         self.exchange.process_quote_tick(tick2)

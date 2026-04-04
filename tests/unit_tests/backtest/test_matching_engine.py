@@ -354,6 +354,56 @@ class TestOrderMatchingEngine:
         assert matching_engine.best_bid_price() == Price.from_str("1000.000")
         assert matching_engine.best_ask_price() == Price.from_str("1000.000")
 
+    def test_stale_trade_tick_does_not_mutate_book(self) -> None:
+        # Arrange - seed with a quote at ts_event=2
+        quote = TestDataStubs.quote_tick(
+            instrument=self.instrument,
+            bid_price=1000.0,
+            ask_price=1000.0,
+            ts_event=2,
+            ts_init=2,
+        )
+        self.matching_engine.process_quote_tick(quote)
+
+        # Act - feed a stale trade with older ts_event=1
+        stale_trade = TestDataStubs.trade_tick(
+            instrument=self.instrument,
+            price=1100.0,
+            aggressor_side=AggressorSide.BUYER,
+            ts_event=1,
+            ts_init=1,
+        )
+        self.matching_engine.process_trade_tick(stale_trade)
+
+        # Assert - book and matching state unchanged
+        assert self.matching_engine.best_bid_price() == Price.from_str("1000.000")
+        assert self.matching_engine.best_ask_price() == Price.from_str("1000.000")
+
+    def test_stale_quote_tick_does_not_mutate_book(self) -> None:
+        # Arrange - seed with a trade at ts_event=2
+        trade = TestDataStubs.trade_tick(
+            instrument=self.instrument,
+            price=1000.0,
+            aggressor_side=AggressorSide.BUYER,
+            ts_event=2,
+            ts_init=2,
+        )
+        self.matching_engine.process_trade_tick(trade)
+
+        # Act - feed a stale quote with older ts_event=1
+        stale_quote = TestDataStubs.quote_tick(
+            instrument=self.instrument,
+            bid_price=1100.0,
+            ask_price=1200.0,
+            ts_event=1,
+            ts_init=1,
+        )
+        self.matching_engine.process_quote_tick(stale_quote)
+
+        # Assert - book and matching state unchanged
+        assert self.matching_engine.best_bid_price() == Price.from_str("1000.000")
+        assert self.matching_engine.best_ask_price() == Price.from_str("1000.000")
+
     def test_trade_execution_difference_buyer_aggressor(self) -> None:
         # This test demonstrates that trade_execution=True vs False produces the same result
         # for L1_MBP books since update_trade_tick sets both bid/ask to trade price anyway

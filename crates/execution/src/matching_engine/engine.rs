@@ -1186,6 +1186,18 @@ impl OrderMatchingEngine {
             .unwrap();
 
         if self.book_type == BookType::L1_MBP {
+            // Stale update: skip book mutation and cache updates
+            if quote.ts_event < self.book.ts_last {
+                log::warn!(
+                    "Skipping stale quote: ts_event {} < book.ts_last {} for {}",
+                    quote.ts_event,
+                    self.book.ts_last,
+                    self.book.instrument_id,
+                );
+                self.iterate(quote.ts_init, AggressorSide::NoAggressor);
+                return;
+            }
+
             if self.config.queue_position {
                 self.decrement_l1_queue_on_quote(
                     quote.bid_price.raw,
@@ -1478,6 +1490,18 @@ impl OrderMatchingEngine {
         let price_raw = trade.price.raw;
 
         if self.book_type == BookType::L1_MBP {
+            // Stale update: skip book mutation and trade execution
+            if trade.ts_event < self.book.ts_last {
+                log::warn!(
+                    "Skipping stale trade: ts_event {} < book.ts_last {} for {}",
+                    trade.ts_event,
+                    self.book.ts_last,
+                    self.book.instrument_id,
+                );
+                self.iterate(trade.ts_init, AggressorSide::NoAggressor);
+                return;
+            }
+
             self.book.update_trade_tick(trade).unwrap();
         }
 

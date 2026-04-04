@@ -1109,6 +1109,80 @@ fn test_book_update_trade_tick_advances_sequence() {
 }
 
 #[rstest]
+fn test_book_update_stale_trade_tick_does_not_mutate_l1() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L1_MBP);
+
+    let quote = QuoteTick::new(
+        instrument_id,
+        Price::from("10.000"),
+        Price::from("10.000"),
+        Quantity::from("1.00000000"),
+        Quantity::from("1.00000000"),
+        UnixNanos::from(2),
+        UnixNanos::from(2),
+    );
+    book.update_quote_tick(&quote).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+
+    // Stale trade with older ts_event should not mutate the book
+    let stale_trade = TradeTick::new(
+        instrument_id,
+        Price::from("11.000"),
+        Quantity::from("1.00000000"),
+        AggressorSide::Buyer,
+        TradeId::new("1"),
+        UnixNanos::from(1),
+        UnixNanos::from(1),
+    );
+    book.update_trade_tick(&stale_trade).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+}
+
+#[rstest]
+fn test_book_update_stale_quote_tick_does_not_mutate_l1() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L1_MBP);
+
+    let trade = TradeTick::new(
+        instrument_id,
+        Price::from("10.000"),
+        Quantity::from("1.00000000"),
+        AggressorSide::Buyer,
+        TradeId::new("1"),
+        UnixNanos::from(2),
+        UnixNanos::from(2),
+    );
+    book.update_trade_tick(&trade).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+
+    // Stale quote with older ts_event should not mutate the book
+    let stale_quote = QuoteTick::new(
+        instrument_id,
+        Price::from("11.000"),
+        Price::from("12.000"),
+        Quantity::from("1.00000000"),
+        Quantity::from("1.00000000"),
+        UnixNanos::from(1),
+        UnixNanos::from(1),
+    );
+    book.update_quote_tick(&stale_quote).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+}
+
+#[rstest]
 fn test_book_pprint() {
     let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
     let mut book = OrderBook::new(instrument_id, BookType::L3_MBO);
