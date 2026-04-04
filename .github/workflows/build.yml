@@ -165,7 +165,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-x86-py${{ matrix.python-version }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-x86
       RUST_BACKTRACE: 1
     # yamllint disable rule:line-length
     services:
@@ -212,8 +212,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
-          rust-cache-key: build-linux-x86-${{ matrix.python-version }}
-          rust-cache-workspaces: . -> target/build-linux-x86-py${{ matrix.python-version }}
+          rust-cache-key: build-linux-x86
+          rust-cache-workspaces: . -> target/build-linux-x86
           rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       - name: Install Nautilus CLI
@@ -240,6 +240,12 @@ jobs:
       - name: Run Rust tests (adapters)
         if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-adapters EXTRA_FEATURES="capnp,hypersync" NEXTEST_PROFILE=ci
+
+      - name: Clean Rust test artifacts
+        if: needs.plan.outputs.run-rust-tests == 'true'
+        run: |
+          rm -rf "${CARGO_TARGET_DIR}/nextest"
+          df -h .
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
       - name: Verify immutable CI inputs (pre-wheel build)
@@ -289,7 +295,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-arm-py${{ matrix.python-version }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-linux-arm
       RUST_BACKTRACE: 1
     # yamllint disable rule:line-length
     services:
@@ -336,8 +342,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
-          rust-cache-key: build-linux-arm-${{ matrix.python-version }}
-          rust-cache-workspaces: . -> target/build-linux-arm-py${{ matrix.python-version }}
+          rust-cache-key: build-linux-arm
+          rust-cache-workspaces: . -> target/build-linux-arm
           rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       - name: Install Nautilus CLI
@@ -364,6 +370,12 @@ jobs:
       - name: Run Rust tests (adapters)
         if: needs.plan.outputs.run-rust-tests == 'true'
         run: make cargo-test-adapters EXTRA_FEATURES="capnp" NEXTEST_PROFILE=ci
+
+      - name: Clean Rust test artifacts
+        if: needs.plan.outputs.run-rust-tests == 'true'
+        run: |
+          rm -rf "${CARGO_TARGET_DIR}/nextest"
+          df -h .
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
       - name: Verify immutable CI inputs (pre-wheel build)
@@ -408,7 +420,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-test-py${{ matrix.python-version }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos
       RUST_BACKTRACE: 1
     steps:
       # https://github.com/step-security/harden-runner
@@ -441,8 +453,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
-          rust-cache-key: build-macos-test-${{ matrix.python-version }}
-          rust-cache-workspaces: . -> target/build-macos-test-py${{ matrix.python-version }}
+          rust-cache-key: build-macos
+          rust-cache-workspaces: . -> target/build-macos
           rust-cache-on-failure: "false"
           rust-cache-save-if: ${{ github.event_name == 'push' }}
 
@@ -468,7 +480,7 @@ jobs:
         id: build-wheel
         uses: ./.github/actions/common-wheel-build
         env:
-          CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos-wheel-py${{ matrix.python-version }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-macos
           PARALLEL_BUILD: false
         with:
           python-version: ${{ matrix.python-version }}
@@ -478,7 +490,7 @@ jobs:
         if: failure() && steps.build-wheel.outcome == 'failure'
         env:
           # yamllint disable-line rule:line-length
-          MACOS_WHEEL_TARGET_DIR: ${{ github.workspace }}/target/build-macos-wheel-py${{ matrix.python-version }}/release
+          MACOS_WHEEL_TARGET_DIR: ${{ github.workspace }}/target/build-macos/release
         run: |
           set +e
 
@@ -561,7 +573,7 @@ jobs:
       - pre-commit
     env:
       BUILD_MODE: release
-      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-windows-py${{ matrix.python-version }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/build-windows
       HIGH_PRECISION: false
       PARALLEL_BUILD: false
       RUST_BACKTRACE: 1
@@ -589,8 +601,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           free-disk-space: "true"
-          rust-cache-key: build-windows-${{ matrix.python-version }}
-          rust-cache-workspaces: . -> target/build-windows-py${{ matrix.python-version }}
+          rust-cache-key: build-windows
+          rust-cache-workspaces: . -> target/build-windows
           rust-cache-save-if: ${{ github.event_name == 'push' }}
 
       # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
