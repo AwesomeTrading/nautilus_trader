@@ -15,12 +15,14 @@
 
 //! Python bindings for Binance configuration.
 
+use std::collections::HashMap;
+
 use nautilus_model::identifiers::{AccountId, TraderId};
 use pyo3::prelude::*;
 use rust_decimal::Decimal;
 
 use crate::{
-    common::enums::{BinanceEnvironment, BinanceProductType},
+    common::enums::{BinanceEnvironment, BinanceMarginType, BinanceProductType},
     config::{BinanceDataClientConfig, BinanceExecClientConfig},
 };
 
@@ -89,6 +91,9 @@ impl BinanceExecClientConfig {
         default_taker_fee = None,
         api_key = None,
         api_secret = None,
+        futures_leverages = None,
+        futures_margin_types = None,
+        treat_expired_as_canceled = false,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn py_new(
@@ -104,6 +109,9 @@ impl BinanceExecClientConfig {
         default_taker_fee: Option<f64>,
         api_key: Option<String>,
         api_secret: Option<String>,
+        futures_leverages: Option<HashMap<String, u32>>,
+        futures_margin_types: Option<HashMap<String, BinanceMarginType>>,
+        treat_expired_as_canceled: bool,
     ) -> Self {
         let defaults = Self::default();
         Self {
@@ -121,6 +129,9 @@ impl BinanceExecClientConfig {
                 .unwrap_or(defaults.default_taker_fee),
             api_key: api_key.or(defaults.api_key),
             api_secret: api_secret.or(defaults.api_secret),
+            futures_leverages,
+            futures_margin_types,
+            treat_expired_as_canceled,
         }
     }
 
@@ -183,6 +194,7 @@ mod tests {
         let account_id = AccountId::from("BINANCE-001");
         let config = BinanceExecClientConfig::py_new(
             trader_id, account_id, None, None, None, None, None, true, true, None, None, None,
+            None, None, false,
         );
         let defaults = BinanceExecClientConfig::default();
 
@@ -196,10 +208,23 @@ mod tests {
         assert_eq!(config.default_taker_fee, defaults.default_taker_fee);
         assert_eq!(config.api_key, defaults.api_key);
         assert_eq!(config.api_secret, defaults.api_secret);
+        assert_eq!(config.futures_leverages, defaults.futures_leverages);
+        assert_eq!(config.futures_margin_types, defaults.futures_margin_types);
+        assert_eq!(
+            config.treat_expired_as_canceled,
+            defaults.treat_expired_as_canceled
+        );
     }
 
     #[rstest]
     fn test_exec_client_py_new_preserves_explicit_overrides() {
+        use std::collections::HashMap;
+
+        use crate::common::enums::BinanceMarginType;
+
+        let leverages = HashMap::from([("BTCUSDT".to_string(), 20)]);
+        let margin_types = HashMap::from([("BTCUSDT".to_string(), BinanceMarginType::Cross)]);
+
         let config = BinanceExecClientConfig::py_new(
             TraderId::from("TRADER-002"),
             AccountId::from("BINANCE-002"),
@@ -213,6 +238,9 @@ mod tests {
             Some(0.0015),
             Some("api-key".to_string()),
             Some("api-secret".to_string()),
+            Some(leverages.clone()),
+            Some(margin_types.clone()),
+            true,
         );
 
         assert_eq!(config.product_types, vec![BinanceProductType::UsdM]);
@@ -231,6 +259,9 @@ mod tests {
         assert_eq!(config.default_taker_fee, Decimal::try_from(0.0015).unwrap());
         assert_eq!(config.api_key.as_deref(), Some("api-key"));
         assert_eq!(config.api_secret.as_deref(), Some("api-secret"));
+        assert_eq!(config.futures_leverages, Some(leverages));
+        assert_eq!(config.futures_margin_types, Some(margin_types));
+        assert!(config.treat_expired_as_canceled);
     }
 
     #[rstest]
@@ -249,6 +280,9 @@ mod tests {
             Some(f64::NAN),
             None,
             None,
+            None,
+            None,
+            false,
         );
 
         assert_eq!(config.default_taker_fee, defaults.default_taker_fee);

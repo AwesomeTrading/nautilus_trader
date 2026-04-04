@@ -155,9 +155,10 @@ impl BinanceFuturesDataClient {
             config.api_key.clone(),
             config.api_secret.clone(),
             config.base_url_http.clone(),
-            None, // recv_window
-            None, // timeout_secs
-            None, // proxy_url
+            None,  // recv_window
+            None,  // timeout_secs
+            None,  // proxy_url
+            false, // treat_expired_as_canceled
         )?;
 
         let ws_client = BinanceFuturesWebSocketClient::new(

@@ -15,13 +15,13 @@
 
 //! Binance adapter configuration structures.
 
-use std::any::Any;
+use std::{any::Any, collections::HashMap};
 
 use nautilus_model::identifiers::{AccountId, TraderId};
 use nautilus_system::factories::ClientConfig;
 use rust_decimal::Decimal;
 
-use crate::common::enums::{BinanceEnvironment, BinanceProductType};
+use crate::common::enums::{BinanceEnvironment, BinanceMarginType, BinanceProductType};
 
 /// Configuration for Binance data client.
 ///
@@ -123,6 +123,16 @@ pub struct BinanceExecClientConfig {
     pub api_key: Option<String>,
     /// API secret (Ed25519 base64-encoded, required, uses env var if not provided).
     pub api_secret: Option<String>,
+    /// Initial leverage per Binance symbol (e.g. BTCUSDT -> 20), applied during connect.
+    pub futures_leverages: Option<HashMap<String, u32>>,
+    /// Margin type per Binance symbol (e.g. BTCUSDT -> Cross), applied during connect.
+    pub futures_margin_types: Option<HashMap<String, BinanceMarginType>>,
+    /// If true, the EXPIRED execution type emits `OrderCanceled` instead of `OrderExpired`.
+    ///
+    /// Binance uses EXPIRED for certain cancel scenarios depending on order type
+    /// and time-in-force combination.
+    #[builder(default = false)]
+    pub treat_expired_as_canceled: bool,
 }
 
 impl Default for BinanceExecClientConfig {

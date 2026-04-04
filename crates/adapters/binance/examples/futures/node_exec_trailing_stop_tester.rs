@@ -54,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None,
         None,
         None,
+        false,
     )?;
 
     http_client.cancel_all_algo_orders(instrument_id).await?;

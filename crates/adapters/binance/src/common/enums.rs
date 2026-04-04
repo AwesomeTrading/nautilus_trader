@@ -213,14 +213,33 @@ pub enum BinancePositionSide {
 }
 
 /// Margin type applied to a position.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+///
+/// Serializes to the POST format (`CROSSED`/`ISOLATED`) expected by
+/// `/fapi/v1/marginType`. Deserializes from both POST and GET/WS
+/// formats (`cross`/`isolated`) via serde aliases.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(
+        module = "nautilus_trader.core.nautilus_pyo3.binance",
+        eq,
+        from_py_object,
+        rename_all = "SCREAMING_SNAKE_CASE"
+    )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.binance")
+)]
 pub enum BinanceMarginType {
     /// Cross margin.
+    #[serde(rename = "CROSSED", alias = "cross")]
     Cross,
     /// Isolated margin.
+    #[serde(rename = "ISOLATED", alias = "isolated")]
     Isolated,
     /// Unknown or undocumented value.
+    #[default]
     #[serde(other)]
     Unknown,
 }
@@ -918,6 +937,32 @@ mod tests {
     ) {
         let value: BinanceRateLimitInterval = serde_json::from_str(raw).unwrap();
         assert_eq!(value, expected);
+    }
+
+    #[rstest]
+    #[case(BinanceMarginType::Cross, "CROSSED", "cross")]
+    #[case(BinanceMarginType::Isolated, "ISOLATED", "isolated")]
+    fn test_margin_type_serde_roundtrip(
+        #[case] variant: BinanceMarginType,
+        #[case] post_format: &str,
+        #[case] get_format: &str,
+    ) {
+        let serialized = serde_json::to_value(variant).unwrap();
+        assert_eq!(serialized, json!(post_format));
+
+        let from_post: BinanceMarginType =
+            serde_json::from_str(&format!("\"{post_format}\"")).unwrap();
+        assert_eq!(from_post, variant);
+
+        let from_get: BinanceMarginType =
+            serde_json::from_str(&format!("\"{get_format}\"")).unwrap();
+        assert_eq!(from_get, variant);
+    }
+
+    #[rstest]
+    fn test_margin_type_unknown_fallback() {
+        let value: BinanceMarginType = serde_json::from_str("\"SOMETHING_NEW\"").unwrap();
+        assert_eq!(value, BinanceMarginType::Unknown);
     }
 
     #[rstest]

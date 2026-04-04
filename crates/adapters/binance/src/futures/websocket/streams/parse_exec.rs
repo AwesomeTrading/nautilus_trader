@@ -55,6 +55,7 @@ pub fn parse_futures_order_update_to_order_status(
     price_precision: u8,
     size_precision: u8,
     account_id: AccountId,
+    treat_expired_as_canceled: bool,
     ts_init: UnixNanos,
 ) -> anyhow::Result<OrderStatusReport> {
     let order = &msg.order;
@@ -67,7 +68,7 @@ pub fn parse_futures_order_update_to_order_status(
     let venue_order_id = VenueOrderId::new(order.order_id.to_string());
 
     let order_side = parse_side(order.side);
-    let order_status = parse_order_status(order.order_status);
+    let order_status = parse_order_status(order.order_status, treat_expired_as_canceled);
     let order_type = parse_futures_order_type(order.order_type);
     let time_in_force = parse_time_in_force(order.time_in_force);
 
@@ -354,7 +355,7 @@ fn parse_side(side: BinanceSide) -> OrderSide {
     }
 }
 
-fn parse_order_status(status: BinanceOrderStatus) -> OrderStatus {
+fn parse_order_status(status: BinanceOrderStatus, treat_expired_as_canceled: bool) -> OrderStatus {
     match status {
         BinanceOrderStatus::New | BinanceOrderStatus::PendingNew => OrderStatus::Accepted,
         BinanceOrderStatus::PartiallyFilled => OrderStatus::PartiallyFilled,
@@ -363,7 +364,13 @@ fn parse_order_status(status: BinanceOrderStatus) -> OrderStatus {
         | BinanceOrderStatus::NewInsurance => OrderStatus::Filled,
         BinanceOrderStatus::Canceled | BinanceOrderStatus::PendingCancel => OrderStatus::Canceled,
         BinanceOrderStatus::Rejected => OrderStatus::Rejected,
-        BinanceOrderStatus::Expired | BinanceOrderStatus::ExpiredInMatch => OrderStatus::Expired,
+        BinanceOrderStatus::Expired | BinanceOrderStatus::ExpiredInMatch => {
+            if treat_expired_as_canceled {
+                OrderStatus::Canceled
+            } else {
+                OrderStatus::Expired
+            }
+        }
         BinanceOrderStatus::Unknown => OrderStatus::Accepted,
     }
 }
@@ -440,6 +447,7 @@ mod tests {
             PRICE_PRECISION,
             SIZE_PRECISION,
             account_id(),
+            false,
             ts_init,
         )
         .unwrap();
@@ -637,6 +645,7 @@ mod tests {
             PRICE_PRECISION,
             SIZE_PRECISION,
             account_id(),
+            false,
             ts_init,
         )
         .unwrap();
@@ -698,6 +707,7 @@ mod tests {
             PRICE_PRECISION,
             SIZE_PRECISION,
             account_id(),
+            false,
             ts_init,
         )
         .unwrap();
@@ -742,14 +752,28 @@ mod tests {
 
     #[rstest]
     fn test_parse_order_status_new_adl_maps_to_filled() {
-        let result = parse_order_status(BinanceOrderStatus::NewAdl);
+        let result = parse_order_status(BinanceOrderStatus::NewAdl, false);
         assert_eq!(result, OrderStatus::Filled);
     }
 
     #[rstest]
     fn test_parse_order_status_new_insurance_maps_to_filled() {
-        let result = parse_order_status(BinanceOrderStatus::NewInsurance);
+        let result = parse_order_status(BinanceOrderStatus::NewInsurance, false);
         assert_eq!(result, OrderStatus::Filled);
+    }
+
+    #[rstest]
+    #[case(BinanceOrderStatus::Expired, false, OrderStatus::Expired)]
+    #[case(BinanceOrderStatus::Expired, true, OrderStatus::Canceled)]
+    #[case(BinanceOrderStatus::ExpiredInMatch, false, OrderStatus::Expired)]
+    #[case(BinanceOrderStatus::ExpiredInMatch, true, OrderStatus::Canceled)]
+    fn test_parse_order_status_expired_respects_treat_as_canceled(
+        #[case] status: BinanceOrderStatus,
+        #[case] treat_expired_as_canceled: bool,
+        #[case] expected: OrderStatus,
+    ) {
+        let result = parse_order_status(status, treat_expired_as_canceled);
+        assert_eq!(result, expected);
     }
 
     #[rstest]
@@ -826,6 +850,7 @@ mod tests {
             PRICE_PRECISION,
             SIZE_PRECISION,
             account_id(),
+            false,
             UnixNanos::from(1_000_000_000u64),
         )
         .unwrap();
@@ -844,6 +869,7 @@ mod tests {
             PRICE_PRECISION,
             SIZE_PRECISION,
             account_id(),
+            false,
             UnixNanos::from(1_000_000_000u64),
         )
         .unwrap();

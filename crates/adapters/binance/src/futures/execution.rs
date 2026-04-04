@@ -53,7 +53,7 @@ use nautilus_model::{
     },
     events::{
         AccountState, OrderAccepted, OrderCancelRejected, OrderCanceled, OrderEventAny,
-        OrderFilled, OrderModifyRejected, OrderRejected, OrderUpdated,
+        OrderExpired, OrderFilled, OrderModifyRejected, OrderRejected, OrderUpdated,
     },
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, PositionId, Symbol, TradeId, Venue,
@@ -76,7 +76,7 @@ use super::{
         query::{
             BatchCancelItem, BinanceAllOrdersParamsBuilder, BinanceOpenOrdersParamsBuilder,
             BinanceOrderQueryParamsBuilder, BinancePositionRiskParamsBuilder,
-            BinanceUserTradesParamsBuilder,
+            BinanceSetLeverageParams, BinanceSetMarginTypeParams, BinanceUserTradesParamsBuilder,
         },
     },
     websocket::{
@@ -191,6 +191,7 @@ impl BinanceFuturesExecutionClient {
             None, // recv_window
             None, // timeout_secs
             None, // proxy_url
+            config.treat_expired_as_canceled,
         )
         .context("failed to construct Binance Futures HTTP client")?;
 
@@ -855,6 +856,50 @@ impl BinanceFuturesExecutionClient {
             Some(entry_price),
         ))
     }
+
+    async fn apply_futures_config(&self) -> anyhow::Result<()> {
+        if let Some(ref leverages) = self.config.futures_leverages {
+            for (symbol, leverage) in leverages {
+                let params = BinanceSetLeverageParams {
+                    symbol: symbol.clone(),
+                    leverage: *leverage,
+                    recv_window: None,
+                };
+                let response = self
+                    .http_client
+                    .set_leverage(&params)
+                    .await
+                    .context(format!("failed to set leverage for {symbol}"))?;
+                log::info!("Set leverage {} {}X", response.symbol, response.leverage);
+            }
+        }
+
+        if let Some(ref margin_types) = self.config.futures_margin_types {
+            for (symbol, margin_type) in margin_types {
+                let params = BinanceSetMarginTypeParams {
+                    symbol: symbol.clone(),
+                    margin_type: *margin_type,
+                    recv_window: None,
+                };
+                match self.http_client.set_margin_type(&params).await {
+                    Ok(_) => {
+                        log::info!("Set {symbol} margin type to {margin_type:?}");
+                    }
+                    Err(e) => {
+                        let err_str = format!("{e}");
+                        if err_str.contains("-4046") {
+                            log::info!("{symbol} margin type already {margin_type:?}");
+                        } else {
+                            return Err(e)
+                                .context(format!("failed to set margin type for {symbol}"));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait(?Send)]
@@ -919,6 +964,11 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             instruments
         };
 
+        // Apply configured leverage and margin types
+        self.apply_futures_config()
+            .await
+            .context("failed to apply futures config")?;
+
         // Create listen key for user data stream
         log::info!("Creating listen key for user data stream...");
         let listen_key_response = self
@@ -959,6 +1009,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             let product_type = self.product_type;
             let use_position_ids = self.config.use_position_ids;
             let default_taker_fee = self.config.default_taker_fee;
+            let treat_expired_as_canceled = self.config.treat_expired_as_canceled;
             let dispatch_state = self.dispatch_state.clone();
             let triggered_algo_ids = self.triggered_algo_order_ids.clone();
             let algo_client_ids = self.algo_client_order_ids.clone();
@@ -983,6 +1034,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                                 &algo_client_ids,
                                 use_position_ids,
                                 default_taker_fee,
+                                treat_expired_as_canceled,
                                 &seen_trade_ids,
                             );
                         }
@@ -1185,6 +1237,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                     self.core.account_id,
                     instrument_id,
                     size_precision,
+                    self.config.treat_expired_as_canceled,
                     ts_init,
                 )?;
                 Ok(Some(report))
@@ -1244,6 +1297,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                         self.core.account_id,
                         instrument_id,
                         size_precision,
+                        self.config.treat_expired_as_canceled,
                         ts_init,
                     ) {
                         reports.push(report);
@@ -1258,6 +1312,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                             self.core.account_id,
                             instrument.id(),
                             instrument.size_precision(),
+                            self.config.treat_expired_as_canceled,
                             ts_init,
                         )
                     {
@@ -1324,6 +1379,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                     self.core.account_id,
                     instrument_id,
                     size_precision,
+                    self.config.treat_expired_as_canceled,
                     ts_init,
                 ) {
                     reports.push(report);
@@ -1498,6 +1554,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
             BINANCE_NAUTILUS_FUTURES_BROKER_ID,
         ));
         let (_, size_precision) = self.get_instrument_precision(command.instrument_id);
+        let treat_expired_as_canceled = self.config.treat_expired_as_canceled;
 
         self.spawn_task("query_order", async move {
             let mut builder = BinanceOrderQueryParamsBuilder::default();
@@ -1523,6 +1580,7 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
                         account_id,
                         command.instrument_id,
                         size_precision,
+                        treat_expired_as_canceled,
                         ts_init,
                     )?;
 
@@ -2071,6 +2129,7 @@ fn dispatch_ws_message(
     algo_client_ids: &Arc<AtomicSet<ClientOrderId>>,
     use_position_ids: bool,
     default_taker_fee: Decimal,
+    treat_expired_as_canceled: bool,
     seen_trade_ids: &Arc<Mutex<FifoCache<(ustr::Ustr, i64), 10_000>>>,
 ) {
     match msg {
@@ -2085,6 +2144,7 @@ fn dispatch_ws_message(
                 dispatch_state,
                 use_position_ids,
                 default_taker_fee,
+                treat_expired_as_canceled,
                 seen_trade_ids,
             );
         }
@@ -2163,6 +2223,7 @@ fn dispatch_order_update(
     dispatch_state: &WsDispatchState,
     use_position_ids: bool,
     default_taker_fee: Decimal,
+    treat_expired_as_canceled: bool,
     seen_trade_ids: &Arc<Mutex<FifoCache<(ustr::Ustr, i64), 10_000>>>,
 ) {
     let order = &msg.order;
@@ -2340,7 +2401,7 @@ fn dispatch_order_update(
                     dispatch_state.cleanup_terminal(client_order_id);
                 }
             }
-            BinanceExecutionType::Canceled | BinanceExecutionType::Expired => {
+            BinanceExecutionType::Canceled => {
                 ensure_accepted_emitted(
                     client_order_id,
                     account_id,
@@ -2364,6 +2425,48 @@ fn dispatch_order_update(
                 );
                 dispatch_state.cleanup_terminal(client_order_id);
                 emitter.send_order_event(OrderEventAny::Canceled(canceled));
+            }
+            BinanceExecutionType::Expired => {
+                ensure_accepted_emitted(
+                    client_order_id,
+                    account_id,
+                    venue_order_id,
+                    &identity,
+                    emitter,
+                    dispatch_state,
+                    ts_init,
+                );
+                dispatch_state.cleanup_terminal(client_order_id);
+
+                if treat_expired_as_canceled {
+                    let canceled = OrderCanceled::new(
+                        emitter.trader_id(),
+                        identity.strategy_id,
+                        identity.instrument_id,
+                        client_order_id,
+                        UUID4::new(),
+                        ts_event,
+                        ts_init,
+                        false,
+                        Some(venue_order_id),
+                        Some(account_id),
+                    );
+                    emitter.send_order_event(OrderEventAny::Canceled(canceled));
+                } else {
+                    let expired = OrderExpired::new(
+                        emitter.trader_id(),
+                        identity.strategy_id,
+                        identity.instrument_id,
+                        client_order_id,
+                        UUID4::new(),
+                        ts_event,
+                        ts_init,
+                        false,
+                        Some(venue_order_id),
+                        Some(account_id),
+                    );
+                    emitter.send_order_event(OrderEventAny::Expired(expired));
+                }
             }
             BinanceExecutionType::Amendment => {
                 let quantity: f64 = order.original_qty.parse().unwrap_or(0.0);
@@ -2438,6 +2541,7 @@ fn dispatch_order_update(
                     price_precision,
                     size_precision,
                     account_id,
+                    treat_expired_as_canceled,
                     ts_init,
                 ) {
                     Ok(status) => emitter.send_order_status_report(status),
@@ -2454,6 +2558,7 @@ fn dispatch_order_update(
                     price_precision,
                     size_precision,
                     account_id,
+                    treat_expired_as_canceled,
                     ts_init,
                 ) {
                     Ok(status) => emitter.send_order_status_report(status),
@@ -2580,6 +2685,7 @@ fn dispatch_exchange_generated_fill(
         price_precision,
         size_precision,
         account_id,
+        false, // Exchange-generated fills are not subject to expired-as-canceled
         ts_init,
     ) {
         Ok(status) => emitter.send_order_status_report(status),
@@ -3008,6 +3114,7 @@ mod tests {
             &dispatch_state,
             true,
             Decimal::new(4, 4),
+            false,
             &seen_trade_ids,
         );
         dispatch_order_update(
@@ -3020,6 +3127,7 @@ mod tests {
             &dispatch_state,
             true,
             Decimal::new(4, 4),
+            false,
             &seen_trade_ids,
         );
 
@@ -3065,6 +3173,7 @@ mod tests {
             &dispatch_state,
             true,
             Decimal::new(4, 4),
+            false,
             &seen_trade_ids,
         );
         dispatch_order_update(
@@ -3077,6 +3186,7 @@ mod tests {
             &dispatch_state,
             true,
             Decimal::new(4, 4),
+            false,
             &seen_trade_ids,
         );
 
@@ -3127,6 +3237,7 @@ mod tests {
             &dispatch_state,
             true,
             Decimal::new(4, 4),
+            false,
             &seen_trade_ids,
         );
         dispatch_order_update(
@@ -3139,6 +3250,7 @@ mod tests {
             &dispatch_state,
             true,
             Decimal::new(4, 4),
+            false,
             &seen_trade_ids,
         );
 
@@ -3296,6 +3408,7 @@ mod tests {
             None,
             None,
             None,
+            false,
         )
         .expect("Test HTTP client should be created")
     }

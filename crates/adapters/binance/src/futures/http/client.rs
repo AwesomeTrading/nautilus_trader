@@ -1104,6 +1104,7 @@ pub struct BinanceFuturesHttpClient {
     product_type: BinanceProductType,
     clock: &'static AtomicTime,
     instruments: Arc<DashMap<Ustr, BinanceFuturesInstrument>>,
+    treat_expired_as_canceled: bool,
 }
 
 impl BinanceFuturesHttpClient {
@@ -1123,6 +1124,7 @@ impl BinanceFuturesHttpClient {
         recv_window: Option<u64>,
         timeout_secs: Option<u64>,
         proxy_url: Option<String>,
+        treat_expired_as_canceled: bool,
     ) -> BinanceFuturesHttpResult<Self> {
         match product_type {
             BinanceProductType::UsdM | BinanceProductType::CoinM => {}
@@ -1149,6 +1151,7 @@ impl BinanceFuturesHttpClient {
             product_type,
             clock,
             instruments: Arc::new(DashMap::new()),
+            treat_expired_as_canceled,
         })
     }
 
@@ -1648,7 +1651,13 @@ impl BinanceFuturesHttpClient {
 
         let order = self.inner.submit_order(&params).await?;
         let ts_init = self.clock.get_time_ns();
-        order.to_order_status_report(account_id, instrument_id, size_precision, ts_init)
+        order.to_order_status_report(
+            account_id,
+            instrument_id,
+            size_precision,
+            self.treat_expired_as_canceled,
+            ts_init,
+        )
     }
 
     /// Submits an algo order (conditional order) to the Binance Algo Service.
@@ -1825,7 +1834,13 @@ impl BinanceFuturesHttpClient {
 
         let order = self.inner.modify_order(&params).await?;
         let ts_init = self.clock.get_time_ns();
-        order.to_order_status_report(account_id, instrument_id, size_precision, ts_init)
+        order.to_order_status_report(
+            account_id,
+            instrument_id,
+            size_precision,
+            self.treat_expired_as_canceled,
+            ts_init,
+        )
     }
 
     /// Modifies multiple orders in a single request (up to 5 orders).
@@ -2097,7 +2112,13 @@ impl BinanceFuturesHttpClient {
 
         let order = self.inner.query_order(&params).await?;
         let ts_init = self.clock.get_time_ns();
-        order.to_order_status_report(account_id, instrument_id, size_precision, ts_init)
+        order.to_order_status_report(
+            account_id,
+            instrument_id,
+            size_precision,
+            self.treat_expired_as_canceled,
+            ts_init,
+        )
     }
 
     /// Requests order status reports for open orders.
@@ -2153,6 +2174,7 @@ impl BinanceFuturesHttpClient {
                 account_id,
                 order_instrument_id,
                 size_precision,
+                self.treat_expired_as_canceled,
                 ts_init,
             ) {
                 Ok(report) => reports.push(report),
@@ -2425,6 +2447,7 @@ mod tests {
             None,
             None,
             None,
+            false,
         );
 
         assert!(result.is_err());
