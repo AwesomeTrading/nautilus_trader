@@ -97,6 +97,12 @@ who = "Chris Sellers <chris@cjdsellers.io>"
 criteria = "safe-to-deploy"
 delta = "1.8.1 -> 1.8.2"
 
+[[audits.arc-swap]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.9.0 -> 1.9.1"
+notes = "Single atomic ordering fix: compare_exchange failure order changed from Acquire to SeqCst in debt repayment. No new unsafe patterns."
+
 [[audits.base32]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
@@ -183,6 +189,12 @@ criteria = "safe-to-deploy"
 delta = "0.51.0 -> 0.52.1"
 notes = "Version bump only"
 
+[[audits.fastrand]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "2.3.0 -> 2.4.0"
+notes = "Improved f32/f64 generation quality, new f32/f64_inclusive methods, const with_seed, getrandom 0.3 bump. No new unsafe."
+
 [[audits.hyper]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
@@ -242,11 +254,23 @@ criteria = "safe-to-deploy"
 delta = "0.28.2 -> 0.28.3"
 notes = "5 bug fixes: enum into_pyobject deadlock, PyBytesWriter soundness (3.15 only), attach race (auto-initialize), Probe name collision, Py_NegativeRefcount FFI cfg. No new deps."
 
+[[audits.redis]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.1.0 -> 1.2.0"
+notes = "Read routing strategies for cluster replicas, lazy connection manager instantiation, sentinel TcpSettings. No new unsafe, no suspicious patterns."
+
 [[audits.rustls-webpki]]
 who = "Nautech Systems <info@nautechsystems.io>"
 criteria = "safe-to-deploy"
 delta = "0.103.9 -> 0.103.10"
 notes = "CRL authoritative_for() fix for multiple distribution point URIs, Rust 1.94 import compatibility. No new unsafe or dependency changes."
+
+[[audits.semver]]
+who = "Nautech Systems <info@nautechsystems.io>"
+criteria = "safe-to-deploy"
+delta = "1.0.27 -> 1.0.28"
+notes = "Edition 2021 bump, let-else refactoring, ptr_as_ptr clippy fixes, benchmark migration to criterion. No logic changes, no new unsafe."
 
 [[audits.serde_spanned]]
 who = "Nautech Systems <info@nautechsystems.io>"

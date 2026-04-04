@@ -277,7 +277,7 @@ Released on TBD (UTC).
 - Upgraded `databento` crate to v0.45.0
 - Upgraded `datafusion` crate to v53.0.0
 - Upgraded `pyo3` crate to v0.28.3
-- Upgraded `redis` crate to v1.1.0
+- Upgraded `redis` crate to v1.2.0
 - Upgraded `tokio` crate to v1.51.0
 - Upgraded `tokio-tungstenite` crate to v0.29.0
 
