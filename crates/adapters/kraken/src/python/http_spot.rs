@@ -160,6 +160,9 @@ impl KrakenSpotHttpClient {
     }
 
     /// Requests tradable instruments from Kraken.
+    ///
+    /// When `pairs` is `None` (loading all), also fetches tokenized asset pairs
+    /// (xStocks) and merges them with the default currency pairs.
     #[pyo3(name = "request_instruments")]
     #[pyo3(signature = (pairs=None))]
     fn py_request_instruments<'py>(

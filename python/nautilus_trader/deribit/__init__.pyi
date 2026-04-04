@@ -75,10 +75,10 @@ class DeribitHttpClient:
         api_secret: str | None = None,
         base_url: str | None = None,
         is_testnet: bool = False,
-        timeout_secs: int | None = None,
-        max_retries: int | None = None,
-        retry_delay_ms: int | None = None,
-        retry_delay_max_ms: int | None = None,
+        timeout_secs: int = 10,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1000,
+        retry_delay_max_ms: int = 10000,
         proxy_url: str | None = None,
     ) -> None: ...
     @property
@@ -137,7 +137,7 @@ class DeribitWebSocketClient:
         url: str | None = None,
         api_key: str | None = None,
         api_secret: str | None = None,
-        heartbeat_interval: int | None = None,
+        heartbeat_interval: int = 30,
         is_testnet: bool = False,
     ) -> None: ...
     @staticmethod
@@ -322,8 +322,8 @@ class DeribitProductType(enum.Enum):
 @typing.final
 class DeribitUpdateInterval(enum.Enum):
     RAW = ...
-    M_S100 = ...
-    AG_G2 = ...
+    MS100 = ...
+    AGG2 = ...
 
     def __init__(self, value: typing.Any) -> None: ...
     def __hash__(self) -> int: ...

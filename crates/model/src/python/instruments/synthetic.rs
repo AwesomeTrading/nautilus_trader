@@ -102,11 +102,14 @@ impl SyntheticInstrument {
         self.ts_init.as_u64()
     }
 
+    /// Returns whether the given formula compiles against this instrument's components.
     #[pyo3(name = "is_valid_formula")]
     fn py_is_valid_formula(&self, formula: &str) -> bool {
         self.is_valid_formula(formula)
     }
 
+    /// Replaces the derivation formula, recompiling it against the existing components.
+    ///
     /// # Errors
     ///
     /// Returns an error if parsing the new formula fails.
@@ -117,9 +120,11 @@ impl SyntheticInstrument {
 
     /// Calculates the price of the synthetic instrument based on the given component input prices
     /// provided as an array of `f64` values.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the input length does not match or formula evaluation fails.
+    /// Returns an error if the input length does not match, any input is non-finite, or formula
+    /// evaluation fails.
     #[pyo3(name = "calculate")]
     #[allow(clippy::needless_pass_by_value)]
     fn py_calculate(&mut self, inputs: Vec<f64>) -> PyResult<Price> {

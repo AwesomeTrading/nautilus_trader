@@ -41,11 +41,7 @@ class DataBackendSession:
         sql_query: str | None = None,
     ) -> None: ...
     def add_custom_file(
-        self,
-        type_name: str,
-        table_name: str,
-        file_path: str,
-        sql_query: str | None = ...,
+        self, type_name: str, table_name: str, file_path: str, sql_query: str | None = None
     ) -> None: ...
     def to_query_result(self) -> DataQueryResult: ...
     def register_object_store_from_uri(

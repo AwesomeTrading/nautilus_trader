@@ -199,7 +199,8 @@ pyo3-async-runtimes = { version = "0.28.0", default-features = false, features =
   "tokio",
   "tokio-runtime",
 ] }
-pyo3-stub-gen = { version = "0.20.0", default-features = false, features = [
+# Pinned: 0.21 rejects module paths outside pymodule root, blocking our mixed layout for now
+pyo3-stub-gen = { version = "=0.20.0", default-features = false, features = [
   "rust_decimal",
 ] }
 rand = { version = "0.10.0", default-features = false, features = [

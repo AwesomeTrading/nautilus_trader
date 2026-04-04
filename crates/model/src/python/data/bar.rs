@@ -127,19 +127,36 @@ impl BarSpecification {
         Ok(self.timedelta())
     }
 
-    /// Returns whether the aggregation method is time-driven.
+    /// Return a value indicating whether the aggregation method is time-driven:
+    ///  - `BarAggregation.Millisecond`
+    ///  - `BarAggregation.Second`
+    ///  - `BarAggregation.Minute`
+    ///  - `BarAggregation.Hour`
+    ///  - `BarAggregation.Day`
+    ///  - `BarAggregation.Week`
+    ///  - `BarAggregation.Month`
+    ///  - `BarAggregation.Year`
     #[pyo3(name = "is_time_aggregated")]
     fn py_is_time_aggregated(&self) -> bool {
         self.is_time_aggregated()
     }
 
-    /// Returns whether the aggregation method is threshold-driven.
+    /// Return a value indicating whether the aggregation method is threshold-driven:
+    ///  - `BarAggregation.Tick`
+    ///  - `BarAggregation.TickImbalance`
+    ///  - `BarAggregation.Volume`
+    ///  - `BarAggregation.VolumeImbalance`
+    ///  - `BarAggregation.Value`
+    ///  - `BarAggregation.ValueImbalance`
     #[pyo3(name = "is_threshold_aggregated")]
     fn py_is_threshold_aggregated(&self) -> bool {
         self.is_threshold_aggregated()
     }
 
-    /// Returns whether the aggregation method is information-driven.
+    /// Return a value indicating whether the aggregation method is information-driven:
+    ///  - `BarAggregation.TickRuns`
+    ///  - `BarAggregation.VolumeRuns`
+    ///  - `BarAggregation.ValueRuns`
     #[pyo3(name = "is_information_aggregated")]
     fn py_is_information_aggregated(&self) -> bool {
         self.is_information_aggregated()
@@ -382,18 +399,21 @@ impl BarType {
         self.aggregation_source() == AggregationSource::Internal
     }
 
+    /// Returns the `InstrumentId` for this bar type.
     #[getter]
     #[pyo3(name = "instrument_id")]
     fn py_instrument_id(&self) -> InstrumentId {
         self.instrument_id()
     }
 
+    /// Returns the `BarSpecification` for this bar type.
     #[getter]
     #[pyo3(name = "spec")]
     fn py_spec(&self) -> BarSpecification {
         self.spec()
     }
 
+    /// Returns the `AggregationSource` for this bar type.
     #[getter]
     #[pyo3(name = "aggregation_source")]
     fn py_aggregation_source(&self) -> AggregationSource {

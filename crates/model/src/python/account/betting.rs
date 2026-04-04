@@ -29,6 +29,7 @@ use crate::{
 #[pymethods]
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl BettingAccount {
+    /// Creates a new `BettingAccount` instance.
     #[new]
     #[pyo3(signature = (event, calculate_account_state))]
     pub fn py_new(event: AccountState, calculate_account_state: bool) -> Self {
@@ -191,6 +192,10 @@ impl BettingAccount {
             .map_err(to_pyvalue_err)
     }
 
+    /// Returns the balance impact for a betting order.
+    ///
+    /// For `Sell` (back) the impact is the negative stake (quantity).
+    /// For `Buy` (lay) the impact is the negative liability (quantity * (price - 1)).
     #[pyo3(name = "balance_impact")]
     fn py_balance_impact(
         &self,

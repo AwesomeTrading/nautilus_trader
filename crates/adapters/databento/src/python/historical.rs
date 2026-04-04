@@ -82,6 +82,7 @@ impl DatabentoHistoricalClient {
         Ok(Self { inner })
     }
 
+    /// Returns the API key from the stored credential.
     #[getter]
     #[pyo3(name = "api_key")]
     fn py_api_key(&self) -> &str {
