@@ -147,7 +147,7 @@ impl OKXExecutionClient {
         )
         .context("failed to construct OKX business websocket client")?;
 
-        let trade_mode = Self::derive_trade_mode(core.account_type, &config);
+        let trade_mode = Self::derive_default_trade_mode(core.account_type, &config);
         let clock = get_atomic_clock_realtime();
         let emitter = ExecutionEventEmitter::new(
             clock,
@@ -179,7 +179,10 @@ impl OKXExecutionClient {
         })
     }
 
-    fn derive_trade_mode(account_type: AccountType, config: &OKXExecClientConfig) -> OKXTradeMode {
+    fn derive_default_trade_mode(
+        account_type: AccountType,
+        config: &OKXExecClientConfig,
+    ) -> OKXTradeMode {
         let is_cross_margin = config.margin_mode == Some(OKXMarginMode::Cross);
 
         if account_type == AccountType::Cash {
@@ -198,6 +201,27 @@ impl OKXExecutionClient {
         } else {
             OKXTradeMode::Isolated
         }
+    }
+
+    fn trade_mode_for_order(
+        &self,
+        instrument_id: InstrumentId,
+        params: &Option<Params>,
+    ) -> OKXTradeMode {
+        if let Some(td_mode_str) = get_param_as_string(params, "td_mode") {
+            match td_mode_str.parse::<OKXTradeMode>() {
+                Ok(mode) => return mode,
+                Err(_) => {
+                    log::warn!("Invalid td_mode '{td_mode_str}', using derived trade mode");
+                }
+            }
+        }
+
+        derive_trade_mode_for_instrument(
+            instrument_id,
+            self.config.margin_mode,
+            self.config.use_spot_margin,
+        )
     }
 
     fn instrument_types(&self) -> Vec<OKXInstrumentType> {
@@ -237,7 +261,7 @@ impl OKXExecutionClient {
                 .ok_or_else(|| anyhow::anyhow!("Order not found: {}", cmd.client_order_id))?
         };
         let ws_private = self.ws_private.clone();
-        let trade_mode = self.trade_mode;
+        let trade_mode = self.trade_mode_for_order(cmd.instrument_id, &cmd.params);
 
         let emitter = self.emitter.clone();
         let clock = self.clock;
@@ -321,7 +345,7 @@ impl OKXExecutionClient {
                 .ok_or_else(|| anyhow::anyhow!("Order not found: {}", cmd.client_order_id))?
         };
         let http_client = self.http_client.clone();
-        let trade_mode = self.trade_mode;
+        let trade_mode = self.trade_mode_for_order(cmd.instrument_id, &cmd.params);
 
         let emitter = self.emitter.clone();
         let clock = self.clock;
@@ -349,6 +373,13 @@ impl OKXExecutionClient {
         let trailing_offset = order.trailing_offset();
         let trailing_offset_type = order.trailing_offset_type();
         let activation_price = order.activation_price();
+
+        let close_fraction = get_param_as_string(&cmd.params, "close_fraction");
+        let reduce_only = if close_fraction.is_some() {
+            Some(true)
+        } else {
+            Some(is_reduce_only)
+        };
 
         let (callback_ratio, callback_spread) = if order_type == OrderType::TrailingStopMarket {
             let offset = trailing_offset
@@ -383,8 +414,8 @@ impl OKXExecutionClient {
                     trigger_price,
                     trigger_type,
                     price,
-                    Some(is_reduce_only),
-                    None,
+                    reduce_only,
+                    close_fraction,
                     callback_ratio,
                     callback_spread,
                     activation_price,
@@ -682,6 +713,36 @@ impl OKXExecutionClient {
                 anyhow::bail!(
                     "Timeout waiting for account {account_id} to be registered after {timeout_secs}s"
                 );
+            }
+        }
+    }
+}
+
+fn derive_trade_mode_for_instrument(
+    instrument_id: InstrumentId,
+    margin_mode: Option<OKXMarginMode>,
+    use_spot_margin: bool,
+) -> OKXTradeMode {
+    let inst_type = okx_instrument_type_from_symbol(instrument_id.symbol.as_str());
+    let is_cross_margin = margin_mode == Some(OKXMarginMode::Cross);
+
+    match inst_type {
+        OKXInstrumentType::Spot => {
+            if use_spot_margin {
+                if is_cross_margin {
+                    OKXTradeMode::Cross
+                } else {
+                    OKXTradeMode::Isolated
+                }
+            } else {
+                OKXTradeMode::Cash
+            }
+        }
+        _ => {
+            if is_cross_margin {
+                OKXTradeMode::Cross
+            } else {
+                OKXTradeMode::Isolated
             }
         }
     }
@@ -1397,7 +1458,7 @@ impl ExecutionClient for OKXExecutionClient {
             batch_orders.push((
                 inst_type,
                 cmd.instrument_id,
-                self.trade_mode,
+                self.trade_mode_for_order(cmd.instrument_id, &cmd.params),
                 order.client_order_id(),
                 order.order_side(),
                 None, // position_side: WS client defaults to Net for derivatives
@@ -1745,5 +1806,202 @@ impl ExecutionClient for OKXExecutionClient {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use serde_json::Value;
+
+    use super::*;
+
+    fn build_config(
+        margin_mode: Option<OKXMarginMode>,
+        use_spot_margin: bool,
+    ) -> OKXExecClientConfig {
+        OKXExecClientConfig {
+            margin_mode,
+            use_spot_margin,
+            ..OKXExecClientConfig::default()
+        }
+    }
+
+    #[rstest]
+    #[case::cash_no_spot_margin(AccountType::Cash, None, false, OKXTradeMode::Cash)]
+    #[case::cash_spot_margin_cross(
+        AccountType::Cash,
+        Some(OKXMarginMode::Cross),
+        true,
+        OKXTradeMode::Cross
+    )]
+    #[case::cash_spot_margin_isolated(
+        AccountType::Cash,
+        Some(OKXMarginMode::Isolated),
+        true,
+        OKXTradeMode::Isolated
+    )]
+    #[case::cash_spot_margin_none(AccountType::Cash, None, true, OKXTradeMode::Isolated)]
+    #[case::margin_cross(
+        AccountType::Margin,
+        Some(OKXMarginMode::Cross),
+        false,
+        OKXTradeMode::Cross
+    )]
+    #[case::margin_isolated(
+        AccountType::Margin,
+        Some(OKXMarginMode::Isolated),
+        false,
+        OKXTradeMode::Isolated
+    )]
+    #[case::margin_none(AccountType::Margin, None, false, OKXTradeMode::Isolated)]
+    fn test_derive_default_trade_mode(
+        #[case] account_type: AccountType,
+        #[case] margin_mode: Option<OKXMarginMode>,
+        #[case] use_spot_margin: bool,
+        #[case] expected: OKXTradeMode,
+    ) {
+        let config = build_config(margin_mode, use_spot_margin);
+
+        let result = OKXExecutionClient::derive_default_trade_mode(account_type, &config);
+
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::spot_no_margin("BTC-USDT", None, false, OKXTradeMode::Cash)]
+    #[case::spot_cross_margin("BTC-USDT", Some(OKXMarginMode::Cross), true, OKXTradeMode::Cross)]
+    #[case::spot_isolated_margin(
+        "ETH-USDT",
+        Some(OKXMarginMode::Isolated),
+        true,
+        OKXTradeMode::Isolated
+    )]
+    #[case::spot_margin_no_mode("BTC-USDT", None, true, OKXTradeMode::Isolated)]
+    #[case::swap_cross(
+        "BTC-USDT-SWAP",
+        Some(OKXMarginMode::Cross),
+        false,
+        OKXTradeMode::Cross
+    )]
+    #[case::swap_isolated(
+        "BTC-USDT-SWAP",
+        Some(OKXMarginMode::Isolated),
+        false,
+        OKXTradeMode::Isolated
+    )]
+    #[case::swap_no_mode("ETH-USDT-SWAP", None, false, OKXTradeMode::Isolated)]
+    #[case::futures_cross(
+        "BTC-USDT-250328",
+        Some(OKXMarginMode::Cross),
+        false,
+        OKXTradeMode::Cross
+    )]
+    #[case::futures_isolated("BTC-USDT-250328", None, false, OKXTradeMode::Isolated)]
+    #[case::option_cross(
+        "BTC-USD-250328-50000-C",
+        Some(OKXMarginMode::Cross),
+        false,
+        OKXTradeMode::Cross
+    )]
+    #[case::option_isolated("BTC-USD-250328-50000-C", None, false, OKXTradeMode::Isolated)]
+    fn test_derive_trade_mode_for_instrument(
+        #[case] symbol: &str,
+        #[case] margin_mode: Option<OKXMarginMode>,
+        #[case] use_spot_margin: bool,
+        #[case] expected: OKXTradeMode,
+    ) {
+        let instrument_id = InstrumentId::from(format!("{symbol}.OKX").as_str());
+
+        let result = derive_trade_mode_for_instrument(instrument_id, margin_mode, use_spot_margin);
+
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::override_to_cross("cross", OKXTradeMode::Cross)]
+    #[case::override_to_cash("cash", OKXTradeMode::Cash)]
+    #[case::override_to_isolated("isolated", OKXTradeMode::Isolated)]
+    #[case::override_to_spot_isolated("spot_isolated", OKXTradeMode::SpotIsolated)]
+    #[case::case_insensitive("CROSS", OKXTradeMode::Cross)]
+    fn test_td_mode_param_override(#[case] td_mode_value: &str, #[case] expected: OKXTradeMode) {
+        let mut params = Params::new();
+        params.insert(
+            "td_mode".to_string(),
+            Value::String(td_mode_value.to_string()),
+        );
+
+        let result = get_param_as_string(&Some(params), "td_mode")
+            .and_then(|s| s.parse::<OKXTradeMode>().ok());
+
+        assert_eq!(result, Some(expected));
+    }
+
+    #[rstest]
+    fn test_td_mode_param_invalid_falls_through() {
+        let mut params = Params::new();
+        params.insert("td_mode".to_string(), Value::String("invalid".to_string()));
+
+        let result = get_param_as_string(&Some(params), "td_mode")
+            .and_then(|s| s.parse::<OKXTradeMode>().ok());
+
+        assert_eq!(result, None);
+    }
+
+    #[rstest]
+    fn test_td_mode_param_absent_falls_through() {
+        let result = get_param_as_string(&None, "td_mode");
+
+        assert_eq!(result, None);
+    }
+
+    #[rstest]
+    fn test_close_fraction_present_sets_reduce_only_true() {
+        let mut params = Params::new();
+        params.insert("close_fraction".to_string(), Value::String("1".to_string()));
+        let params = Some(params);
+
+        let close_fraction = get_param_as_string(&params, "close_fraction");
+        let is_reduce_only = false;
+        let reduce_only = if close_fraction.is_some() {
+            Some(true)
+        } else {
+            Some(is_reduce_only)
+        };
+
+        assert_eq!(close_fraction, Some("1".to_string()));
+        assert_eq!(reduce_only, Some(true));
+    }
+
+    #[rstest]
+    fn test_close_fraction_absent_preserves_reduce_only() {
+        let params: Option<Params> = None;
+
+        let close_fraction = get_param_as_string(&params, "close_fraction");
+        let is_reduce_only = false;
+        let reduce_only = if close_fraction.is_some() {
+            Some(true)
+        } else {
+            Some(is_reduce_only)
+        };
+
+        assert_eq!(close_fraction, None);
+        assert_eq!(reduce_only, Some(false));
+    }
+
+    #[rstest]
+    fn test_close_fraction_absent_with_reduce_only_true() {
+        let params: Option<Params> = None;
+
+        let close_fraction = get_param_as_string(&params, "close_fraction");
+        let is_reduce_only = true;
+        let reduce_only = if close_fraction.is_some() {
+            Some(true)
+        } else {
+            Some(is_reduce_only)
+        };
+
+        assert_eq!(close_fraction, None);
+        assert_eq!(reduce_only, Some(true));
     }
 }
