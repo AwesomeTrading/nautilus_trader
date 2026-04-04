@@ -2,7 +2,7 @@
 // DO NOT EDIT.
 // source: common/enums.capnp
 // capnp binary version: 1.3.0
-// capnpc crate version: 0.25.2
+// capnpc crate version: 0.25.3
 
 
 #[repr(u16)]
@@ -40,7 +40,7 @@ impl ::capnp::traits::HasTypeId for AccountType {
     const TYPE_ID: u64 = 0xdf1e_8bc7_c054_f256u64;
 }
 mod account_type {
-pub static ENCODED_NODE: [::capnp::Word; 35] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 35] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(86, 242, 84, 192, 199, 139, 30, 223),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -77,7 +77,7 @@ pub static ENCODED_NODE: [::capnp::Word; 35] = [
     ::capnp::word(98, 101, 116, 116, 105, 110, 103, 0),
     ::capnp::word(119, 97, 108, 108, 101, 116, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -115,7 +115,7 @@ impl ::capnp::traits::HasTypeId for AggressorSide {
     const TYPE_ID: u64 = 0xf201_19f9_54ad_2ae8u64;
 }
 mod aggressor_side {
-pub static ENCODED_NODE: [::capnp::Word; 33] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 33] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(232, 42, 173, 84, 249, 25, 1, 242),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -150,7 +150,7 @@ pub static ENCODED_NODE: [::capnp::Word; 33] = [
     ::capnp::word(98, 117, 121, 101, 114, 0, 0, 0),
     ::capnp::word(115, 101, 108, 108, 101, 114, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -196,7 +196,7 @@ impl ::capnp::traits::HasTypeId for AssetClass {
     const TYPE_ID: u64 = 0xebdb_0309_2fcb_7e04u64;
 }
 mod asset_class {
-pub static ENCODED_NODE: [::capnp::Word; 50] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 50] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(4, 126, 203, 47, 9, 3, 219, 235),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -248,7 +248,7 @@ pub static ENCODED_NODE: [::capnp::Word; 50] = [
     ::capnp::word(97, 108, 116, 101, 114, 110, 97, 116),
     ::capnp::word(105, 118, 101, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -304,7 +304,7 @@ impl ::capnp::traits::HasTypeId for InstrumentClass {
     const TYPE_ID: u64 = 0xe86e_440b_d7a7_b3f8u64;
 }
 mod instrument_class {
-pub static ENCODED_NODE: [::capnp::Word; 72] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 72] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(248, 179, 167, 215, 11, 68, 110, 232),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -378,7 +378,7 @@ pub static ENCODED_NODE: [::capnp::Word; 72] = [
     ::capnp::word(98, 105, 110, 97, 114, 121, 79, 112),
     ::capnp::word(116, 105, 111, 110, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -414,7 +414,7 @@ impl ::capnp::traits::HasTypeId for OptionKind {
     const TYPE_ID: u64 = 0xe888_3060_916e_0843u64;
 }
 mod option_kind {
-pub static ENCODED_NODE: [::capnp::Word; 27] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 27] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(67, 8, 110, 145, 96, 48, 136, 232),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -443,7 +443,7 @@ pub static ENCODED_NODE: [::capnp::Word; 27] = [
     ::capnp::word(99, 97, 108, 108, 0, 0, 0, 0),
     ::capnp::word(112, 117, 116, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -481,7 +481,7 @@ impl ::capnp::traits::HasTypeId for OrderSide {
     const TYPE_ID: u64 = 0x8ce6_6de3_c879_66dau64;
 }
 mod order_side {
-pub static ENCODED_NODE: [::capnp::Word; 32] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(218, 102, 121, 200, 227, 109, 230, 140),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -515,7 +515,7 @@ pub static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(98, 117, 121, 0, 0, 0, 0, 0),
     ::capnp::word(115, 101, 108, 108, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -565,7 +565,7 @@ impl ::capnp::traits::HasTypeId for OrderType {
     const TYPE_ID: u64 = 0xb0a4_8d4c_59d9_56b2u64;
 }
 mod order_type {
-pub static ENCODED_NODE: [::capnp::Word; 64] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 64] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(178, 86, 217, 89, 76, 141, 164, 176),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -631,7 +631,7 @@ pub static ENCODED_NODE: [::capnp::Word; 64] = [
     ::capnp::word(83, 116, 111, 112, 76, 105, 109, 105),
     ::capnp::word(116, 0, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -691,7 +691,7 @@ impl ::capnp::traits::HasTypeId for OrderStatus {
     const TYPE_ID: u64 = 0xf704_cd7d_31c2_8cd0u64;
 }
 mod order_status {
-pub static ENCODED_NODE: [::capnp::Word; 86] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 86] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(208, 140, 194, 49, 125, 205, 4, 247),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -779,7 +779,7 @@ pub static ENCODED_NODE: [::capnp::Word; 86] = [
     ::capnp::word(121, 70, 105, 108, 108, 101, 100, 0),
     ::capnp::word(102, 105, 108, 108, 101, 100, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -825,7 +825,7 @@ impl ::capnp::traits::HasTypeId for TimeInForce {
     const TYPE_ID: u64 = 0xa76d_7dff_8889_19d9u64;
 }
 mod time_in_force {
-pub static ENCODED_NODE: [::capnp::Word; 49] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 49] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(217, 25, 137, 136, 255, 125, 109, 167),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -876,7 +876,7 @@ pub static ENCODED_NODE: [::capnp::Word; 49] = [
     ::capnp::word(97, 116, 84, 104, 101, 67, 108, 111),
     ::capnp::word(115, 101, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -928,7 +928,7 @@ impl ::capnp::traits::HasTypeId for TriggerType {
     const TYPE_ID: u64 = 0xf5f1_1c17_3032_6a40u64;
 }
 mod trigger_type {
-pub static ENCODED_NODE: [::capnp::Word; 67] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 67] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(64, 106, 50, 48, 23, 28, 241, 245),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -997,7 +997,7 @@ pub static ENCODED_NODE: [::capnp::Word; 67] = [
     ::capnp::word(109, 105, 100, 80, 111, 105, 110, 116),
     ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1037,7 +1037,7 @@ impl ::capnp::traits::HasTypeId for ContingencyType {
     const TYPE_ID: u64 = 0xf38d_d3fd_792a_cfceu64;
 }
 mod contingency_type {
-pub static ENCODED_NODE: [::capnp::Word; 37] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 37] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(206, 207, 42, 121, 253, 211, 141, 243),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1076,7 +1076,7 @@ pub static ENCODED_NODE: [::capnp::Word; 37] = [
     ::capnp::word(111, 116, 111, 0, 0, 0, 0, 0),
     ::capnp::word(111, 117, 111, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1116,7 +1116,7 @@ impl ::capnp::traits::HasTypeId for PositionSide {
     const TYPE_ID: u64 = 0xf2e8_8dda_5506_c715u64;
 }
 mod position_side {
-pub static ENCODED_NODE: [::capnp::Word; 36] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 36] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(21, 199, 6, 85, 218, 141, 232, 242),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1154,7 +1154,7 @@ pub static ENCODED_NODE: [::capnp::Word; 36] = [
     ::capnp::word(108, 111, 110, 103, 0, 0, 0, 0),
     ::capnp::word(115, 104, 111, 114, 116, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1192,7 +1192,7 @@ impl ::capnp::traits::HasTypeId for LiquiditySide {
     const TYPE_ID: u64 = 0xc45b_5bbf_a763_18c4u64;
 }
 mod liquidity_side {
-pub static ENCODED_NODE: [::capnp::Word; 33] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 33] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(196, 24, 99, 167, 191, 91, 91, 196),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1227,7 +1227,7 @@ pub static ENCODED_NODE: [::capnp::Word; 33] = [
     ::capnp::word(109, 97, 107, 101, 114, 0, 0, 0),
     ::capnp::word(116, 97, 107, 101, 114, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1267,7 +1267,7 @@ impl ::capnp::traits::HasTypeId for BookAction {
     const TYPE_ID: u64 = 0x8ba2_aa32_63d7_b234u64;
 }
 mod book_action {
-pub static ENCODED_NODE: [::capnp::Word; 35] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 35] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(52, 178, 215, 99, 50, 170, 162, 139),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1304,7 +1304,7 @@ pub static ENCODED_NODE: [::capnp::Word; 35] = [
     ::capnp::word(100, 101, 108, 101, 116, 101, 0, 0),
     ::capnp::word(99, 108, 101, 97, 114, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1342,7 +1342,7 @@ impl ::capnp::traits::HasTypeId for BookType {
     const TYPE_ID: u64 = 0x8a33_0d53_857f_2062u64;
 }
 mod book_type {
-pub static ENCODED_NODE: [::capnp::Word; 35] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 35] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(98, 32, 127, 133, 83, 13, 51, 138),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1379,7 +1379,7 @@ pub static ENCODED_NODE: [::capnp::Word; 35] = [
     ::capnp::word(109, 97, 114, 107, 101, 116, 66, 121),
     ::capnp::word(79, 114, 100, 101, 114, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1419,7 +1419,7 @@ impl ::capnp::traits::HasTypeId for OrderBookDeltaType {
     const TYPE_ID: u64 = 0xfe6c_e40c_109f_fbdcu64;
 }
 mod order_book_delta_type {
-pub static ENCODED_NODE: [::capnp::Word; 36] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 36] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(220, 251, 159, 16, 12, 228, 108, 254),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1457,7 +1457,7 @@ pub static ENCODED_NODE: [::capnp::Word; 36] = [
     ::capnp::word(100, 101, 108, 101, 116, 101, 0, 0),
     ::capnp::word(99, 108, 101, 97, 114, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1501,7 +1501,7 @@ impl ::capnp::traits::HasTypeId for RecordFlag {
     const TYPE_ID: u64 = 0xcd55_3a95_d2e3_1571u64;
 }
 mod record_flag {
-pub static ENCODED_NODE: [::capnp::Word; 46] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 46] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(113, 21, 227, 210, 149, 58, 85, 205),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1549,7 +1549,7 @@ pub static ENCODED_NODE: [::capnp::Word; 46] = [
     ::capnp::word(114, 101, 115, 101, 114, 118, 101, 100),
     ::capnp::word(49, 0, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1585,7 +1585,7 @@ impl ::capnp::traits::HasTypeId for AggregationSource {
     const TYPE_ID: u64 = 0x946f_a419_8403_c015u64;
 }
 mod aggregation_source {
-pub static ENCODED_NODE: [::capnp::Word; 30] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 30] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(21, 192, 3, 132, 25, 164, 111, 148),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1617,7 +1617,7 @@ pub static ENCODED_NODE: [::capnp::Word; 30] = [
     ::capnp::word(105, 110, 116, 101, 114, 110, 97, 108),
     ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1659,7 +1659,7 @@ impl ::capnp::traits::HasTypeId for PriceType {
     const TYPE_ID: u64 = 0xec7c_ed40_7682_a0ccu64;
 }
 mod price_type {
-pub static ENCODED_NODE: [::capnp::Word; 39] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 39] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(204, 160, 130, 118, 64, 237, 124, 236),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1700,7 +1700,7 @@ pub static ENCODED_NODE: [::capnp::Word; 39] = [
     ::capnp::word(108, 97, 115, 116, 0, 0, 0, 0),
     ::capnp::word(109, 97, 114, 107, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1768,7 +1768,7 @@ impl ::capnp::traits::HasTypeId for BarAggregation {
     const TYPE_ID: u64 = 0xe9c7_bb7d_5a7f_09b2u64;
 }
 mod bar_aggregation {
-pub static ENCODED_NODE: [::capnp::Word; 99] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 99] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(178, 9, 127, 90, 125, 187, 199, 233),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1869,7 +1869,7 @@ pub static ENCODED_NODE: [::capnp::Word; 99] = [
     ::capnp::word(121, 101, 97, 114, 0, 0, 0, 0),
     ::capnp::word(114, 101, 110, 107, 111, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1911,7 +1911,7 @@ impl ::capnp::traits::HasTypeId for TrailingOffsetType {
     const TYPE_ID: u64 = 0xa371_3806_ebb6_9f8eu64;
 }
 mod trailing_offset_type {
-pub static ENCODED_NODE: [::capnp::Word; 44] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 44] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(142, 159, 182, 235, 6, 56, 113, 163),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -1957,7 +1957,7 @@ pub static ENCODED_NODE: [::capnp::Word; 44] = [
     ::capnp::word(112, 114, 105, 99, 101, 84, 105, 101),
     ::capnp::word(114, 0, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -1995,7 +1995,7 @@ impl ::capnp::traits::HasTypeId for OmsType {
     const TYPE_ID: u64 = 0xbb27_63d9_0807_97c5u64;
 }
 mod oms_type {
-pub static ENCODED_NODE: [::capnp::Word; 32] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(197, 151, 7, 8, 217, 99, 39, 187),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2029,7 +2029,7 @@ pub static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(110, 101, 116, 116, 105, 110, 103, 0),
     ::capnp::word(104, 101, 100, 103, 105, 110, 103, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -2067,7 +2067,7 @@ impl ::capnp::traits::HasTypeId for CurrencyType {
     const TYPE_ID: u64 = 0x83d2_f362_aae3_98b7u64;
 }
 mod currency_type {
-pub static ENCODED_NODE: [::capnp::Word; 32] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(183, 152, 227, 170, 98, 243, 210, 131),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2101,7 +2101,7 @@ pub static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(99, 111, 109, 109, 111, 100, 105, 116),
     ::capnp::word(121, 66, 97, 99, 107, 101, 100, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -2137,7 +2137,7 @@ impl ::capnp::traits::HasTypeId for InstrumentCloseType {
     const TYPE_ID: u64 = 0xbfe2_c25f_cb93_74afu64;
 }
 mod instrument_close_type {
-pub static ENCODED_NODE: [::capnp::Word; 30] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 30] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(175, 116, 147, 203, 95, 194, 226, 191),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2169,7 +2169,7 @@ pub static ENCODED_NODE: [::capnp::Word; 30] = [
     ::capnp::word(99, 111, 110, 116, 114, 97, 99, 116),
     ::capnp::word(69, 120, 112, 105, 114, 101, 100, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -2233,7 +2233,7 @@ impl ::capnp::traits::HasTypeId for MarketStatusAction {
     const TYPE_ID: u64 = 0xa006_30ff_1b89_b376u64;
 }
 mod market_status_action {
-pub static ENCODED_NODE: [::capnp::Word; 95] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 95] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(118, 179, 137, 27, 255, 48, 6, 160),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2330,7 +2330,7 @@ pub static ENCODED_NODE: [::capnp::Word; 95] = [
     ::capnp::word(97, 98, 108, 101, 70, 111, 114, 84),
     ::capnp::word(114, 97, 100, 105, 110, 103, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -2366,7 +2366,7 @@ impl ::capnp::traits::HasTypeId for PositionAdjustmentType {
     const TYPE_ID: u64 = 0xe4d7_b45b_7075_debeu64;
 }
 mod position_adjustment_type {
-pub static ENCODED_NODE: [::capnp::Word; 30] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 30] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(190, 222, 117, 112, 91, 180, 215, 228),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2398,7 +2398,7 @@ pub static ENCODED_NODE: [::capnp::Word; 30] = [
     ::capnp::word(111, 110, 0, 0, 0, 0, 0, 0),
     ::capnp::word(102, 117, 110, 100, 105, 110, 103, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -2458,7 +2458,7 @@ impl ::capnp::traits::HasTypeId for ComponentState {
     const TYPE_ID: u64 = 0xe61a_21eb_58b9_78c3u64;
 }
 mod component_state {
-pub static ENCODED_NODE: [::capnp::Word; 86] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 86] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(195, 120, 185, 88, 235, 33, 26, 230),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2546,7 +2546,7 @@ pub static ENCODED_NODE: [::capnp::Word; 86] = [
     ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
     ::capnp::word(102, 97, 117, 108, 116, 101, 100, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }
@@ -2584,7 +2584,7 @@ impl ::capnp::traits::HasTypeId for TradingState {
     const TYPE_ID: u64 = 0xdcec_77d0_f188_921cu64;
 }
 mod trading_state {
-pub static ENCODED_NODE: [::capnp::Word; 32] = [
+pub(crate) static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
     ::capnp::word(28, 146, 136, 241, 208, 119, 236, 220),
     ::capnp::word(19, 0, 0, 0, 2, 0, 0, 0),
@@ -2618,7 +2618,7 @@ pub static ENCODED_NODE: [::capnp::Word; 32] = [
     ::capnp::word(114, 101, 100, 117, 99, 105, 110, 103),
     ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
 ];
-pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
     ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
 }
 }

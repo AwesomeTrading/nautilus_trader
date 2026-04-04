@@ -2,7 +2,7 @@
 // DO NOT EDIT.
 // source: events/order.capnp
 // capnp binary version: 1.3.0
-// capnpc crate version: 0.25.2
+// capnpc crate version: 0.25.3
 
 
 pub mod order_event_header {
@@ -293,7 +293,7 @@ pub mod order_event_header {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 114] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 114] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(9, 150, 199, 24, 126, 97, 252, 171),
             ::capnp::word(19, 0, 0, 0, 1, 0, 0, 0),
@@ -409,7 +409,7 @@ pub mod order_event_header {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -420,20 +420,20 @@ pub mod order_event_header {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[3,4,2,1,0,5];
-        pub const TYPE_ID: u64 = 0xabfc_617e_18c7_9609;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[3,4,2,1,0,5];
+        pub(crate) const TYPE_ID: u64 = 0xabfc_617e_18c7_9609;
     }
 }
 
@@ -1057,7 +1057,7 @@ pub mod order_event {
     impl Pipeline  {
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 271] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 271] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(157, 109, 177, 235, 10, 26, 223, 139),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -1330,7 +1330,7 @@ pub mod order_event {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::order_capnp::order_initialized::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::order_capnp::order_denied::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -1351,20 +1351,20 @@ pub mod order_event {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,13,7,1,2,8,15,0,12,11,10,6,3,4,9,14];
-        pub const TYPE_ID: u64 = 0x8bdf_1a0a_ebb1_6d9d;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,13,7,1,2,8,15,0,12,11,10,6,3,4,9,14];
+        pub(crate) const TYPE_ID: u64 = 0x8bdf_1a0a_ebb1_6d9d;
     }
     pub enum Which<A0,A1,A2,A3,A4,A5,A6,A7,A8,A9,A10,A11,A12,A13,A14,A15> {
         Initialized(A0),
@@ -2234,7 +2234,7 @@ pub mod order_initialized {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 555] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 555] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(52, 251, 107, 68, 25, 165, 101, 240),
             ::capnp::word(19, 0, 0, 0, 1, 0, 2, 0),
@@ -2791,7 +2791,7 @@ pub mod order_initialized {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -2829,20 +2829,20 @@ pub mod order_initialized {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[3,25,22,23,12,29,30,31,21,2,18,27,26,4,5,28,8,15,6,10,11,9,1,32,7,0,19,20,24,16,17,13,14];
-        pub const TYPE_ID: u64 = 0xf065_a519_446b_fb34;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[3,25,22,23,12,29,30,31,21,2,18,27,26,4,5,28,8,15,6,10,11,9,1,32,7,0,19,20,24,16,17,13,14];
+        pub(crate) const TYPE_ID: u64 = 0xf065_a519_446b_fb34;
     }
 }
 
@@ -3158,7 +3158,7 @@ pub mod order_denied {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 128] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 128] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(199, 143, 46, 11, 3, 38, 45, 232),
             ::capnp::word(19, 0, 0, 0, 1, 0, 0, 0),
@@ -3288,7 +3288,7 @@ pub mod order_denied {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -3300,20 +3300,20 @@ pub mod order_denied {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[3,5,2,4,1,0,6];
-        pub const TYPE_ID: u64 = 0xe82d_2603_0b2e_8fc7;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[3,5,2,4,1,0,6];
+        pub(crate) const TYPE_ID: u64 = 0xe82d_2603_0b2e_8fc7;
     }
 }
 
@@ -3605,7 +3605,7 @@ pub mod order_emulated {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 114] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 114] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(203, 139, 248, 71, 40, 73, 244, 145),
             ::capnp::word(19, 0, 0, 0, 1, 0, 0, 0),
@@ -3721,7 +3721,7 @@ pub mod order_emulated {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -3732,20 +3732,20 @@ pub mod order_emulated {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[3,4,2,1,0,5];
-        pub const TYPE_ID: u64 = 0x91f4_4928_47f8_8bcb;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[3,4,2,1,0,5];
+        pub(crate) const TYPE_ID: u64 = 0x91f4_4928_47f8_8bcb;
     }
 }
 
@@ -4064,7 +4064,7 @@ pub mod order_released {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 130] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 130] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(190, 133, 212, 2, 160, 117, 255, 244),
             ::capnp::word(19, 0, 0, 0, 1, 0, 0, 0),
@@ -4196,7 +4196,7 @@ pub mod order_released {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -4208,20 +4208,20 @@ pub mod order_released {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[3,5,2,4,1,0,6];
-        pub const TYPE_ID: u64 = 0xf4ff_75a0_02d4_85be;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[3,5,2,4,1,0,6];
+        pub(crate) const TYPE_ID: u64 = 0xf4ff_75a0_02d4_85be;
     }
 }
 
@@ -4567,7 +4567,7 @@ pub mod order_submitted {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 145] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 145] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(163, 225, 103, 49, 26, 201, 245, 172),
             ::capnp::word(19, 0, 0, 0, 1, 0, 0, 0),
@@ -4714,7 +4714,7 @@ pub mod order_submitted {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -4727,20 +4727,20 @@ pub mod order_submitted {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[4,3,5,2,1,0,6,7];
-        pub const TYPE_ID: u64 = 0xacf5_c91a_3167_e1a3;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[4,3,5,2,1,0,6,7];
+        pub(crate) const TYPE_ID: u64 = 0xacf5_c91a_3167_e1a3;
     }
 }
 
@@ -5125,7 +5125,7 @@ pub mod order_accepted {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 177] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 177] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(64, 203, 114, 23, 204, 49, 219, 202),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -5304,7 +5304,7 @@ pub mod order_accepted {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -5319,20 +5319,20 @@ pub mod order_accepted {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
-        pub const TYPE_ID: u64 = 0xcadb_31cc_1772_cb40;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
+        pub(crate) const TYPE_ID: u64 = 0xcadb_31cc_1772_cb40;
     }
 }
 
@@ -5726,7 +5726,7 @@ pub mod order_rejected {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 192] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 192] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(227, 79, 142, 6, 190, 252, 250, 255),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -5920,7 +5920,7 @@ pub mod order_rejected {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -5936,20 +5936,20 @@ pub mod order_rejected {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[4,3,10,6,2,5,9,1,0,7,8];
-        pub const TYPE_ID: u64 = 0xfffa_fcbe_068e_4fe3;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[4,3,10,6,2,5,9,1,0,7,8];
+        pub(crate) const TYPE_ID: u64 = 0xfffa_fcbe_068e_4fe3;
     }
 }
 
@@ -6334,7 +6334,7 @@ pub mod order_canceled {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 177] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 177] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(217, 111, 83, 222, 95, 230, 185, 250),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -6513,7 +6513,7 @@ pub mod order_canceled {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -6528,20 +6528,20 @@ pub mod order_canceled {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
-        pub const TYPE_ID: u64 = 0xfab9_e65f_de53_6fd9;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
+        pub(crate) const TYPE_ID: u64 = 0xfab9_e65f_de53_6fd9;
     }
 }
 
@@ -6926,7 +6926,7 @@ pub mod order_expired {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 176] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 176] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(90, 121, 39, 213, 232, 146, 76, 236),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -7104,7 +7104,7 @@ pub mod order_expired {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -7119,20 +7119,20 @@ pub mod order_expired {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
-        pub const TYPE_ID: u64 = 0xec4c_92e8_d527_795a;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
+        pub(crate) const TYPE_ID: u64 = 0xec4c_92e8_d527_795a;
     }
 }
 
@@ -7517,7 +7517,7 @@ pub mod order_triggered {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 177] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 177] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(68, 78, 29, 80, 221, 58, 254, 232),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -7696,7 +7696,7 @@ pub mod order_triggered {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -7711,20 +7711,20 @@ pub mod order_triggered {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
-        pub const TYPE_ID: u64 = 0xe8fe_3add_501d_4e44;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
+        pub(crate) const TYPE_ID: u64 = 0xe8fe_3add_501d_4e44;
     }
 }
 
@@ -8109,7 +8109,7 @@ pub mod order_pending_update {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 177] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 177] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(94, 101, 58, 16, 222, 148, 85, 247),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -8288,7 +8288,7 @@ pub mod order_pending_update {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -8303,20 +8303,20 @@ pub mod order_pending_update {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
-        pub const TYPE_ID: u64 = 0xf755_94de_103a_655e;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
+        pub(crate) const TYPE_ID: u64 = 0xf755_94de_103a_655e;
     }
 }
 
@@ -8701,7 +8701,7 @@ pub mod order_pending_cancel {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 177] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 177] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(59, 208, 208, 28, 127, 100, 62, 128),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -8880,7 +8880,7 @@ pub mod order_pending_cancel {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -8895,20 +8895,20 @@ pub mod order_pending_cancel {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
-        pub const TYPE_ID: u64 = 0x803e_647f_1cd0_d03b;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,6,2,9,1,0,7,8,4];
+        pub(crate) const TYPE_ID: u64 = 0x803e_647f_1cd0_d03b;
     }
 }
 
@@ -9317,7 +9317,7 @@ pub mod order_modify_rejected {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 192] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 192] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(179, 64, 250, 247, 73, 81, 224, 166),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -9511,7 +9511,7 @@ pub mod order_modify_rejected {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -9527,20 +9527,20 @@ pub mod order_modify_rejected {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,7,2,6,10,1,0,8,9,4];
-        pub const TYPE_ID: u64 = 0xa6e0_5149_f7fa_40b3;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,7,2,6,10,1,0,8,9,4];
+        pub(crate) const TYPE_ID: u64 = 0xa6e0_5149_f7fa_40b3;
     }
 }
 
@@ -9949,7 +9949,7 @@ pub mod order_cancel_rejected {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 192] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 192] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(218, 114, 9, 225, 4, 58, 87, 250),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -10143,7 +10143,7 @@ pub mod order_cancel_rejected {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -10159,20 +10159,20 @@ pub mod order_cancel_rejected {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,7,2,6,10,1,0,8,9,4];
-        pub const TYPE_ID: u64 = 0xfa57_3a04_e109_72da;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,7,2,6,10,1,0,8,9,4];
+        pub(crate) const TYPE_ID: u64 = 0xfa57_3a04_e109_72da;
     }
 }
 
@@ -10677,7 +10677,7 @@ pub mod order_updated {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 255] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 255] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(249, 251, 92, 110, 244, 123, 146, 193),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -10934,7 +10934,7 @@ pub mod order_updated {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -10954,20 +10954,20 @@ pub mod order_updated {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,10,2,14,7,9,6,13,1,0,8,11,12,4];
-        pub const TYPE_ID: u64 = 0xc192_7bf4_6e5c_fbf9;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,10,2,14,7,9,6,13,1,0,8,11,12,4];
+        pub(crate) const TYPE_ID: u64 = 0xc192_7bf4_6e5c_fbf9;
     }
 }
 
@@ -11550,7 +11550,7 @@ pub mod order_filled {
         }
     }
     mod _private {
-        pub static ENCODED_NODE: [::capnp::Word; 317] = [
+        pub(crate) static ENCODED_NODE: [::capnp::Word; 317] = [
             ::capnp::word(0, 0, 0, 0, 6, 0, 6, 0),
             ::capnp::word(106, 100, 123, 127, 46, 254, 215, 209),
             ::capnp::word(19, 0, 0, 0, 1, 0, 1, 0),
@@ -11869,7 +11869,7 @@ pub mod order_filled {
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
             ::capnp::word(0, 0, 0, 0, 0, 0, 0, 0),
         ];
-        pub fn get_field_types(index: u16) -> ::capnp::introspect::Type {
+        pub(crate) fn get_field_types(index: u16) -> ::capnp::introspect::Type {
             match index {
                 0 => <crate::identifiers_capnp::trader_id::Owned as ::capnp::introspect::Introspect>::introspect(),
                 1 => <crate::identifiers_capnp::strategy_id::Owned as ::capnp::introspect::Introspect>::introspect(),
@@ -11893,19 +11893,19 @@ pub mod order_filled {
                 _ => ::capnp::introspect::panic_invalid_field_index(index),
             }
         }
-        pub fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
+        pub(crate) fn get_annotation_types(child_index: Option<u16>, index: u32) -> ::capnp::introspect::Type {
             ::capnp::introspect::panic_invalid_annotation_indices(child_index, index)
         }
-        pub static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
-        pub static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
+        pub(crate) static ARENA: ::capnp::private::arena::GeneratedCodeArena = ::capnp::private::arena::GeneratedCodeArena::new(&ENCODED_NODE);
+        pub(crate) static RAW_SCHEMA: ::capnp::introspect::RawStructSchema = ::capnp::introspect::RawStructSchema::new(
             &ARENA,
             NONUNION_MEMBERS,
             MEMBERS_BY_DISCRIMINANT,
             MEMBERS_BY_NAME
         );
-        pub static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
-        pub static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
-        pub static MEMBERS_BY_NAME : &[u16] = &[5,3,18,11,13,2,10,9,12,7,8,17,16,1,6,0,14,15,4];
-        pub const TYPE_ID: u64 = 0xd1d7_fe2e_7f7b_646a;
+        pub(crate) static NONUNION_MEMBERS : &[u16] = &[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+        pub(crate) static MEMBERS_BY_DISCRIMINANT : &[u16] = &[];
+        pub(crate) static MEMBERS_BY_NAME : &[u16] = &[5,3,18,11,13,2,10,9,12,7,8,17,16,1,6,0,14,15,4];
+        pub(crate) const TYPE_ID: u64 = 0xd1d7_fe2e_7f7b_646a;
     }
 }
