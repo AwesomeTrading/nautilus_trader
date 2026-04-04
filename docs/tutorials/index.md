@@ -59,6 +59,13 @@ For task-oriented data recipes, see the [how-to guides](../how_to/):
 | [Grid market making with a deadman's switch (BitMEX)](grid_market_maker_bitmex)            | Grid MM with server‑side safety on XBTUSD    | Tardis.dev        |
 | [On‑chain grid market making with short‑term orders (dYdX)](grid_market_maker_dydx)        | Grid MM on dYdX v4 perpetuals                | User‑provided     |
 
+## Options
+
+| Tutorial                                                                                   | Description                                  | Data              |
+|:-------------------------------------------------------------------------------------------|:---------------------------------------------|:------------------|
+| [Options data and Greeks on Bybit](options_data_bybit)                                     | Stream Greeks and option chain snapshots      | Live API          |
+| [Delta‑neutral options strategy on Bybit](delta_neutral_options_bybit)                     | Short strangle with perpetual delta hedging   | Live API          |
+
 ## Rust
 
 | Tutorial                                                                                   | Description                                  | Data              |

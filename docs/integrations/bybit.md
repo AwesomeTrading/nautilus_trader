@@ -67,6 +67,13 @@ for the instrument ID. For example:
 - The Ether/Tether spot currency pair is identified with `-SPOT`, such as `ETHUSDT-SPOT`.
 - The BTCUSDT perpetual futures contract is identified with `-LINEAR`, such as `BTCUSDT-LINEAR`.
 - The BTCUSD inverse perpetual futures contract is identified with `-INVERSE`, such as `BTCUSD-INVERSE`.
+- A BTC USDT-settled put option: `BTC-27MAR26-70000-P-USDT-OPTION`.
+- A ETH USDC-settled call option: `ETH-28FEB25-2800-C-OPTION`.
+
+Bybit's option symbols include the settlement currency for USDT-settled
+contracts (e.g. `BTC-27MAR26-70000-P-USDT`) but omit it for USDC-settled
+contracts (e.g. `ETH-28FEB25-2800-C`). The adapter appends `-OPTION` to
+whatever symbol the API returns.
 
 ## Environments
 
@@ -112,6 +119,7 @@ Environment variables: `BYBIT_DEMO_API_KEY`, `BYBIT_DEMO_API_SECRET`
 
 - The WebSocket Trade API is **not supported** for demo trading. NautilusTrader automatically uses the HTTP REST API for order operations in demo mode.
 - Some advanced order features available via WebSocket (trigger orders, post-only with is_quote_quantity) are not available in demo mode.
+- **Options are not supported in demo mode.** Bybit does not provide public WebSocket streams for options on `stream-demo.bybit.com`. Instrument definitions load over REST, but real-time data (Greeks, quotes, orderbook) requires mainnet or testnet.
 
 :::
 
@@ -427,17 +435,58 @@ The following limitations apply to Spot products, as positions are not tracked o
 - `reduce_only` orders are *not supported*.
 - Trailing stop orders are *not supported*.
 
-### Options trading limitations
+### Options trading
 
-The following limitations apply to Option products:
+Bybit lists European-style options on BTC and ETH, settled in USDT or USDC.
+The adapter uses the `CryptoOption` instrument type and the `-OPTION` symbol
+suffix. See the [symbology section](#symbology) for the full symbol format.
 
-- Kline/bar data is not available. Bybit does not provide kline streams for options.
-- Funding rates do not apply to options.
+#### Options data
+
+The adapter supports real-time options market data through the WebSocket ticker
+channel:
+
+| Data type                  | Description                                              |
+|----------------------------|----------------------------------------------------------|
+| Quotes (bid/ask)           | Top‑of‑book prices and sizes for each option contract.   |
+| Greeks                     | Delta, gamma, vega, theta, plus bid/ask/mark IV.         |
+| Mark price                 | Exchange mark price for each option contract.            |
+| Index price                | Underlying index price.                                  |
+| Underlying (forward) price | Per‑expiry forward price, used for ATM determination.    |
+| Open interest              | Per‑contract open interest.                              |
+| Order book deltas          | L2 MBP updates from the option orderbook stream.         |
+
+Subscribe to per-instrument Greeks or aggregate them into option chain
+snapshots with ATM-relative strike filtering. See the
+[options concept guide](../concepts/options.md) for subscription patterns and
+the [options data tutorial](../tutorials/options_data_bybit.md) for a
+step-by-step walkthrough. NautilusTrader builds the option chain view locally
+from Bybit's per-contract option market data.
+
+Bar (kline) data is not available for options. Bybit does not provide kline
+streams for this product type.
+
+#### Options order parameters
+
+In addition to the standard order parameters, option orders accept:
+
+| Parameter  | Type             | Description                                              |
+|------------|------------------|----------------------------------------------------------|
+| `order_iv` | `str` or `float` | Place or amend the order by implied volatility instead of price. |
+| `mmp`      | `bool`           | Enable Market Maker Protection for the order.            |
+
+These parameters are passed through `params` on `SubmitOrder` and flow through
+the WebSocket trade channel on mainnet. They are not supported in demo mode.
+
+#### Options trading limitations
+
+- Demo mode is not supported. Use mainnet or testnet for options.
 - Leverage is not configurable. Option buyers pay premium; sellers post margin.
 - Position mode is one-way only. Hedge mode is not supported.
 - Conditional order types (`STOP_MARKET`, `STOP_LIMIT`, `MARKET_IF_TOUCHED`,
   `LIMIT_IF_TOUCHED`) are not supported.
 - Trading stops (TP/SL on positions) are not supported.
+- Funding rates do not apply to options.
 - Options require a Unified Trading Account (UTA).
 
 ### Trailing stops
