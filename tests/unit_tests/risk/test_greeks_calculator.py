@@ -678,6 +678,91 @@ class TestGreeksCalculator:
         assert greeks is not None
         assert greeks.underlying_price == 157.25
 
+    def test_instrument_greeks_prefers_quote_over_index_price_for_index_future(self):
+        future_id = InstrumentId(Symbol("ESH4"), Venue("GLBX"))
+        call_id = InstrumentId(Symbol("ESH4C150"), Venue("GLBX"))
+        expiry_date = datetime(2024, 3, 15, 16, 0, 0, tzinfo=UTC)
+        expiry_ns = int(expiry_date.timestamp() * 1_000_000_000)
+
+        future = FuturesContract(
+            instrument_id=future_id,
+            raw_symbol=Symbol("ESH4"),
+            asset_class=AssetClass.INDEX,
+            exchange="XCME",
+            currency=Currency.from_str("USD"),
+            price_precision=2,
+            price_increment=Price.from_str("0.25"),
+            multiplier=Quantity.from_int(1),
+            lot_size=Quantity.from_int(1),
+            underlying="ESH4",
+            activation_ns=0,
+            expiration_ns=expiry_ns,
+            ts_event=0,
+            ts_init=0,
+        )
+        call_option = OptionContract(
+            instrument_id=call_id,
+            raw_symbol=Symbol("ESH4C150"),
+            asset_class=AssetClass.INDEX,
+            currency=Currency.from_str("USD"),
+            price_precision=2,
+            price_increment=Price.from_str("0.01"),
+            multiplier=Quantity.from_int(1),
+            lot_size=Quantity.from_int(1),
+            underlying="ESH4",
+            option_kind=OptionKind.CALL,
+            activation_ns=0,
+            expiration_ns=expiry_ns,
+            strike_price=Price.from_str("150.00"),
+            ts_event=0,
+            ts_init=0,
+        )
+
+        self.cache.add_instrument(future)
+        self.cache.add_instrument(call_option)
+        # Both a quote and an index price for the underlying future
+        self.cache.add_quote_tick(
+            QuoteTick(
+                instrument_id=future_id,
+                bid_price=Price.from_str("158.50"),
+                ask_price=Price.from_str("159.50"),
+                bid_size=Quantity.from_int(100),
+                ask_size=Quantity.from_int(100),
+                ts_event=self.clock.timestamp_ns(),
+                ts_init=self.clock.timestamp_ns(),
+            ),
+        )
+        self.cache.add_index_price(
+            IndexPriceUpdate(
+                instrument_id=future_id,
+                value=Price.from_str("157.25"),
+                ts_event=self.clock.timestamp_ns(),
+                ts_init=self.clock.timestamp_ns(),
+            ),
+        )
+        self.cache.add_quote_tick(
+            QuoteTick(
+                instrument_id=call_id,
+                bid_price=Price.from_str("8.50"),
+                ask_price=Price.from_str("8.50"),
+                bid_size=Quantity.from_int(100),
+                ask_size=Quantity.from_int(100),
+                ts_event=self.clock.timestamp_ns(),
+                ts_init=self.clock.timestamp_ns(),
+            ),
+        )
+
+        greeks = self.greeks_calculator.instrument_greeks(
+            instrument_id=call_id,
+            flat_interest_rate=0.0425,
+            cache_greeks=False,
+            ts_event=self.clock.timestamp_ns(),
+        )
+
+        assert greeks is not None
+        # Should use the MID quote (159.00), not the index price (157.25)
+        assert greeks.underlying_price == 159.0
+
     def test_instrument_greeks_returns_none_when_opposite_option_price_missing_for_parity(self):
         future_id = InstrumentId(Symbol("ESH4"), Venue("GLBX"))
         call_id = InstrumentId(Symbol("ESH4C150"), Venue("GLBX"))

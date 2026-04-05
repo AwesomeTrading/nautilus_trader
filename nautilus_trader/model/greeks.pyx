@@ -31,6 +31,7 @@ from nautilus_trader.common.component cimport Logger
 from nautilus_trader.core.datetime cimport unix_nanos_to_dt
 from nautilus_trader.core.rust.model cimport OptionKind
 from nautilus_trader.core.rust.model cimport PositionSide
+from nautilus_trader.model.data cimport IndexPriceUpdate
 from nautilus_trader.model.identifiers cimport InstrumentId
 from nautilus_trader.model.identifiers cimport StrategyId
 from nautilus_trader.model.identifiers cimport Symbol
@@ -196,7 +197,7 @@ cdef class GreeksCalculator:
     ):
         cdef double multiplier = float(instrument.multiplier)
         cdef InstrumentId underlying_instrument_id = instrument.id
-        cdef object underlying_price_obj = self._get_price(underlying_instrument_id)
+        cdef Price underlying_price_obj = self._get_price(underlying_instrument_id)
         cdef double underlying_price
         cdef double delta
 
@@ -260,7 +261,7 @@ cdef class GreeksCalculator:
         cdef bint is_call = instrument.option_kind is OptionKind.CALL
         cdef double strike = float(instrument.strike_price)
 
-        cdef object option_price_obj = self._get_price(instrument_id)
+        cdef Price option_price_obj = self._get_price(instrument_id)
         if option_price_obj is None:
             return None
 
@@ -271,9 +272,7 @@ cdef class GreeksCalculator:
         elif flat_dividend_yield is not None:
             cost_of_carry = interest_rate - flat_dividend_yield
 
-        cdef object underlying_price_obj = self._get_underlying_price(
-            underlying_instrument_id, instrument, option_price_obj, interest_rate, strike, expiry_in_years
-        )
+        cdef Price underlying_price_obj = self._get_underlying_price(underlying_instrument_id)
         if underlying_price_obj is None:
             return None
 
@@ -355,53 +354,57 @@ cdef class GreeksCalculator:
             greeks_data.cost_of_carry, shocked_vol, 0., greeks.price, delta, gamma, vega, greeks.theta, greeks.itm_prob
         )
 
-    cdef object _get_underlying_price(
-        self,
-        InstrumentId underlying_instrument_id,
-        object option_instrument,
-        object option_price_obj,
-        double interest_rate,
-        double strike,
-        double expiry_in_years,
-    ):
-        cdef object underlying_price_obj = self._get_price(underlying_instrument_id)
-        if underlying_price_obj is not None:
-            return underlying_price_obj
+    cdef Price _get_underlying_price(self, InstrumentId underlying_instrument_id):
+        cdef Price price = self._get_price(underlying_instrument_id)
+        if price is not None:
+            return price
 
+        # Only fall back to cached futures spread when the underlying is a future
+        # (or absent from the cache, since the spread was explicitly cached)
         cdef object underlying_instrument = self._cache.instrument(underlying_instrument_id)
-        if underlying_instrument is None:
-            self._log.warning(f"No instrument available for underlying {underlying_instrument_id}")
-            return None
+        cdef bint is_future_or_absent = (
+            underlying_instrument is None
+            or underlying_instrument.instrument_class is InstrumentClass.FUTURE
+        )
 
-        if underlying_instrument.instrument_class is not InstrumentClass.FUTURE:
-            return None
+        if is_future_or_absent:
+            price = self.get_cached_futures_spread_price(underlying_instrument_id)
+            if price is not None:
+                self._log.debug(f"Using cached futures spread for {underlying_instrument_id=}: {float(price)=:.6f}")
+                return price
 
-        underlying_price_obj = self.get_cached_futures_spread_price(underlying_instrument_id)
-        if underlying_price_obj is not None:
-            self._log.debug(f"Using cached futures spread for {underlying_instrument_id=}: {float(underlying_price_obj)=:.6f}")
-            return underlying_price_obj
+        self._log.warning(f"No price available for {underlying_instrument_id}")
+        return None
 
-        return underlying_price_obj
-
-    cdef object _get_price(self, InstrumentId instrument_id):
-        # Check if the instrument is an index - if so, use index price
+    cdef Price _get_price(self, InstrumentId instrument_id):
+        # For index-class futures, prefer tradable quotes over the published index
+        # price since index price is the spot level and may diverge from futures basis.
+        # For true index instruments (non-futures), prefer the published index price.
         cdef object instrument = self._cache.instrument(instrument_id)
-        cdef object index_price
+        cdef IndexPriceUpdate index_price
+        cdef Price price
         if instrument is not None and instrument.asset_class is AssetClass.INDEX:
+            if instrument.instrument_class is InstrumentClass.FUTURE:
+                price = self._cache.price(instrument_id, PriceType.MID)
+                if price is not None:
+                    return price
+                price = self._cache.price(instrument_id, PriceType.LAST)
+                if price is not None:
+                    return price
             index_price = self._cache.index_price(instrument_id)
             if index_price is not None:
                 return index_price.value
-            # If no index price, fall through to regular price lookup
 
-        # Try MID price first, then LAST price as fallback
-        cdef object price_obj = self._cache.price(instrument_id, PriceType.MID)
-        if price_obj is None:
-            price_obj = self._cache.price(instrument_id, PriceType.LAST)
-            if price_obj is None:
-                self._log.warning(f"No price available for {instrument_id}")
-                return None
+        price = self._cache.price(instrument_id, PriceType.MID)
+        if price is not None:
+            return price
 
-        return price_obj
+        price = self._cache.price(instrument_id, PriceType.LAST)
+        if price is not None:
+            return price
+
+        self._log.warning(f"No price available for {instrument_id}")
+        return None
 
     def modify_greeks(
         self,
@@ -677,6 +680,18 @@ cdef class GreeksCalculator:
             )
             return None
 
+        if call_instrument.strike_price != put_instrument.strike_price:
+            self._log.warning(
+                f"Cannot cache futures spread: strike prices differ {call_instrument_id=} {put_instrument_id=}",
+            )
+            return None
+
+        if call_instrument.expiration_ns != put_instrument.expiration_ns:
+            self._log.warning(
+                f"Cannot cache futures spread: expiration dates differ {call_instrument_id=} {put_instrument_id=}",
+            )
+            return None
+
         if reference_future_instrument is None:
             self._log.warning(f"Cannot cache futures spread: no reference futures instrument for {futures_instrument_id}")
             return None
@@ -685,26 +700,33 @@ cdef class GreeksCalculator:
             self._log.warning(f"Cannot cache futures spread: no reference futures price for {futures_instrument_id}")
             return None
 
-        cdef object call_price_obj = self._get_price(call_instrument_id)
-        cdef object put_price_obj = self._get_price(put_instrument_id)
-        if call_price_obj is None or put_price_obj is None:
+        cdef Price call_price = self._get_price(call_instrument_id)
+        cdef Price put_price = self._get_price(put_instrument_id)
+        if call_price is None or put_price is None:
             self._log.warning(
                 f"Cannot cache futures spread: missing option price for {call_instrument_id=} or {put_instrument_id=}",
             )
             return None
 
-        cdef object implied_future_price_obj = self._calculate_implied_future_price(call_instrument, call_price_obj, put_price_obj)
-        if implied_future_price_obj is None:
+        cdef InstrumentId underlying_instrument_id = InstrumentId.from_str(f"{call_instrument.underlying}.{call_instrument_id.venue}")
+
+        # Reject if the underlying is present in cache but is not a future
+        cdef object underlying_check = self._cache.instrument(underlying_instrument_id)
+        if underlying_check is not None and underlying_check.instrument_class is not InstrumentClass.FUTURE:
+            self._log.warning(
+                f"Cannot cache futures spread: underlying {underlying_instrument_id} is not a futures contract",
+            )
             return None
 
-        cdef InstrumentId underlying_instrument_id = InstrumentId.from_str(f"{call_instrument.underlying}.{call_instrument_id.venue}")
-        cdef double spread = float(implied_future_price_obj) - float(reference_future_price)
+        cdef double implied_future_price = self._calculate_implied_future_price(call_instrument, call_price, put_price)
+
+        cdef double spread = implied_future_price - float(reference_future_price)
         cdef Price spread_price = reference_future_instrument.make_price(spread)
         self._cached_futures_spreads[underlying_instrument_id] = (futures_instrument_id, spread_price)
 
         return reference_future_price.add(spread_price)
 
-    cdef object _calculate_implied_future_price(self, object call_instrument, object call_price_obj, object put_price_obj):
+    cdef double _calculate_implied_future_price(self, object call_instrument, Price call_price, Price put_price):
         cdef object expiry_utc = call_instrument.expiration_utc
         cdef int expiry_in_days = max((expiry_utc - unix_nanos_to_dt(self._clock.timestamp_ns())).days, 1)
         cdef double expiry_in_years = expiry_in_days / 365.25
@@ -712,10 +734,8 @@ cdef class GreeksCalculator:
         cdef object yield_curve = self._cache.yield_curve(currency)
         cdef double interest_rate = yield_curve(expiry_in_years) if yield_curve is not None else 0.0425
         cdef double strike = float(call_instrument.strike_price)
-        cdef double call_price = float(call_price_obj)
-        cdef double put_price = float(put_price_obj)
 
-        return strike + exp(interest_rate * expiry_in_years) * (call_price - put_price)
+        return strike + exp(interest_rate * expiry_in_years) * (float(call_price) - float(put_price))
 
     cpdef object get_cached_futures_spread_price(self, InstrumentId underlying_instrument_id):
         cdef Price spread

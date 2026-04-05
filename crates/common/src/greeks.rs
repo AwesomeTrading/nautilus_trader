@@ -17,6 +17,7 @@
 
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
+use ahash::AHashMap;
 use derive_builder::Builder;
 use nautilus_core::UnixNanos;
 use nautilus_model::{
@@ -312,7 +313,7 @@ impl PortfolioGreeksParams {
 pub struct GreeksCalculator {
     cache: Rc<RefCell<Cache>>,
     clock: Rc<RefCell<dyn Clock>>,
-    cached_futures_spreads: RefCell<HashMap<InstrumentId, (InstrumentId, Price)>>,
+    cached_futures_spreads: RefCell<AHashMap<InstrumentId, (InstrumentId, Price)>>,
 }
 
 impl GreeksCalculator {
@@ -321,7 +322,7 @@ impl GreeksCalculator {
         Self {
             cache,
             clock,
-            cached_futures_spreads: RefCell::new(HashMap::new()),
+            cached_futures_spreads: RefCell::new(AHashMap::new()),
         }
     }
 
@@ -711,18 +712,18 @@ impl GreeksCalculator {
             return Ok(underlying_price);
         }
 
-        let cache = self.cache.borrow();
-        let underlying_instrument = cache.instrument(underlying_instrument_id);
-        let Some(underlying_instrument) = underlying_instrument else {
-            anyhow::bail!("No instrument available for underlying {underlying_instrument_id}");
+        // Only fall back to cached futures spread when the underlying is a future
+        // (or absent from the cache, since the spread was explicitly cached).
+        let is_future_or_absent = {
+            let cache = self.cache.borrow();
+            cache
+                .instrument(underlying_instrument_id)
+                .is_none_or(|inst| inst.instrument_class() == InstrumentClass::Future)
         };
 
-        if underlying_instrument.instrument_class() != InstrumentClass::Future {
-            anyhow::bail!("No price available for {underlying_instrument_id}");
-        }
-
-        if let Some(underlying_price) =
-            self.get_cached_futures_spread_price(*underlying_instrument_id)
+        if is_future_or_absent
+            && let Some(underlying_price) =
+                self.get_cached_futures_spread_price(*underlying_instrument_id)
         {
             return Ok(underlying_price.as_f64());
         }
@@ -1005,6 +1006,18 @@ impl GreeksCalculator {
             );
         }
 
+        if call_instrument.strike_price() != put_instrument.strike_price() {
+            anyhow::bail!(
+                "Cannot cache futures spread: strike prices differ call_instrument_id={call_instrument_id} put_instrument_id={put_instrument_id}"
+            );
+        }
+
+        if call_instrument.expiration_ns() != put_instrument.expiration_ns() {
+            anyhow::bail!(
+                "Cannot cache futures spread: expiration dates differ call_instrument_id={call_instrument_id} put_instrument_id={put_instrument_id}"
+            );
+        }
+
         let reference_future_price = self.get_price_object(&futures_instrument_id).ok_or_else(|| {
             anyhow::anyhow!(
                 "Cannot cache futures spread: no reference futures price for {futures_instrument_id}"
@@ -1021,10 +1034,23 @@ impl GreeksCalculator {
             )
         })?;
 
-        let implied_future_price =
-            self.calculate_implied_future_price(&call_instrument, call_price, put_price);
         let underlying_instrument_id =
             InstrumentId::from(format!("{call_underlying}.{}", call_instrument_id.venue));
+
+        // Reject if the underlying is present in cache but is not a future
+        {
+            let cache = self.cache.borrow();
+            if let Some(underlying) = cache.instrument(&underlying_instrument_id)
+                && underlying.instrument_class() != InstrumentClass::Future
+            {
+                anyhow::bail!(
+                    "Cannot cache futures spread: underlying {underlying_instrument_id} is not a futures contract"
+                );
+            }
+        }
+
+        let implied_future_price =
+            self.calculate_implied_future_price(&call_instrument, call_price, put_price);
         let spread = implied_future_price - reference_future_price.as_f64();
         let spread_price = reference_future_instrument.make_price(spread);
 
@@ -1079,12 +1105,26 @@ impl GreeksCalculator {
 
     fn get_price_object(&self, instrument_id: &InstrumentId) -> Option<Price> {
         let cache = self.cache.borrow();
-        if cache
-            .instrument(instrument_id)
-            .is_some_and(|instrument| instrument.asset_class() == AssetClass::Index)
-            && let Some(index_price) = cache.index_price(instrument_id)
+
+        // For index-class futures, prefer tradable quotes over the published index
+        // price since index price is the spot level and may diverge from futures basis.
+        // For true index instruments (non-futures), prefer the published index price.
+        if let Some(instrument) = cache.instrument(instrument_id)
+            && instrument.asset_class() == AssetClass::Index
         {
-            return Some(index_price.value);
+            if instrument.instrument_class() == InstrumentClass::Future {
+                let tradable = cache
+                    .price(instrument_id, PriceType::Mid)
+                    .or_else(|| cache.price(instrument_id, PriceType::Last));
+
+                if tradable.is_some() {
+                    return tradable;
+                }
+            }
+
+            if let Some(index_price) = cache.index_price(instrument_id) {
+                return Some(index_price.value);
+            }
         }
 
         cache
@@ -2235,5 +2275,93 @@ mod tests {
             .unwrap();
 
         assert_eq!(greeks.underlying_price, 157.25);
+    }
+
+    #[rstest]
+    fn test_instrument_greeks_prefers_quote_over_index_price_for_index_future() {
+        let now = Utc.with_ymd_and_hms(2024, 2, 14, 16, 0, 0).unwrap();
+        let expiry = Utc.with_ymd_and_hms(2024, 3, 15, 16, 0, 0).unwrap();
+        let now_ns = UnixNanos::from(now);
+        let expiry_ns = UnixNanos::from(expiry);
+
+        let future = future_with_expiration("ESH4.GLBX", "ESH4", expiry_ns);
+        let call_option = future_option_with_expiration(
+            "ESH4C150.GLBX",
+            "ESH4C150",
+            "ESH4",
+            OptionKind::Call,
+            "150.00",
+            expiry_ns,
+        );
+
+        let cache = Rc::new(RefCell::new(Cache::new(None, None)));
+        cache
+            .borrow_mut()
+            .add_instrument(InstrumentAny::FuturesContract(future))
+            .unwrap();
+        cache
+            .borrow_mut()
+            .add_instrument(InstrumentAny::OptionContract(call_option.clone()))
+            .unwrap();
+
+        // Both a quote and an index price for the underlying future
+        let future_quote = QuoteTick::new(
+            InstrumentId::from("ESH4.GLBX"),
+            Price::from("158.50"),
+            Price::from("159.50"),
+            Quantity::from(100),
+            Quantity::from(100),
+            now_ns,
+            now_ns,
+        );
+        cache.borrow_mut().add_quote(future_quote).unwrap();
+        cache
+            .borrow_mut()
+            .add_index_price(IndexPriceUpdate::new(
+                InstrumentId::from("ESH4.GLBX"),
+                Price::from("157.25"),
+                now_ns,
+                now_ns,
+            ))
+            .unwrap();
+
+        let call_quote = QuoteTick::new(
+            call_option.id(),
+            Price::from("8.50"),
+            Price::from("8.50"),
+            Quantity::from(100),
+            Quantity::from(100),
+            now_ns,
+            now_ns,
+        );
+        cache.borrow_mut().add_quote(call_quote).unwrap();
+
+        let clock = Rc::new(RefCell::new(TestClock::new()));
+        clock.borrow_mut().set_time(now_ns);
+        let calculator = GreeksCalculator::new(cache, clock);
+
+        let greeks = calculator
+            .instrument_greeks(
+                call_option.id(),
+                Some(0.0425),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(now_ns),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+
+        // Should use the MID quote (159.00), not the index price (157.25)
+        assert_eq!(greeks.underlying_price, 159.0);
     }
 }
