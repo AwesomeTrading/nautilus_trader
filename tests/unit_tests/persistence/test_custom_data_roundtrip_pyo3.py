@@ -37,7 +37,7 @@ def _assert_custom_data_json_roundtrip(result, inner_type, assert_fields):
 def test_python_custom_data_roundtrip(tmp_path):
     """Test PyO3 custom data roundtrip via catalog - same as Rust test but from Python."""
     from nautilus_trader.core.nautilus_pyo3 import InstrumentId
-    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalogV2
+    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalog
     from nautilus_trader.core.nautilus_pyo3.model import CustomData
     from nautilus_trader.core.nautilus_pyo3.model import DataType
     from nautilus_trader.core.nautilus_pyo3.model import custom_data_backend_kind
@@ -47,7 +47,7 @@ def test_python_custom_data_roundtrip(tmp_path):
     register_custom_data_class(RustTestCustomData)
     catalog_path = tmp_path / "catalog_file"
     catalog_path.mkdir(parents=True, exist_ok=True)
-    pyo3_catalog = ParquetDataCatalogV2(str(catalog_path))
+    pyo3_catalog = ParquetDataCatalog(str(catalog_path))
 
     instrument_id = InstrumentId.from_str("RUST.TEST")
     metadata = {"venue": "TEST", "instrument_id": str(instrument_id)}
@@ -138,7 +138,7 @@ def test_python_custom_data_roundtrip(tmp_path):
 
 def test_macro_yield_curve_data_roundtrip(tmp_path):
     """Test MacroYieldCurveData roundtrip via catalog - tests Vec<f64> and numpy interop."""
-    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalogV2
+    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalog
     from nautilus_trader.core.nautilus_pyo3.model import CustomData
     from nautilus_trader.core.nautilus_pyo3.model import DataType
     from nautilus_trader.core.nautilus_pyo3.model import register_custom_data_class
@@ -147,7 +147,7 @@ def test_macro_yield_curve_data_roundtrip(tmp_path):
     register_custom_data_class(MacroYieldCurveData)
     catalog_path = tmp_path / "catalog_file"
     catalog_path.mkdir(parents=True, exist_ok=True)
-    pyo3_catalog = ParquetDataCatalogV2(str(catalog_path))
+    pyo3_catalog = ParquetDataCatalog(str(catalog_path))
 
     metadata = {"currency": "USD", "curve": "govt"}
     identifier = "USD-GOVT"
@@ -211,7 +211,7 @@ def test_macro_yield_curve_data_roundtrip(tmp_path):
 
 def test_rust_params_custom_data_roundtrip(tmp_path):
     """Test RustTestParamsCustomData roundtrip via catalog - exercises Params <-> dict interop."""
-    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalogV2
+    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalog
     from nautilus_trader.core.nautilus_pyo3.model import CustomData
     from nautilus_trader.core.nautilus_pyo3.model import DataType
     from nautilus_trader.core.nautilus_pyo3.model import register_custom_data_class
@@ -220,7 +220,7 @@ def test_rust_params_custom_data_roundtrip(tmp_path):
     register_custom_data_class(RustTestParamsCustomData)
     catalog_path = tmp_path / "catalog_params"
     catalog_path.mkdir(parents=True, exist_ok=True)
-    pyo3_catalog = ParquetDataCatalogV2(str(catalog_path))
+    pyo3_catalog = ParquetDataCatalog(str(catalog_path))
 
     metadata = {"source": "unit-test", "kind": "params"}
     data_type = DataType("RustTestParamsCustomData", metadata, None)
@@ -301,7 +301,7 @@ def test_python_only_customdataclass_pyo3_roundtrip(tmp_path):
     Test Python-only custom data via customdataclass_pyo3 and
     register_custom_data_class.
     """
-    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalogV2
+    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalog
     from nautilus_trader.core.nautilus_pyo3.model import CustomData
     from nautilus_trader.core.nautilus_pyo3.model import DataType
     from nautilus_trader.core.nautilus_pyo3.model import custom_data_backend_kind
@@ -317,7 +317,7 @@ def test_python_only_customdataclass_pyo3_roundtrip(tmp_path):
     register_custom_data_class(MarketTickPython)
     catalog_path = tmp_path / "catalog_python_only"
     catalog_path.mkdir(parents=True, exist_ok=True)
-    pyo3_catalog = ParquetDataCatalogV2(str(catalog_path))
+    pyo3_catalog = ParquetDataCatalog(str(catalog_path))
 
     metadata = {"exchange": "NASDAQ", "asset_class": "equity"}
     identifier = "NASDAQ-EQUITY"
@@ -383,7 +383,7 @@ def test_python_only_customdataclass_pyo3_dict_roundtrip(tmp_path):
 
     import pyarrow as pa
 
-    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalogV2
+    from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalog
     from nautilus_trader.core.nautilus_pyo3.model import CustomData
     from nautilus_trader.core.nautilus_pyo3.model import DataType
     from nautilus_trader.core.nautilus_pyo3.model import custom_data_backend_kind
@@ -398,7 +398,7 @@ def test_python_only_customdataclass_pyo3_dict_roundtrip(tmp_path):
     register_custom_data_class(JsonBlobPython)
     catalog_path = tmp_path / "catalog_python_dict"
     catalog_path.mkdir(parents=True, exist_ok=True)
-    pyo3_catalog = ParquetDataCatalogV2(str(catalog_path))
+    pyo3_catalog = ParquetDataCatalog(str(catalog_path))
 
     metadata = {"source": "python", "format": "json-dict"}
     identifier = "PYTHON-DICT"

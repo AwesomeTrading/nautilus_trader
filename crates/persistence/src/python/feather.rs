@@ -13,7 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! Python bindings for the Rust `FeatherWriter` as `StreamingFeatherWriterV2`.
+//! Python bindings for the Rust `FeatherWriter` as `StreamingFeatherWriter`.
 
 use std::{
     cell::RefCell,
@@ -46,17 +46,21 @@ use crate::{
 ///
 /// This provides a streaming writer of Nautilus objects into feather files with rotation
 /// capabilities, matching the interface of Python's `StreamingFeatherWriter`.
-#[pyclass(module = "nautilus_trader.core.nautilus_pyo3.persistence", unsendable)]
+#[pyclass(
+    name = "StreamingFeatherWriter",
+    module = "nautilus_trader.core.nautilus_pyo3.persistence",
+    unsendable
+)]
 #[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.persistence")]
-pub struct StreamingFeatherWriterV2 {
+pub struct PyStreamingFeatherWriter {
     writer: Rc<RefCell<FeatherWriter>>,
     handler: Option<ShareableMessageHandler>,
 }
 
 #[pymethods]
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
-impl StreamingFeatherWriterV2 {
-    /// Creates a new `StreamingFeatherWriterV2` instance.
+impl PyStreamingFeatherWriter {
+    /// Creates a new `StreamingFeatherWriter` instance.
     ///
     /// # Parameters
     ///

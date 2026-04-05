@@ -172,7 +172,7 @@ def customdataclass_pyo3(*args, **kwargs):  # noqa: C901 (too complex)
     """
     Extend customdataclass with methods required for the PyO3 (Rust) catalog.
 
-    Use this when you want to write/query custom data via ParquetDataCatalogV2
+    Use this when you want to write/query custom data via ParquetDataCatalog
     (nautilus_pyo3). After defining your class, register it once by type:
 
         from nautilus_trader.core.nautilus_pyo3.model import register_custom_data_class

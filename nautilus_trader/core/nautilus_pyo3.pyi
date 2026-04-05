@@ -4758,7 +4758,7 @@ class PostgresCacheDatabase:
     def update_order(self, order: object) -> None: ...
     def update_account(self, account: Account) -> None: ...
 
-class ParquetDataCatalogV2:
+class ParquetDataCatalog:
     def __init__(
         self,
         base_path: str,
@@ -4985,7 +4985,7 @@ class ParquetDataCatalogV2:
         use_ts_event_for_ts_init: bool = False,
     ) -> None: ...
 
-class StreamingFeatherWriterV2:
+class StreamingFeatherWriter:
     def __init__(
         self,
         path: str,

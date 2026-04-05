@@ -13,9 +13,9 @@ __all__ = [
     "NautilusDataType",
     "OrderBookDeltaDataWrangler",
     "OrderBookDepth10DataWrangler",
-    "ParquetDataCatalogV2",
+    "ParquetDataCatalog",
     "QuoteTickDataWrangler",
-    "StreamingFeatherWriterV2",
+    "StreamingFeatherWriter",
     "TradeTickDataWrangler",
 ]
 
@@ -76,7 +76,7 @@ class OrderBookDepth10DataWrangler:
     def process_record_batch_bytes(self, data: bytes) -> list[model.OrderBookDepth10]: ...
 
 @typing.final
-class ParquetDataCatalogV2:
+class ParquetDataCatalog:
     def new(
         self,
         base_path: str,
@@ -84,7 +84,7 @@ class ParquetDataCatalogV2:
         batch_size: int | None = None,
         compression: int | None = None,
         max_row_group_size: int | None = None,
-    ) -> ParquetDataCatalogV2: ...
+    ) -> ParquetDataCatalog: ...
     def write_quote_ticks(
         self,
         data: typing.Sequence[model.QuoteTick],
@@ -308,7 +308,7 @@ class QuoteTickDataWrangler:
     def process_record_batch_bytes(self, data: bytes) -> list[model.QuoteTick]: ...
 
 @typing.final
-class StreamingFeatherWriterV2:
+class StreamingFeatherWriter:
     def new(
         self,
         path: str,
@@ -324,7 +324,7 @@ class StreamingFeatherWriterV2:
         rotation_timezone: str = "UTC",
         flush_interval_ms: int | None = None,
         replace: bool = False,
-    ) -> StreamingFeatherWriterV2: ...
+    ) -> StreamingFeatherWriter: ...
     def subscribe(self) -> None: ...
     def unsubscribe(self) -> None: ...
     def write(self, data: typing.Any) -> None: ...

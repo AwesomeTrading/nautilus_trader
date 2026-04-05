@@ -18,7 +18,7 @@ The custom-data architecture satisfies the following requirements:
 - Let users define custom data in pure Python without writing Rust code.
 - Let Rust-defined custom data use native Rust JSON and Arrow handlers.
 - Preserve a single user-facing `CustomData` wrapper at the PyO3 boundary.
-- Support persistence in `ParquetDataCatalogV2` using dynamic type registration
+- Support persistence in `ParquetDataCatalog` using dynamic type registration
   instead of hardcoded schemas.
 - Make custom data routable through the normal data-engine, actor, and strategy
   subscription flow.
@@ -246,7 +246,7 @@ custom data dynamically using the registered `type_name`.
 
 ### Catalog write flow
 
-`ParquetDataCatalogV2` expects custom writes to come in as `CustomData` values.
+`ParquetDataCatalog` expects custom writes to come in as `CustomData` values.
 
 The custom-data write path:
 

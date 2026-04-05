@@ -46,19 +46,22 @@ fn data_to_pyobject(py: Python<'_>, item: Data) -> PyResult<Py<PyAny>> {
 /// A catalog for writing data to Parquet files.
 #[cfg_attr(
     feature = "python",
-    pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.persistence")
+    pyo3::pyclass(
+        name = "ParquetDataCatalog",
+        module = "nautilus_trader.core.nautilus_pyo3.persistence"
+    )
 )]
 #[cfg_attr(
     feature = "python",
     pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.persistence")
 )]
-pub struct ParquetDataCatalogV2 {
+pub struct PyParquetDataCatalog {
     inner: ParquetDataCatalog,
 }
 
 #[pymethods]
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
-impl ParquetDataCatalogV2 {
+impl PyParquetDataCatalog {
     /// Create a new `ParquetCatalog` with the given base path and optional parameters.
     ///
     /// # Parameters
