@@ -39,7 +39,7 @@ use nautilus_core::{
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
-    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce, TriggerType},
+    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce},
     events::OrderEventAny,
     identifiers::{AccountId, ClientId, Venue},
     orders::{Order, OrderAny},
@@ -49,7 +49,10 @@ use nautilus_model::{
 use tokio::task::JoinHandle;
 
 use crate::{
-    common::consts::{DERIBIT_VENUE, DERIBIT_WS_HEARTBEAT_SECS},
+    common::{
+        consts::{DERIBIT_VENUE, DERIBIT_WS_HEARTBEAT_SECS},
+        enums::resolve_trigger_type,
+    },
     config::DeribitExecClientConfig,
     http::{client::DeribitHttpClient, models::DeribitCurrency, query::GetOrderStateParams},
     websocket::{
@@ -201,16 +204,7 @@ impl DeribitExecutionClient {
         // Deribit's `good_til_day` expires at end of trading session (8 UTC).
         let valid_until = None;
 
-        // Map trigger type for stop orders
-        let trigger = order.trigger_type().and_then(|tt| {
-            match tt {
-                TriggerType::LastPrice => Some("last_price".to_string()),
-                TriggerType::MarkPrice => Some("mark_price".to_string()),
-                TriggerType::IndexPrice => Some("index_price".to_string()),
-                TriggerType::Default => Some("last_price".to_string()), // Deribit default
-                _ => None,
-            }
-        });
+        let trigger = resolve_trigger_type(order.trigger_type());
 
         Ok(DeribitOrderParams {
             instrument_name: order.instrument_id().symbol.to_string(),

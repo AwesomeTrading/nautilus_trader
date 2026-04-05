@@ -17,7 +17,7 @@
 
 use std::fmt::Display;
 
-use nautilus_model::enums::{MarketStatusAction, TimeInForce};
+use nautilus_model::enums::{MarketStatusAction, TimeInForce, TriggerType};
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display as StrumDisplay, EnumIter, EnumString};
 
@@ -236,6 +236,16 @@ impl TryFrom<TimeInForce> for DeribitTimeInForce {
             )),
         }
     }
+}
+
+/// Resolves an optional Nautilus trigger type to a Deribit trigger string.
+pub fn resolve_trigger_type(trigger_type: Option<TriggerType>) -> Option<String> {
+    trigger_type.and_then(|tt| match tt {
+        TriggerType::LastPrice | TriggerType::Default => Some("last_price".to_string()),
+        TriggerType::MarkPrice => Some("mark_price".to_string()),
+        TriggerType::IndexPrice => Some("index_price".to_string()),
+        _ => None,
+    })
 }
 
 #[cfg(test)]

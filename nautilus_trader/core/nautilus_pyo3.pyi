@@ -7128,6 +7128,7 @@ class BybitWebSocketClient:
         time_in_force: TimeInForce | None = None,
         price: Price | None = None,
         trigger_price: Price | None = None,
+        trigger_type: TriggerType | None = None,
         post_only: bool | None = None,
         reduce_only: bool | None = None,
         is_leverage: bool = False,
@@ -7182,6 +7183,7 @@ class BybitWebSocketClient:
         time_in_force: TimeInForce | None = None,
         price: Price | None = None,
         trigger_price: Price | None = None,
+        trigger_type: TriggerType | None = None,
         post_only: bool | None = None,
         reduce_only: bool | None = None,
         is_leverage: bool = False,
@@ -7840,7 +7842,7 @@ class DeribitWebSocketClient:
         post_only: bool = False,
         reduce_only: bool = False,
         trigger_price: Price | None = None,
-        trigger: str | None = None,
+        trigger_type: TriggerType | None = None,
     ) -> None: ...
     async def modify_order(
         self,

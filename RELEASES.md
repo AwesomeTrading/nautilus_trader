@@ -138,10 +138,12 @@ Released on TBD (UTC).
 - Fixed Bybit WebSocket failed subscription ACKs (success=false) not triggering `mark_failure` recovery path
 - Fixed Bybit spot market orders ignoring `is_quote_quantity` on the order, causing all spot market buys to default to quote currency quantity via the Bybit API
 - Fixed Bybit demo mode `submit_order` ignoring `is_leverage` param, hardcoding `false` instead of reading from order params
+- Fixed Bybit `trigger_type` ignored on conditional orders, always submitting as `LastPrice` (#3794), thanks for reporting @marco-rigoni
 - Fixed Bybit TP/SL conditional orders misclassified as plain Market/Limit during reconciliation
 - Fixed Bybit bulk order status reports silently missing conditional (stop/MIT) orders
 - Fixed Bybit account state free balance underflowing when locked margin exceeds wallet total during liquidation
 - Fixed Databento price precision truncation for fractional tick sizes (#3696), thanks @pandashark
+- Fixed Deribit stop order submission missing `trigger_price` and `trigger` fields in Python exec client (#3794), thanks for reporting @marco-rigoni
 - Fixed Deribit cancel event lost during WebSocket reconnection gap when `user.orders` subscription update never arrives
 - Fixed Deribit duplicate `OrderCanceled` events when cancel RPC response and `user.orders` subscription both emit
 - Fixed Deribit `GenerateOrderStatusReport` unable to find closed orders when only `client_order_id` is provided
