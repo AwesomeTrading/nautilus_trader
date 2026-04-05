@@ -248,7 +248,7 @@ class DeribitWebSocketClient:
         post_only: bool,
         reduce_only: bool,
         trigger_price: model.Price | None = ...,
-        trigger: str | None = ...,
+        trigger_type: model.TriggerType | None = ...,
     ) -> typing.Any: ...
     def modify_order(
         self,
