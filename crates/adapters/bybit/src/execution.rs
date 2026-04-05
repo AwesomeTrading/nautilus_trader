@@ -60,7 +60,7 @@ use crate::{
         credential::credential_env_vars,
         enums::{
             BybitAccountType, BybitEnvironment, BybitOrderSide, BybitOrderType, BybitProductType,
-            BybitTimeInForce, BybitTpSlMode, BybitTriggerType,
+            BybitTimeInForce, BybitTpSlMode, resolve_trigger_type,
         },
         parse::{
             BybitTpSlParams, extract_raw_symbol, get_price_str, nanos_to_millis,
@@ -304,7 +304,7 @@ impl BybitExecutionClient {
             close_on_trigger: tp_sl.close_on_trigger,
             trigger_price: order.trigger_price().map(|p: Price| p.to_string()),
             trigger_by: if is_conditional {
-                Some(BybitTriggerType::LastPrice)
+                Some(resolve_trigger_type(order.trigger_type()))
             } else {
                 None
             },
@@ -316,16 +316,12 @@ impl BybitExecutionClient {
             },
             take_profit: tp_sl.take_profit.map(|p| p.to_string()),
             stop_loss: tp_sl.stop_loss.map(|p| p.to_string()),
-            tp_trigger_by: tp_sl.tp_trigger_by.or(if tp_sl.take_profit.is_some() {
-                Some(BybitTriggerType::LastPrice)
-            } else {
-                None
-            }),
-            sl_trigger_by: tp_sl.sl_trigger_by.or(if tp_sl.stop_loss.is_some() {
-                Some(BybitTriggerType::LastPrice)
-            } else {
-                None
-            }),
+            tp_trigger_by: tp_sl.tp_trigger_by.or(tp_sl
+                .take_profit
+                .map(|_| resolve_trigger_type(order.trigger_type()))),
+            sl_trigger_by: tp_sl.sl_trigger_by.or(tp_sl
+                .stop_loss
+                .map(|_| resolve_trigger_type(order.trigger_type()))),
             sl_trigger_price: tp_sl.sl_trigger_price.clone(),
             tp_trigger_price: tp_sl.tp_trigger_price.clone(),
             sl_order_type: tp_sl.sl_order_type,

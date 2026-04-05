@@ -32,7 +32,7 @@ use nautilus_common::live::get_runtime;
 use nautilus_core::{AtomicMap, AtomicSet, UUID4, consts::NAUTILUS_USER_AGENT};
 use nautilus_model::{
     data::BarType,
-    enums::{AggregationSource, OrderSide, OrderType, PriceType, TimeInForce},
+    enums::{AggregationSource, OrderSide, OrderType, PriceType, TimeInForce, TriggerType},
     identifiers::{AccountId, ClientOrderId, InstrumentId, StrategyId, TraderId, VenueOrderId},
     instruments::{Instrument, InstrumentAny},
     types::{Price, Quantity},
@@ -55,7 +55,7 @@ use crate::{
         credential::Credential,
         enums::{
             BybitEnvironment, BybitOrderSide, BybitOrderType, BybitProductType, BybitTimeInForce,
-            BybitTpSlMode, BybitTriggerType, BybitWsOrderRequestOp,
+            BybitTpSlMode, BybitWsOrderRequestOp, resolve_trigger_type,
         },
         parse::{
             bar_spec_to_bybit_interval, extract_base_coin, extract_raw_symbol, map_time_in_force,
@@ -1504,6 +1504,7 @@ impl BybitWebSocketClient {
         time_in_force: Option<TimeInForce>,
         price: Option<Price>,
         trigger_price: Option<Price>,
+        trigger_type: Option<TriggerType>,
         post_only: Option<bool>,
         reduce_only: Option<bool>,
         is_leverage: bool,
@@ -1519,6 +1520,7 @@ impl BybitWebSocketClient {
             time_in_force,
             price,
             trigger_price,
+            trigger_type,
             post_only,
             reduce_only,
             is_leverage,
@@ -1592,6 +1594,7 @@ impl BybitWebSocketClient {
         time_in_force: Option<TimeInForce>,
         price: Option<Price>,
         trigger_price: Option<Price>,
+        trigger_type: Option<TriggerType>,
         post_only: Option<bool>,
         reduce_only: Option<bool>,
         is_leverage: bool,
@@ -1648,7 +1651,7 @@ impl BybitWebSocketClient {
                 reduce_only: reduce_only.filter(|&r| r),
                 close_on_trigger: None,
                 trigger_price: trigger_price.map(|p| p.to_string()),
-                trigger_by: Some(BybitTriggerType::LastPrice),
+                trigger_by: Some(resolve_trigger_type(trigger_type)),
                 trigger_direction: trigger_dir,
                 tpsl_mode: if take_profit.is_some() || stop_loss.is_some() {
                     Some(BybitTpSlMode::Full)
@@ -1657,8 +1660,8 @@ impl BybitWebSocketClient {
                 },
                 take_profit: take_profit.map(|p| p.to_string()),
                 stop_loss: stop_loss.map(|p| p.to_string()),
-                tp_trigger_by: take_profit.map(|_| BybitTriggerType::LastPrice),
-                sl_trigger_by: stop_loss.map(|_| BybitTriggerType::LastPrice),
+                tp_trigger_by: take_profit.map(|_| resolve_trigger_type(trigger_type)),
+                sl_trigger_by: stop_loss.map(|_| resolve_trigger_type(trigger_type)),
                 sl_trigger_price: None,
                 tp_trigger_price: None,
                 sl_order_type: None,
@@ -1692,8 +1695,8 @@ impl BybitWebSocketClient {
                 },
                 take_profit: take_profit.map(|p| p.to_string()),
                 stop_loss: stop_loss.map(|p| p.to_string()),
-                tp_trigger_by: take_profit.map(|_| BybitTriggerType::LastPrice),
-                sl_trigger_by: stop_loss.map(|_| BybitTriggerType::LastPrice),
+                tp_trigger_by: take_profit.map(|_| resolve_trigger_type(trigger_type)),
+                sl_trigger_by: stop_loss.map(|_| resolve_trigger_type(trigger_type)),
                 sl_trigger_price: None,
                 tp_trigger_price: None,
                 sl_order_type: None,
@@ -2044,6 +2047,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 is_leverage,
                 None,
                 None,
@@ -2110,6 +2114,7 @@ mod tests {
                 } else {
                     Some(Price::from("50000.0"))
                 },
+                None,
                 None,
                 None,
                 None,

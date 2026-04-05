@@ -1896,6 +1896,7 @@ mod conditional_order_tests {
                 Some(TimeInForce::Gtc),
                 price,
                 trigger_price,
+                None,  // trigger_type
                 None,  // post_only
                 None,  // reduce_only
                 false, // is_leverage
