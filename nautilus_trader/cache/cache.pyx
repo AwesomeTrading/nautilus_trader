@@ -951,9 +951,13 @@ cdef class Cache(CacheFacade):
         else:
             # Safe to purge
             self._orders.pop(client_order_id, None)
-            self._index_venue_orders[order.instrument_id.venue].discard(client_order_id)
+            venue_orders = self._index_venue_orders.get(order.instrument_id.venue)
+            if venue_orders is not None:
+                venue_orders.discard(client_order_id)
             self._index_venue_order_ids.pop(order.venue_order_id, None)
-            self._index_instrument_orders[order.instrument_id].discard(client_order_id)
+            instrument_orders = self._index_instrument_orders.get(order.instrument_id)
+            if instrument_orders is not None:
+                instrument_orders.discard(client_order_id)
 
             if order.account_id is not None:
                 account_orders = self._index_account_orders.get(order.account_id)
@@ -966,11 +970,15 @@ cdef class Cache(CacheFacade):
                 position_orders = self._index_position_orders.get(order.position_id)
                 if position_orders is not None:
                     position_orders.discard(client_order_id)
+                    if not position_orders:
+                        self._index_position_orders.pop(order.position_id, None)
 
             if order.exec_algorithm_id is not None:
                 exec_algo_orders = self._index_exec_algorithm_orders.get(order.exec_algorithm_id)
                 if exec_algo_orders is not None:
                     exec_algo_orders.discard(client_order_id)
+                    if not exec_algo_orders:
+                        self._index_exec_algorithm_orders.pop(order.exec_algorithm_id, None)
 
             # Clean up strategy orders reverse index
             strategy_orders = self._index_strategy_orders.get(order.strategy_id)
@@ -1044,10 +1052,24 @@ cdef class Cache(CacheFacade):
         else:
             # Safe to purge
             self._positions.pop(position_id, None)
-            self._index_venue_positions[position.instrument_id.venue].discard(position_id)
-            self._index_instrument_positions[position.instrument_id].discard(position_id)
-            self._index_strategy_positions[position.strategy_id].discard(position_id)
-            self._index_account_positions[position.account_id].discard(position_id)
+
+            venue_positions = self._index_venue_positions.get(position.instrument_id.venue)
+            if venue_positions is not None:
+                venue_positions.discard(position_id)
+
+            instrument_positions = self._index_instrument_positions.get(position.instrument_id)
+            if instrument_positions is not None:
+                instrument_positions.discard(position_id)
+
+            strategy_positions = self._index_strategy_positions.get(position.strategy_id)
+            if strategy_positions is not None:
+                strategy_positions.discard(position_id)
+
+            account_positions = self._index_account_positions.get(position.account_id)
+            if account_positions is not None:
+                account_positions.discard(position_id)
+                if not account_positions:
+                    self._index_account_positions.pop(position.account_id, None)
 
             for client_order_id in position.client_order_ids_c():
                 self._index_order_position.pop(client_order_id, None)
