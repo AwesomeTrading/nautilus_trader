@@ -63,7 +63,6 @@ log = { workspace = true }
 regex = { workspace = true }
 rmp-serde = { workspace = true }
 rust_decimal = { workspace = true }
-semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
