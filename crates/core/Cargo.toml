@@ -36,7 +36,6 @@ anyhow = { workspace = true }
 arc-swap = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
-heck = { workspace = true }
 indexmap = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
@@ -101,4 +100,9 @@ harness = false
 [[bench]]
 name = "concurrent_map"
 path = "benches/concurrent_map.rs"
+harness = false
+
+[[bench]]
+name = "to_snake_case"
+path = "benches/to_snake_case.rs"
 harness = false

@@ -75,12 +75,12 @@ use std::{
 use ahash::AHashMap;
 use datafusion::arrow::record_batch::RecordBatch;
 use futures::StreamExt;
-use heck::ToSnakeCase;
 use itertools::Itertools;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
     UnixNanos,
     datetime::{iso8601_to_unix_nanos, unix_nanos_to_iso8601},
+    string::to_snake_case,
 };
 use nautilus_model::{
     data::{
@@ -495,7 +495,7 @@ impl ParquetDataCatalog {
             return Ok(PathBuf::new());
         }
 
-        let type_name = std::any::type_name::<T>().to_snake_case();
+        let type_name = to_snake_case(std::any::type_name::<T>());
         Self::check_ascending_timestamps(&data, &type_name)?;
 
         let start_ts = start.unwrap_or(data.first().unwrap().ts_init());
@@ -961,7 +961,7 @@ impl ParquetDataCatalog {
             return Ok(PathBuf::new());
         }
 
-        let type_name = std::any::type_name::<T>().to_snake_case();
+        let type_name = to_snake_case(std::any::type_name::<T>());
         Self::check_ascending_timestamps(&data, &type_name)?;
 
         let start_ts = data.first().unwrap().ts_init();
@@ -3496,7 +3496,7 @@ impl ParquetDataCatalog {
 
         // Convert data class name to filename (e.g., "quotes" -> "quotes")
         // The data_cls should already be in the correct format (snake_case)
-        let data_name = data_cls.to_snake_case();
+        let data_name = to_snake_case(data_cls);
 
         // List all feather files for this data class
         let feather_files =

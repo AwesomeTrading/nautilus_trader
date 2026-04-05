@@ -23,7 +23,6 @@ use anyhow::Context;
 use arrow::record_batch::RecordBatch;
 use chrono::{DateTime, Duration, NaiveDate};
 use futures_util::{StreamExt, pin_mut};
-use heck::ToSnakeCase;
 use nautilus_core::{UnixNanos, datetime::unix_nanos_to_iso8601, formatting::Separable};
 use nautilus_model::{
     data::{
@@ -348,11 +347,10 @@ fn batch_and_write_deltas(
     date: NaiveDate,
     path: &Path,
 ) {
-    let typename = stringify!(OrderBookDeltas);
     match book_deltas_to_arrow_record_batch_bytes(deltas) {
-        Ok(batch) => write_batch(&batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "order_book_deltas", instrument_id, date, path),
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting OrderBookDeltas to Arrow: {e:?}");
         }
     }
 }
@@ -363,10 +361,8 @@ fn batch_and_write_depths(
     date: NaiveDate,
     path: &Path,
 ) {
-    // Use "order_book_depths" to match catalog path prefix
-    let typename = "order_book_depths";
     match book_depth10_to_arrow_record_batch_bytes(depths) {
-        Ok(batch) => write_batch(&batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "order_book_depths", instrument_id, date, path),
         Err(e) => {
             log::error!("Error converting OrderBookDepth10 to Arrow: {e:?}");
         }
@@ -379,11 +375,10 @@ fn batch_and_write_quotes(
     date: NaiveDate,
     path: &Path,
 ) {
-    let typename = stringify!(QuoteTick);
     match quotes_to_arrow_record_batch_bytes(quotes) {
-        Ok(batch) => write_batch(&batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "quote_tick", instrument_id, date, path),
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting QuoteTick to Arrow: {e:?}");
         }
     }
 }
@@ -394,21 +389,19 @@ fn batch_and_write_trades(
     date: NaiveDate,
     path: &Path,
 ) {
-    let typename = stringify!(TradeTick);
     match trades_to_arrow_record_batch_bytes(trades) {
-        Ok(batch) => write_batch(&batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "trade_tick", instrument_id, date, path),
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting TradeTick to Arrow: {e:?}");
         }
     }
 }
 
 fn batch_and_write_bars(bars: &[Bar], bar_type: &BarType, date: NaiveDate, path: &Path) {
-    let typename = stringify!(Bar);
     let batch = match bars_to_arrow_record_batch_bytes(bars) {
         Ok(batch) => batch,
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting Bar to Arrow: {e:?}");
             return;
         }
     };
@@ -457,7 +450,6 @@ fn timestamps_to_filename(timestamp_1: UnixNanos, timestamp_2: UnixNanos) -> Str
 fn parquet_filepath(typename: &str, instrument_id: &InstrumentId, date: NaiveDate) -> PathBuf {
     assert_post_epoch(date);
 
-    let typename = typename.to_snake_case();
     let instrument_id_str = instrument_id.to_string().replace('/', "");
 
     let start_utc = date.and_hms_opt(0, 0, 0).unwrap().and_utc();

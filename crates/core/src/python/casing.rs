@@ -15,14 +15,13 @@
 
 //! String-case conversion helpers (`CamelCase` ⇄ `snake_case`).
 
-use heck::ToSnakeCase;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::gen_stub_pyfunction;
 
+use crate::string::to_snake_case;
+
 /// Convert the given string from any common case (PascalCase, camelCase, kebab-case, etc.)
 /// to *lower* `snake_case`.
-///
-/// This function uses the `heck` Rust crate under the hood.
 ///
 /// Parameters
 /// ----------
@@ -36,5 +35,5 @@ use pyo3_stub_gen::derive::gen_stub_pyfunction;
 #[pyfunction(name = "convert_to_snake_case")]
 #[gen_stub_pyfunction(module = "nautilus_trader.core")]
 pub fn py_convert_to_snake_case(input: &str) -> String {
-    input.to_snake_case()
+    to_snake_case(input)
 }
