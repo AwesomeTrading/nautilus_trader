@@ -147,26 +147,26 @@ impl AxExecutionClient {
             .map_err(|e| anyhow::anyhow!("Authentication failed: {e}"))
     }
 
-    async fn refresh_account_state(&self) -> anyhow::Result<()> {
-        let account_state = self
-            .http_client
-            .request_account_state(self.core.account_id)
-            .await
-            .context("failed to request AX account state")?;
+    fn update_account_state(&self) {
+        let http_client = self.http_client.clone();
+        let account_id = self.core.account_id;
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
 
-        let ts_event = self.clock.get_time_ns();
-        self.emitter.emit_account_state(
-            account_state.balances.clone(),
-            account_state.margins.clone(),
-            account_state.is_reported,
-            ts_event,
-        );
-        Ok(())
-    }
-
-    fn update_account_state(&self) -> anyhow::Result<()> {
-        let runtime = get_runtime();
-        runtime.block_on(self.refresh_account_state())
+        self.spawn_task("query_account", async move {
+            let account_state = http_client
+                .request_account_state(account_id)
+                .await
+                .context("failed to request AX account state")?;
+            let ts_event = clock.get_time_ns();
+            emitter.emit_account_state(
+                account_state.balances.clone(),
+                account_state.margins.clone(),
+                account_state.is_reported,
+                ts_event,
+            );
+            Ok(())
+        });
     }
 
     fn submit_order_internal(&self, cmd: &SubmitOrder) -> anyhow::Result<()> {
@@ -510,7 +510,8 @@ impl ExecutionClient for AxExecutionClient {
     }
 
     fn query_account(&self, _cmd: &QueryAccount) -> anyhow::Result<()> {
-        self.update_account_state()
+        self.update_account_state();
+        Ok(())
     }
 
     fn query_order(&self, cmd: &QueryOrder) -> anyhow::Result<()> {

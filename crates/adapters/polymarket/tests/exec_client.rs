@@ -37,7 +37,8 @@ use nautilus_common::{
         ExecutionEvent, ExecutionReport,
         execution::{
             BatchCancelOrders, CancelOrder, GenerateFillReports, GenerateOrderStatusReport,
-            GenerateOrderStatusReports, GeneratePositionStatusReports, ModifyOrder, SubmitOrder,
+            GenerateOrderStatusReports, GeneratePositionStatusReports, ModifyOrder, QueryAccount,
+            QueryOrder, SubmitOrder,
         },
     },
     testing::wait_until_async,
@@ -1932,4 +1933,67 @@ async fn test_cancel_order_cache_fallback_with_rejection() {
         .unwrap()
         .unwrap();
     assert_order_event(event, "CancelRejected");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_query_order_does_not_block_within_runtime() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state).await;
+    let (mut client, mut rx, cache) = create_test_execution_client(addr);
+    client.start().unwrap();
+
+    let instrument_id = InstrumentId::from("TEST-TOKEN.POLYMARKET");
+    add_instrument_to_cache(&cache, instrument_id);
+
+    let cmd = QueryOrder::new(
+        TraderId::from("TESTER-001"),
+        Some(ClientId::from("POLYMARKET")),
+        StrategyId::from("S-001"),
+        instrument_id,
+        ClientOrderId::from("O-QUERY-001"),
+        Some(VenueOrderId::from(
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
+        )),
+        UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    // This must not panic with "Cannot start a runtime from within a runtime"
+    client.query_order(&cmd).unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_order_status_report(event, OrderStatus::Accepted);
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_query_account_does_not_block_within_runtime() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state).await;
+    let (mut client, mut rx, _cache) = create_test_execution_client(addr);
+    client.start().unwrap();
+
+    let cmd = QueryAccount::new(
+        TraderId::from("TESTER-001"),
+        Some(ClientId::from("POLYMARKET")),
+        AccountId::from("POLYMARKET-001"),
+        UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    // This must not panic with "Cannot start a runtime from within a runtime"
+    client.query_account(&cmd).unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(event, ExecutionEvent::Account(_)),
+        "Expected Account event, was {event:?}"
+    );
 }

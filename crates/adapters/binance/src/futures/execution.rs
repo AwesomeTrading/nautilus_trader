@@ -48,8 +48,8 @@ use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
     enums::{
-        LiquiditySide, OmsType, OrderSide, OrderType, PositionSideSpecified, TrailingOffsetType,
-        TriggerType,
+        AccountType, LiquiditySide, OmsType, OrderSide, OrderType, PositionSideSpecified,
+        TrailingOffsetType, TriggerType,
     },
     events::{
         AccountState, OrderAccepted, OrderCancelRejected, OrderCanceled, OrderEventAny,
@@ -301,7 +301,21 @@ impl BinanceFuturesExecutionClient {
 
     /// Converts Binance futures account info to Nautilus account state.
     fn create_account_state(&self, account_info: &BinanceFuturesAccountInfo) -> AccountState {
-        let ts_now = self.clock.get_time_ns();
+        Self::create_account_state_from(
+            account_info,
+            self.core.account_id,
+            self.core.account_type,
+            self.clock,
+        )
+    }
+
+    fn create_account_state_from(
+        account_info: &BinanceFuturesAccountInfo,
+        account_id: AccountId,
+        account_type: AccountType,
+        clock: &'static AtomicTime,
+    ) -> AccountState {
+        let ts_now = clock.get_time_ns();
 
         let balances: Vec<AccountBalance> = account_info
             .assets
@@ -352,8 +366,8 @@ impl BinanceFuturesExecutionClient {
         }
 
         AccountState::new(
-            self.core.account_id,
-            self.core.account_type,
+            account_id,
+            account_type,
             balances,
             margins,
             true, // reported
@@ -376,18 +390,29 @@ impl BinanceFuturesExecutionClient {
         Ok(self.create_account_state(&account_info))
     }
 
-    fn update_account_state(&self) -> anyhow::Result<()> {
-        let runtime = get_runtime();
-        let account_state = runtime.block_on(self.refresh_account_state())?;
+    fn update_account_state(&self) {
+        let http_client = self.http_client.clone();
+        let account_id = self.core.account_id;
+        let account_type = self.core.account_type;
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
 
-        let ts_now = self.clock.get_time_ns();
-        self.emitter.emit_account_state(
-            account_state.balances.clone(),
-            account_state.margins.clone(),
-            account_state.is_reported,
-            ts_now,
-        );
-        Ok(())
+        self.spawn_task("query_account", async move {
+            let account_info = http_client
+                .query_account()
+                .await
+                .context("Binance Futures account state request failed")?;
+            let account_state =
+                Self::create_account_state_from(&account_info, account_id, account_type, clock);
+            let ts_now = clock.get_time_ns();
+            emitter.emit_account_state(
+                account_state.balances.clone(),
+                account_state.margins.clone(),
+                account_state.is_reported,
+                ts_now,
+            );
+            Ok(())
+        });
     }
 
     async fn init_hedge_mode(&self) -> anyhow::Result<bool> {
@@ -1541,7 +1566,8 @@ impl ExecutionClient for BinanceFuturesExecutionClient {
     }
 
     fn query_account(&self, _cmd: &QueryAccount) -> anyhow::Result<()> {
-        self.update_account_state()
+        self.update_account_state();
+        Ok(())
     }
 
     fn query_order(&self, cmd: &QueryOrder) -> anyhow::Result<()> {

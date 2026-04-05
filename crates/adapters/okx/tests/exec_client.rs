@@ -15,24 +15,36 @@
 
 //! Integration tests for `OKXExecutionClient`.
 
-use nautilus_common::messages::{
-    ExecutionEvent,
-    execution::{BatchCancelOrders, CancelOrder, SubmitOrder, SubmitOrderList},
+use std::{cell::RefCell, collections::HashMap, net::SocketAddr, rc::Rc, time::Duration};
+
+use axum::{Router, http::HeaderMap, response::IntoResponse, routing::get};
+use nautilus_common::{
+    cache::Cache,
+    clients::ExecutionClient,
+    live::runner::set_exec_event_sender,
+    messages::{
+        ExecutionEvent,
+        execution::{BatchCancelOrders, CancelOrder, QueryAccount, SubmitOrder, SubmitOrderList},
+    },
+    testing::wait_until_async,
 };
 use nautilus_core::{UUID4, UnixNanos, time::get_atomic_clock_realtime};
-use nautilus_live::ExecutionEventEmitter;
+use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
-    enums::{AccountType, LiquiditySide, OrderSide, OrderStatus, OrderType, TimeInForce},
+    enums::{AccountType, LiquiditySide, OmsType, OrderSide, OrderStatus, OrderType, TimeInForce},
     events::OrderInitialized,
     identifiers::{
         AccountId, ClientId, ClientOrderId, InstrumentId, OrderListId, StrategyId, TradeId,
-        TraderId, VenueOrderId,
+        TraderId, Venue, VenueOrderId,
     },
     orders::OrderList,
     reports::{FillReport, OrderStatusReport},
     types::{Currency, Money, Price, Quantity},
 };
+use nautilus_network::http::HttpClient;
 use nautilus_okx::{
+    config::OKXExecClientConfig,
+    execution::OKXExecutionClient,
     http::models::OKXCancelAlgoOrderResponse,
     websocket::{
         dispatch::{
@@ -844,4 +856,124 @@ async fn test_trade_dedup_concurrent_inserts_only_one_wins() {
         1,
         "exactly one task should see the trade as new"
     );
+}
+
+fn load_test_data(filename: &str) -> serde_json::Value {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("test_data")
+        .join(filename);
+    let content = std::fs::read_to_string(path).unwrap();
+    serde_json::from_str(&content).unwrap()
+}
+
+fn create_exec_test_router() -> Router {
+    Router::new().route(
+        "/api/v5/account/balance",
+        get(|_headers: HeaderMap| async {
+            axum::Json(load_test_data("http_get_account_balance.json")).into_response()
+        }),
+    )
+}
+
+async fn start_exec_test_server() -> SocketAddr {
+    let router = create_exec_test_router();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    tokio::spawn(async move {
+        axum::serve(listener, router.into_make_service())
+            .await
+            .unwrap();
+    });
+
+    let health_url = format!("http://{addr}/api/v5/account/balance");
+    let http_client =
+        HttpClient::new(HashMap::new(), Vec::new(), Vec::new(), None, None, None).unwrap();
+    wait_until_async(
+        || {
+            let url = health_url.clone();
+            let client = http_client.clone();
+            async move { client.get(url, None, None, Some(1), None).await.is_ok() }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
+
+    addr
+}
+
+fn create_test_execution_client(
+    base_url: &str,
+) -> (
+    OKXExecutionClient,
+    tokio::sync::mpsc::UnboundedReceiver<ExecutionEvent>,
+) {
+    let trader_id = TraderId::from("TESTER-001");
+    let account_id = AccountId::from("OKX-001");
+    let client_id = ClientId::from("OKX");
+
+    let cache = Rc::new(RefCell::new(Cache::default()));
+
+    let core = ExecutionClientCore::new(
+        trader_id,
+        client_id,
+        Venue::from("OKX"),
+        OmsType::Hedging,
+        account_id,
+        AccountType::Margin,
+        None,
+        cache,
+    );
+
+    let config = OKXExecClientConfig {
+        trader_id,
+        account_id,
+        base_url_http: Some(base_url.to_string()),
+        base_url_ws_private: Some("ws://127.0.0.1:19999/ws/v5/private".to_string()),
+        base_url_ws_business: Some("ws://127.0.0.1:19999/ws/v5/business".to_string()),
+        api_key: Some("test_key".to_string()),
+        api_secret: Some("test_secret".to_string()),
+        api_passphrase: Some("test_passphrase".to_string()),
+        ..Default::default()
+    };
+
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    set_exec_event_sender(tx);
+
+    let client = OKXExecutionClient::new(core, config).unwrap();
+
+    (client, rx)
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_query_account_does_not_block_within_runtime() {
+    let addr = start_exec_test_server().await;
+    let base_url = format!("http://{addr}");
+
+    let (mut client, mut rx) = create_test_execution_client(&base_url);
+
+    client.start().unwrap();
+
+    let cmd = QueryAccount::new(
+        TraderId::from("TESTER-001"),
+        Some(ClientId::from("OKX")),
+        AccountId::from("OKX-001"),
+        UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let result = client.query_account(&cmd);
+    assert!(result.is_ok());
+
+    wait_until_async(
+        || {
+            let found = rx
+                .try_recv()
+                .is_ok_and(|e| matches!(e, ExecutionEvent::Account(_)));
+            async move { found }
+        },
+        Duration::from_secs(5),
+    )
+    .await;
 }

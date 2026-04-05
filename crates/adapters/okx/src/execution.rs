@@ -232,20 +232,19 @@ impl OKXExecutionClient {
         }
     }
 
-    async fn refresh_account_state(&self) -> anyhow::Result<()> {
-        let account_state = self
-            .http_client
-            .request_account_state(self.core.account_id)
-            .await
-            .context("failed to request OKX account state")?;
+    fn update_account_state(&self) {
+        let http_client = self.http_client.clone();
+        let account_id = self.core.account_id;
+        let emitter = self.emitter.clone();
 
-        self.emitter.send_account_state(account_state);
-        Ok(())
-    }
-
-    fn update_account_state(&self) -> anyhow::Result<()> {
-        let runtime = get_runtime();
-        runtime.block_on(self.refresh_account_state())
+        self.spawn_task("query_account", async move {
+            let account_state = http_client
+                .request_account_state(account_id)
+                .await
+                .context("failed to request OKX account state")?;
+            emitter.send_account_state(account_state);
+            Ok(())
+        });
     }
 
     fn is_conditional_order(&self, order_type: OrderType) -> bool {
@@ -1007,7 +1006,8 @@ impl ExecutionClient for OKXExecutionClient {
     }
 
     fn query_account(&self, _cmd: &QueryAccount) -> anyhow::Result<()> {
-        self.update_account_state()
+        self.update_account_state();
+        Ok(())
     }
 
     fn query_order(&self, cmd: &QueryOrder) -> anyhow::Result<()> {

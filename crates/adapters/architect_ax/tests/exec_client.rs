@@ -24,8 +24,10 @@ use std::{cell::RefCell, net::SocketAddr, rc::Rc};
 
 use nautilus_architect_ax::{config::AxExecClientConfig, execution::AxExecutionClient};
 use nautilus_common::{
-    cache::Cache, clients::ExecutionClient, live::runner::set_exec_event_sender,
-    messages::ExecutionEvent,
+    cache::Cache,
+    clients::ExecutionClient,
+    live::runner::set_exec_event_sender,
+    messages::{ExecutionEvent, execution::QueryAccount},
 };
 use nautilus_core::{UUID4, UnixNanos};
 use nautilus_live::ExecutionClientCore;
@@ -235,4 +237,43 @@ async fn test_exec_config_production_defaults() {
     assert!(!config.http_base_url().contains("sandbox"));
     assert!(!config.orders_base_url().contains("sandbox"));
     assert!(!config.ws_private_url().contains("sandbox"));
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_query_account_does_not_block_within_runtime() {
+    let (addr, _state) = start_test_server().await.unwrap();
+    let (mut client, mut rx, cache) = create_test_execution_client(addr);
+
+    add_test_account_to_cache(&cache, AccountId::from("AX-001"));
+
+    client.start().expect("Failed to start");
+    client.connect().await.expect("Failed to connect");
+
+    // Drain any events from connect
+    while rx.try_recv().is_ok() {}
+
+    let cmd = QueryAccount::new(
+        TraderId::from("TESTER-001"),
+        Some(ClientId::from("AX")),
+        AccountId::from("AX-001"),
+        UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    client
+        .query_account(&cmd)
+        .expect("query_account should not panic with nested runtime");
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+        .await
+        .expect("Timed out waiting for account event")
+        .expect("Channel closed without event");
+
+    assert!(
+        matches!(event, ExecutionEvent::Account(_)),
+        "Expected Account event, was {event:?}"
+    );
+
+    client.disconnect().await.expect("Failed to disconnect");
 }

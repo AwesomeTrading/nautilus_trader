@@ -409,16 +409,7 @@ impl ExecutionClient for HyperliquidExecutionClient {
         }
 
         self.abort_pending_tasks();
-
-        // Disconnect WebSocket
-        if self.core.is_connected() {
-            let runtime = get_runtime();
-            runtime.block_on(async {
-                if let Err(e) = self.ws_client.disconnect().await {
-                    log::warn!("Error disconnecting WebSocket client: {e}");
-                }
-            });
-        }
+        self.ws_client.abort();
 
         self.core.set_disconnected();
         self.core.set_stopped();
@@ -1050,14 +1041,31 @@ impl ExecutionClient for HyperliquidExecutionClient {
         Ok(())
     }
 
-    fn query_account(&self, cmd: &QueryAccount) -> anyhow::Result<()> {
-        log::debug!("Querying account: {cmd:?}");
+    fn query_account(&self, _cmd: &QueryAccount) -> anyhow::Result<()> {
+        let http_client = self.http_client.clone();
+        let account_address = self.get_account_address()?;
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
 
-        let runtime = get_runtime();
-        runtime.block_on(async {
-            if let Err(e) = self.refresh_account_state().await {
-                log::warn!("Failed to query account state: {e}");
+        self.spawn_task("query_account", async move {
+            let clearinghouse_state = http_client
+                .info_clearinghouse_state(&account_address)
+                .await
+                .context("failed to fetch clearinghouse state")?;
+
+            let state: ClearinghouseState = serde_json::from_value(clearinghouse_state)
+                .context("failed to deserialize clearinghouse state")?;
+
+            if let Some(ref cross_margin_summary) = state.cross_margin_summary {
+                let (balances, margins) = parse_account_balances_and_margins(cross_margin_summary)
+                    .context("failed to parse account balances and margins")?;
+                let ts_event = clock.get_time_ns();
+                emitter.emit_account_state(balances, margins, true, ts_event);
+            } else {
+                log::warn!("No cross margin summary in clearinghouse state");
             }
+
+            Ok(())
         });
 
         Ok(())

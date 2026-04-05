@@ -285,6 +285,18 @@ impl HyperliquidWebSocketClient {
         self.task_handle = Some(handle);
     }
 
+    /// Force-close fallback for the sync `stop()` path.
+    /// Prefer `disconnect()` for graceful shutdown.
+    pub(crate) fn abort(&mut self) {
+        self.signal.store(true, Ordering::Relaxed);
+        self.connection_mode
+            .store(Arc::new(AtomicU8::new(ConnectionMode::Closed as u8)));
+
+        if let Some(handle) = self.task_handle.take() {
+            handle.abort();
+        }
+    }
+
     /// Disconnects the WebSocket connection.
     pub async fn disconnect(&mut self) -> anyhow::Result<()> {
         log::info!("Disconnecting Hyperliquid WebSocket");

@@ -1637,6 +1637,42 @@ Store task handles in `pending_tasks: Mutex<Vec<JoinHandle<()>>>`. Each call to
 `spawn_task` prunes finished handles before pushing the new one, preventing unbounded
 growth. On disconnect, abort all remaining handles.
 
+### Never use `block_on` in trait methods
+
+The live runner calls sync `ExecutionClient` and `DataClient` trait methods from within a
+tokio runtime. Using `runtime.block_on()` in these methods panics with
+*"Cannot start a runtime from within a runtime"*. Use `spawn_task` instead:
+
+```rust
+// Wrong: panics at runtime
+fn query_order(&self, cmd: &QueryOrder) -> anyhow::Result<()> {
+    get_runtime().block_on(async { self.http_client.get_order(&id).await })
+}
+
+// Correct: clone what you need, spawn, return immediately
+fn query_order(&self, cmd: &QueryOrder) -> anyhow::Result<()> {
+    let http_client = self.http_client.clone();
+    let emitter = self.emitter.clone();
+
+    self.spawn_task("query_order", async move {
+        let report = http_client.get_order(&id).await?;
+        emitter.send_order_status_report(report);
+        Ok(())
+    });
+    Ok(())
+}
+```
+
+`block_on` is valid in contexts that run outside a tokio runtime:
+
+| Context                      | Why safe                                       |
+|------------------------------|------------------------------------------------|
+| PyO3 `#[pymethods]`         | Called from Python, no ambient runtime          |
+| Binary `main()` functions   | Top‑level entry point, runtime not yet started  |
+| Dedicated background threads | Thread created outside tokio's worker pool     |
+| `block_in_place` wrapper    | Moves the thread out of the worker pool first   |
+| Test code with own runtime  | `Runtime::new()` creates an isolated runtime    |
+
 ### Graceful shutdown with `CancellationToken`
 
 Use `tokio_util::sync::CancellationToken` to coordinate shutdown across multiple spawned

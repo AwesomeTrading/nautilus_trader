@@ -718,15 +718,7 @@ impl ExecutionClient for PolymarketExecutionClient {
         }
 
         self.abort_pending_tasks();
-
-        if self.core.is_connected() {
-            let runtime = get_runtime();
-            runtime.block_on(async {
-                if let Err(e) = self.ws_client.disconnect().await {
-                    log::warn!("Error disconnecting WebSocket client: {e}");
-                }
-            });
-        }
+        self.ws_client.abort();
 
         self.core.set_disconnected();
         self.core.set_stopped();
@@ -990,11 +982,13 @@ impl ExecutionClient for PolymarketExecutionClient {
     }
 
     fn query_account(&self, _cmd: &QueryAccount) -> anyhow::Result<()> {
-        let runtime = get_runtime();
-        runtime.block_on(async {
-            if let Err(e) = self.refresh_account_state().await {
-                log::warn!("Failed to query account state: {e}");
-            }
+        let http_client = self.http_client.clone();
+        let emitter = self.emitter.clone();
+        let clock = self.clock;
+        let signature_type = self.config.signature_type;
+
+        self.spawn_task("query_account", async move {
+            fetch_and_emit_account_state(&http_client, &emitter, clock, signature_type).await
         });
         Ok(())
     }
@@ -1020,12 +1014,11 @@ impl ExecutionClient for PolymarketExecutionClient {
             None => (4, 6),
         };
 
-        let runtime = get_runtime();
-        let http_client = &self.http_client;
-        let emitter = &self.emitter;
+        let http_client = self.http_client.clone();
+        let emitter = self.emitter.clone();
         let clock = self.clock;
 
-        runtime.block_on(async {
+        self.spawn_task("query_order", async move {
             match http_client.get_order_optional(&venue_order_id).await {
                 Ok(Some(order)) => {
                     let report = parse_order_status_report(
@@ -1046,6 +1039,7 @@ impl ExecutionClient for PolymarketExecutionClient {
                     log::warn!("Failed to query order {venue_order_id}: {e}");
                 }
             }
+            Ok(())
         });
 
         Ok(())

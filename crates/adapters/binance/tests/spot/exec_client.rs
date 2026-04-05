@@ -979,13 +979,9 @@ async fn test_connect_disconnect_reconnect() {
     assert!(client.is_connected());
 }
 
-// Note: This test is ignored because query_account uses block_on internally
-// which conflicts with the tokio test runtime. The functionality is tested
-// through the connect() path which also queries account state.
 #[rstest]
 #[tokio::test]
-#[ignore = "query_account uses block_on which conflicts with tokio test runtime"]
-async fn test_query_account_generates_account_state_event() {
+async fn test_query_account_does_not_block_within_runtime() {
     let addr = start_exec_test_server().await;
     let base_url = format!("http://{addr}");
 
@@ -998,12 +994,13 @@ async fn test_query_account_generates_account_state_event() {
     let query_cmd = QueryAccount::new(
         TraderId::from("TESTER-001"),
         Some(ClientId::from("BINANCE")),
-        AccountId::from("BINANCE-SPOT-001"),
+        AccountId::from("BINANCE-001"),
         nautilus_core::UUID4::new(),
         UnixNanos::default(),
     );
 
-    client.query_account(&query_cmd).unwrap();
+    let result = client.query_account(&query_cmd);
+    assert!(result.is_ok());
 
     wait_until_async(
         || {

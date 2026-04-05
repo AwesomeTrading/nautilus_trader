@@ -116,6 +116,7 @@ Released on TBD (UTC).
 - Fixed reported `MarginAccount` updates dropping initial and maintenance margins (#3725), thanks for reporting @marco-rigoni
 - Fixed option chains emitting data after expiry (#3735), thanks @filipmacek
 - Fixed `BettingInstrument.selection_handicap` PyO3 name
+- Fixed adapter `query_account` panic from `block_on` inside async runtime across all adapters (Rust)
 - Fixed Betfair order modify `Quantity` serialization for partial cancel size reduction
 - Fixed Binance trailing stop params and testnet URLs (#3778), thanks @eliotOrderson
 - Fixed Binance Spot SBE schema version mismatch after Binance upgraded to schema 3:3 (released 2026-03-25)
@@ -203,6 +204,7 @@ Released on TBD (UTC).
 - Fixed Polymarket `ts_init` timestamps on reports and reconciliation (#3786), thanks @filipmacek
 - Fixed Polymarket position reconciliation dust cycling by filtering sub-threshold positions and implementing Data API position reports (#3774), thanks @filipmacek
 - Fixed Polymarket duplicate inferred fill panic when order update races trade (#3770), thanks for reporting @Javdu10
+- Fixed Polymarket `query_order` panic from `block_on` inside async runtime (#3803), thanks for reporting @Javdu10
 - Fixed Tardis data client CTRL+C not responding due to signal starvation in `LiveNode` event loop
 - Fixed Tardis data client `stop()`/`disconnect()` lifecycle leaving tasks alive or `is_connected` stale
 - Fixed Tardis data client `derivative_ticker` not streaming unless manually added to `data_types`
@@ -292,6 +294,7 @@ Released on TBD (UTC).
 - Added adapter developer guide sections for WS unit tests, close/stream patterns, and split-client architecture
 - Added adapter developer guide sections for symbol normalization, status diffing, task management, data event emission, and AuthTracker
 - Added adapter developer guide section on configuration best practices: builder defaults, `T` vs `Option<T>` rules, `Default` delegation pattern
+- Added adapter developer guide section on `block_on` safety rules and `spawn_task` usage in sync trait methods
 - Added OKX options trading section to integration guide with pricing modes, order types, restrictions, and configuration
 - Added Group 10 (options trading) to execution testing spec with venue-agnostic test cases
 - Added `DeltaNeutralVol` README updates for strangle entry flow, config fields, and usage examples

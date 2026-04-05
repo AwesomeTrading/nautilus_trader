@@ -38,7 +38,7 @@ use nautilus_common::{
     live::runner::set_exec_event_sender,
     messages::{
         ExecutionEvent,
-        execution::{CancelAllOrders, CancelOrder, ModifyOrder, SubmitOrder},
+        execution::{CancelAllOrders, CancelOrder, ModifyOrder, QueryAccount, SubmitOrder},
     },
     testing::wait_until_async,
 };
@@ -1579,4 +1579,34 @@ async fn test_order_trade_update_processed_with_default_precision_on_cache_miss(
         Duration::from_secs(5),
     )
     .await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_query_account_does_not_block_within_runtime() {
+    let addr = start_exec_test_server().await;
+    let base_url_http = format!("http://{addr}");
+    let base_url_ws = format!("ws://{addr}/ws");
+
+    let (mut client, mut rx, cache) = create_test_execution_client(base_url_http, base_url_ws);
+    add_test_account_to_cache(&cache, AccountId::from("BINANCE-001"));
+
+    client.start().unwrap();
+    client.connect().await.unwrap();
+
+    let cmd = QueryAccount::new(
+        TraderId::from("TESTER-001"),
+        Some(ClientId::from("BINANCE")),
+        AccountId::from("BINANCE-001"),
+        nautilus_core::UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let result = client.query_account(&cmd);
+    assert!(result.is_ok());
+
+    match recv_until(&mut rx, |event| matches!(event, ExecutionEvent::Account(_))).await {
+        ExecutionEvent::Account(_) => {}
+        other => panic!("Expected Account event, was {other:?}"),
+    }
 }
