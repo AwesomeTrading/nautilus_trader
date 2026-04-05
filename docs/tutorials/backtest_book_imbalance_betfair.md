@@ -1,4 +1,4 @@
-# Book Imbalance Backtest with Betfair Data (Rust)
+# Book Imbalance Backtest (Betfair)
 
 :::note
 This is a **Rust-only** v2 system tutorial. No Python, no Cython, no Parquet catalog.

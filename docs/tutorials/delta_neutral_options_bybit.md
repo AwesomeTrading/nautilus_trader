@@ -1,4 +1,4 @@
-# Delta-neutral options strategy on Bybit (Rust)
+# Delta-Neutral Options Strategy (Bybit)
 
 :::note
 This is a **Rust-only** v2 system tutorial. It runs a live delta-neutral short

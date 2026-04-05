@@ -1,4 +1,4 @@
-# Options data and Greeks on Bybit (Rust)
+# Options Data and Greeks (Bybit)
 
 :::note
 This is a **Rust-only** v2 system tutorial. It uses the Rust `LiveNode` with
