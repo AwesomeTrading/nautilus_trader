@@ -22,12 +22,23 @@ from nautilus_trader.model import AccountState
 from nautilus_trader.model import AccountType
 from nautilus_trader.model import BettingAccount
 from nautilus_trader.model import CashAccount
+from nautilus_trader.model import ClientOrderId
 from nautilus_trader.model import Currency
 from nautilus_trader.model import LeveragedMarginModel
+from nautilus_trader.model import LiquiditySide
 from nautilus_trader.model import MarginAccount
 from nautilus_trader.model import MarginBalance
 from nautilus_trader.model import Money
+from nautilus_trader.model import OrderFilled
+from nautilus_trader.model import OrderSide
+from nautilus_trader.model import OrderType
+from nautilus_trader.model import Price
+from nautilus_trader.model import Quantity
 from nautilus_trader.model import StandardMarginModel
+from nautilus_trader.model import StrategyId
+from nautilus_trader.model import TradeId
+from nautilus_trader.model import TraderId
+from nautilus_trader.model import VenueOrderId
 from nautilus_trader.model import betting_account_from_account_events
 from nautilus_trader.model import cash_account_from_account_events
 from nautilus_trader.model import margin_account_from_account_events
@@ -278,3 +289,371 @@ def test_betting_account_from_account_events():
 
     assert account.id == AccountId("SIM-006")
     assert account.balance_free() == Money.from_str("875.00 USD")
+
+
+def test_cash_account_multi_currency_balances():
+    usd = Currency.from_str("USD")
+    btc = Currency.from_str("BTC")
+    state = AccountState(
+        account_id=AccountId("BINANCE-001"),
+        account_type=AccountType.CASH,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("10000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("10000.00 USD"),
+            ),
+            AccountBalance(
+                total=Money.from_str("1.50000000 BTC"),
+                locked=Money.from_str("0.00000000 BTC"),
+                free=Money.from_str("1.50000000 BTC"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+    )
+
+    account = CashAccount(state, calculate_account_state=True)
+
+    assert account.base_currency is None
+    assert account.balance_total(usd) == Money.from_str("10000.00 USD")
+    assert account.balance_total(btc) == Money.from_str("1.50000000 BTC")
+    assert account.balance_free(usd) == Money.from_str("10000.00 USD")
+    assert account.balance_free(btc) == Money.from_str("1.50000000 BTC")
+    assert len(account.balances_total()) == 2
+    assert len(account.balances_free()) == 2
+    assert len(account.balances_locked()) == 2
+
+
+def test_cash_account_calculate_balance_locked_buy():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-001"),
+        account_type=AccountType.CASH,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = CashAccount(state, calculate_account_state=True)
+
+    locked = account.calculate_balance_locked(
+        instrument=instrument,
+        side=OrderSide.BUY,
+        quantity=Quantity.from_int(10_000),
+        price=Price.from_str("0.80000"),
+    )
+
+    assert isinstance(locked, Money)
+
+
+def test_cash_account_calculate_balance_locked_sell():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-001"),
+        account_type=AccountType.CASH,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = CashAccount(state, calculate_account_state=True)
+
+    locked = account.calculate_balance_locked(
+        instrument=instrument,
+        side=OrderSide.SELL,
+        quantity=Quantity.from_int(10_000),
+        price=Price.from_str("0.80000"),
+    )
+
+    assert isinstance(locked, Money)
+
+
+def test_cash_account_calculate_commission():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-001"),
+        account_type=AccountType.CASH,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = CashAccount(state, calculate_account_state=True)
+
+    commission = account.calculate_commission(
+        instrument=instrument,
+        last_qty=Quantity.from_int(10_000),
+        last_px=Price.from_str("0.80000"),
+        liquidity_side=LiquiditySide.TAKER,
+    )
+
+    assert isinstance(commission, Money)
+
+
+def test_cash_account_calculate_pnls():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-001"),
+        account_type=AccountType.CASH,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = CashAccount(state, calculate_account_state=True)
+
+    fill = OrderFilled(
+        trader_id=TraderId("TESTER-001"),
+        strategy_id=StrategyId("S-001"),
+        instrument_id=instrument.id,
+        client_order_id=ClientOrderId("O-001"),
+        venue_order_id=VenueOrderId("V-001"),
+        account_id=AccountId("SIM-001"),
+        trade_id=TradeId("T-001"),
+        order_side=OrderSide.BUY,
+        order_type=OrderType.MARKET,
+        last_qty=Quantity.from_int(10_000),
+        last_px=Price.from_str("0.80000"),
+        currency=Currency.from_str("USD"),
+        liquidity_side=LiquiditySide.TAKER,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        reconciliation=False,
+    )
+
+    pnls = account.calculate_pnls(instrument=instrument, fill=fill)
+
+    assert isinstance(pnls, list)
+    assert all(isinstance(m, Money) for m in pnls)
+
+
+def test_cash_account_last_event_and_events():
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-001"),
+        account_type=AccountType.CASH,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("1000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("1000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = CashAccount(state, calculate_account_state=True)
+
+    assert account.last_event is not None
+    assert isinstance(account.events, list)
+    assert len(account.events) == 1
+
+
+def test_margin_account_leverage_operations():
+    instrument = TestInstrumentProvider.audusd_sim()
+    instrument2 = TestInstrumentProvider.usdjpy_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-002"),
+        account_type=AccountType.MARGIN,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = MarginAccount(state, calculate_account_state=True)
+    account.set_default_leverage(Decimal(10))
+    account.set_leverage(instrument.id, Decimal(20))
+
+    assert account.default_leverage == Decimal(10)
+    assert account.leverage(instrument.id) == Decimal(20)
+    assert account.leverage(instrument2.id) == Decimal(10)
+    assert account.is_unleveraged(instrument.id) is False
+    assert isinstance(account.leverages(), dict)
+
+
+def test_margin_account_initial_margins():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-002"),
+        account_type=AccountType.MARGIN,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = MarginAccount(state, calculate_account_state=True)
+    account.update_initial_margin(instrument.id, Money.from_str("500.00 USD"))
+    account.update_maintenance_margin(instrument.id, Money.from_str("250.00 USD"))
+
+    assert account.initial_margin(instrument.id) == Money.from_str("500.00 USD")
+    assert account.maintenance_margin(instrument.id) == Money.from_str("250.00 USD")
+    assert isinstance(account.initial_margins(), dict)
+    assert isinstance(account.maintenance_margins(), dict)
+
+
+def test_margin_account_calculate_initial_margin():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-002"),
+        account_type=AccountType.MARGIN,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = MarginAccount(state, calculate_account_state=True)
+    account.set_default_leverage(Decimal(10))
+
+    margin = account.calculate_initial_margin(
+        instrument=instrument,
+        quantity=Quantity.from_int(10_000),
+        price=Price.from_str("0.80000"),
+    )
+
+    assert isinstance(margin, Money)
+
+
+def test_margin_account_calculate_maintenance_margin():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-002"),
+        account_type=AccountType.MARGIN,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = MarginAccount(state, calculate_account_state=True)
+    account.set_default_leverage(Decimal(10))
+
+    margin = account.calculate_maintenance_margin(
+        instrument=instrument,
+        quantity=Quantity.from_int(10_000),
+        price=Price.from_str("0.80000"),
+    )
+
+    assert isinstance(margin, Money)
+
+
+def test_margin_account_is_unleveraged_default():
+    instrument = TestInstrumentProvider.audusd_sim()
+    usd = Currency.from_str("USD")
+    state = AccountState(
+        account_id=AccountId("SIM-002"),
+        account_type=AccountType.MARGIN,
+        balances=[
+            AccountBalance(
+                total=Money.from_str("100000.00 USD"),
+                locked=Money.from_str("0.00 USD"),
+                free=Money.from_str("100000.00 USD"),
+            ),
+        ],
+        margins=[],
+        is_reported=True,
+        event_id=UUID4(),
+        ts_event=0,
+        ts_init=0,
+        base_currency=usd,
+    )
+
+    account = MarginAccount(state, calculate_account_state=True)
+
+    assert account.is_unleveraged(instrument.id) is True
