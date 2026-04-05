@@ -75,9 +75,10 @@ pub struct PerpetualMarket {
     #[serde(default)]
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub index_price: Option<Decimal>,
-    /// Oracle price for the market.
-    #[serde_as(as = "DisplayFromStr")]
-    pub oracle_price: Decimal,
+    /// Oracle price for the market (may be null for inactive/pre-launch markets).
+    #[serde(default)]
+    #[serde_as(as = "Option<DisplayFromStr>")]
+    pub oracle_price: Option<Decimal>,
     /// Price change over 24 hours.
     #[serde(rename = "priceChange24H")]
     #[serde_as(as = "DisplayFromStr")]

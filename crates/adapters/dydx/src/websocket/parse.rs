@@ -893,7 +893,7 @@ mod tests {
             step_size: dec!(0.001),
             tick_size: dec!(0.01),
             index_price: Some(dec!(50000)),
-            oracle_price: dec!(50000),
+            oracle_price: Some(dec!(50000)),
             price_change_24h: dec!(0),
             next_funding_rate: dec!(0),
             next_funding_at: None,

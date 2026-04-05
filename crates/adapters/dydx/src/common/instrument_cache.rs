@@ -200,7 +200,7 @@ impl InstrumentCache {
             .map(|market| OrderMarketParams {
                 atomic_resolution: market.atomic_resolution,
                 clob_pair_id: market.clob_pair_id,
-                oracle_price: Some(market.oracle_price),
+                oracle_price: market.oracle_price,
                 quantum_conversion_exponent: market.quantum_conversion_exponent,
                 step_base_quantums: market.step_base_quantums,
                 subticks_per_tick: market.subticks_per_tick,
@@ -215,7 +215,7 @@ impl InstrumentCache {
         if let Some(instrument_id) = self.market_index.get(&ticker_ustr)
             && let Some(mut market) = self.market_params.get_mut(&*instrument_id)
         {
-            market.oracle_price = oracle_price;
+            market.oracle_price = Some(oracle_price);
         }
     }
 
@@ -292,7 +292,7 @@ impl InstrumentCache {
     ) -> std::collections::HashMap<InstrumentId, rust_decimal::Decimal> {
         self.market_params
             .iter()
-            .map(|entry| (*entry.key(), entry.value().oracle_price))
+            .filter_map(|entry| entry.value().oracle_price.map(|p| (*entry.key(), p)))
             .collect()
     }
 
@@ -367,7 +367,7 @@ mod tests {
             step_size: dec!(0.001),
             tick_size: dec!(0.1),
             index_price: Some(dec!(50000)),
-            oracle_price: dec!(50000),
+            oracle_price: Some(dec!(50000)),
             price_change_24h: dec!(0),
             next_funding_rate: dec!(0),
             next_funding_at: None,
@@ -499,13 +499,13 @@ mod tests {
 
         // Initial oracle price
         let params = cache.get_market_params(&instrument.id()).unwrap();
-        assert_eq!(params.oracle_price, dec!(50000));
+        assert_eq!(params.oracle_price, Some(dec!(50000)));
 
         // Update oracle price
         cache.update_oracle_price("BTC-USD", dec!(55000));
 
         let params = cache.get_market_params(&instrument.id()).unwrap();
-        assert_eq!(params.oracle_price, dec!(55000));
+        assert_eq!(params.oracle_price, Some(dec!(55000)));
     }
 
     #[rstest]
@@ -538,5 +538,47 @@ mod tests {
         // ETH-USD should have updated price 3000
         let eth_id = InstrumentId::new(Symbol::new("ETH-USD-PERP"), Venue::new("DYDX"));
         assert_eq!(oracle_map.get(&eth_id), Some(&dec!(3000)));
+    }
+
+    #[rstest]
+    fn test_get_order_market_params_with_none_oracle_price() {
+        let cache = InstrumentCache::new();
+        let instrument = create_test_instrument("WTI-USD-PERP");
+        let instrument_id = instrument.id();
+        let mut market = create_test_market("WTI-USD", 99);
+        market.oracle_price = None;
+
+        cache.insert(instrument, market);
+
+        let params = cache.get_order_market_params(&instrument_id).unwrap();
+        assert_eq!(params.oracle_price, None);
+        assert_eq!(params.clob_pair_id, 99);
+    }
+
+    #[rstest]
+    fn test_to_oracle_prices_map_excludes_none() {
+        let cache = InstrumentCache::new();
+
+        let mut market_no_oracle = create_test_market("WTI-USD", 99);
+        market_no_oracle.oracle_price = None;
+
+        let items = vec![
+            (
+                create_test_instrument("BTC-USD-PERP"),
+                create_test_market("BTC-USD", 0),
+            ),
+            (create_test_instrument("WTI-USD-PERP"), market_no_oracle),
+        ];
+
+        cache.insert_many(items);
+
+        let oracle_map = cache.to_oracle_prices_map();
+        assert_eq!(oracle_map.len(), 1);
+
+        let btc_id = InstrumentId::new(Symbol::new("BTC-USD-PERP"), Venue::new("DYDX"));
+        assert_eq!(oracle_map.get(&btc_id), Some(&dec!(50000)));
+
+        let wti_id = InstrumentId::new(Symbol::new("WTI-USD-PERP"), Venue::new("DYDX"));
+        assert_eq!(oracle_map.get(&wti_id), None);
     }
 }

@@ -503,7 +503,7 @@ fn create_btc_instrument() -> InstrumentAny {
         step_size: dec!(0.0001),
         tick_size: dec!(1),
         index_price: Some(dec!(43250)),
-        oracle_price: dec!(43250),
+        oracle_price: Some(dec!(43250)),
         price_change_24h: dec!(500),
         next_funding_rate: dec!(0.0001),
         next_funding_at: None,
