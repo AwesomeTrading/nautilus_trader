@@ -18,7 +18,7 @@
 //! Requires the `high-precision` feature because the ITCH parquet data
 //! uses 128-bit fixed-point encoding.
 
-#![cfg(feature = "high-precision")]
+#![cfg(all(feature = "high-precision", feature = "examples"))]
 
 use ahash::AHashMap;
 use nautilus_backtest::{config::BacktestEngineConfig, engine::BacktestEngine};

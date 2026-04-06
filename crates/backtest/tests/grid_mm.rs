@@ -13,6 +13,8 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
+#![cfg(feature = "examples")]
+
 use ahash::AHashMap;
 use nautilus_backtest::{config::BacktestEngineConfig, engine::BacktestEngine};
 use nautilus_execution::models::{fee::FeeModelAny, fill::FillModelAny};

@@ -9,7 +9,7 @@ PROFILE="nextest"
 
 run_full() {
   echo "Running full workspace clippy"
-  exec cargo clippy --workspace --all-targets \
+  exec cargo clippy --workspace --lib --tests \
     --features "$(
       IFS=,
       echo "${DESIRED_FEATURES[*]}"
@@ -105,5 +105,5 @@ if [ -n "$feat_seen" ]; then
 fi
 
 echo "Running clippy on: ${seen_list[*]}"
-cargo clippy "${pkg_args[@]}" --all-targets "${feat_args[@]}" \
+cargo clippy "${pkg_args[@]}" --lib --tests "${feat_args[@]}" \
   --profile "$PROFILE" -- -D warnings
