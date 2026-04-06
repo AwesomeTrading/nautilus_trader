@@ -48,7 +48,7 @@ rust-version = "1.94.1"
 authors = ["Nautech Systems <info@nautechsystems.io>"]
 license = "LGPL-3.0-or-later"
 readme = "README.md"
-description = "A high-performance algorithmic trading platform and event-driven backtester"
+description = "Production-grade Rust-native trading engine with deterministic event-driven architecture"
 categories = ["finance", "simulation", "asynchronous"]
 keywords = [
   "finance",
