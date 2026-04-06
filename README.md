@@ -104,8 +104,7 @@ The following integrations are currently supported; see [docs/integrations/](htt
 
 | Name                                                                         | ID                    | Type                    | Status                                               | Docs                                       |
 | :--------------------------------------------------------------------------- | :-------------------- | :---------------------- | :----------------------------------------------------| :----------------------------------------- |
-| [AX Exchange](https://architect.exchange)                                    | `AX`                  | Perpetuals Exchange     | ![status](https://img.shields.io/badge/beta-yellow)  | [Guide](docs/integrations/architect_ax.md) |
-| [Architect](https://architect.co)                                            | `ARCHITECT`           | Brokerage (multi-venue) | ![status](https://img.shields.io/badge/planned-gray) | -                                          |
+| [AX Exchange](https://architect.exchange)                                    | `AX`                  | Perpetuals Exchange     | ![status](https://img.shields.io/badge/stable-green) | [Guide](docs/integrations/architect_ax.md) |
 | [Betfair](https://betfair.com)                                               | `BETFAIR`             | Sports Betting Exchange | ![status](https://img.shields.io/badge/stable-green) | [Guide](docs/integrations/betfair.md)      |
 | [Binance](https://binance.com)                                               | `BINANCE`             | Crypto Exchange (CEX)   | ![status](https://img.shields.io/badge/stable-green) | [Guide](docs/integrations/binance.md)      |
 | [BitMEX](https://www.bitmex.com)                                             | `BITMEX`              | Crypto Exchange (CEX)   | ![status](https://img.shields.io/badge/stable-green) | [Guide](docs/integrations/bitmex.md)       |

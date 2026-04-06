@@ -1317,8 +1317,8 @@ impl AxHttpClient {
 
         let mut instruments: Vec<InstrumentAny> = Vec::new();
         for inst in &resp.instruments {
-            if inst.state == AxInstrumentState::Suspended {
-                log::debug!("Skipping suspended instrument: {}", inst.symbol);
+            if inst.state == AxInstrumentState::Delisted {
+                log::debug!("Skipping delisted instrument: {}", inst.symbol);
                 continue;
             }
 

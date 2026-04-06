@@ -466,6 +466,9 @@ pub struct AxOrderDetail {
     /// Text note.
     #[serde(default)]
     pub txt: Option<String>,
+    /// Whether the order is post-only.
+    #[serde(default)]
+    pub po: bool,
 }
 
 /// Response payload returned by `GET /orders`.
@@ -532,6 +535,9 @@ pub struct AxOpenOrder {
     /// Optional order tag.
     #[serde(default)]
     pub tag: Option<String>,
+    /// Whether the order is post-only.
+    #[serde(default)]
+    pub po: bool,
 }
 
 /// Response payload returned by `GET /open_orders`.
@@ -573,6 +579,9 @@ pub struct AxFill {
     pub timestamp: DateTime<Utc>,
     /// User ID.
     pub user_id: String,
+    /// Realized PnL for this fill.
+    #[serde(default, deserialize_with = "deserialize_optional_decimal_from_str")]
+    pub realized_pnl: Option<Decimal>,
 }
 
 /// Response payload returned by `GET /fills`.

@@ -37,11 +37,14 @@ use super::error::AxWsErrorResponse;
 use crate::{
     common::{
         enums::{
-            AxCancelReason, AxCancelRejectionReason, AxCandleWidth, AxMarketDataLevel,
-            AxMdRequestType, AxOrderRequestType, AxOrderSide, AxOrderStatus, AxOrderType,
-            AxOrderWsMessageType, AxTimeInForce,
+            AxCancelReason, AxCancelRejectionReason, AxCandleWidth, AxInstrumentState,
+            AxMarketDataLevel, AxMdRequestType, AxOrderRequestType, AxOrderSide, AxOrderStatus,
+            AxOrderType, AxOrderWsMessageType, AxTimeInForce,
         },
-        parse::{deserialize_decimal_or_zero, deserialize_optional_decimal_or_zero},
+        parse::{
+            deserialize_decimal_or_zero, deserialize_optional_decimal_from_str,
+            deserialize_optional_decimal_or_zero,
+        },
     },
     http::models::AxOrderRejectReason,
 };
@@ -244,6 +247,21 @@ pub struct AxMdTicker {
     /// Open interest.
     #[serde(default)]
     pub oi: Option<i64>,
+    /// Mark price.
+    #[serde(default, deserialize_with = "deserialize_optional_decimal_from_str")]
+    pub m: Option<Decimal>,
+    /// Instrument state.
+    #[serde(default)]
+    pub i: Option<AxInstrumentState>,
+    /// Price band lower limit.
+    #[serde(default, deserialize_with = "deserialize_optional_decimal_from_str")]
+    pub pl: Option<Decimal>,
+    /// Price band upper limit.
+    #[serde(default, deserialize_with = "deserialize_optional_decimal_from_str")]
+    pub pu: Option<Decimal>,
+    /// Last settlement price.
+    #[serde(default, deserialize_with = "deserialize_optional_decimal_from_str")]
+    pub lsp: Option<Decimal>,
 }
 
 /// Trade message from market data WebSocket.
@@ -356,6 +374,9 @@ pub struct AxMdBookL2 {
     pub b: Vec<AxBookLevel>,
     /// Ask levels.
     pub a: Vec<AxBookLevel>,
+    /// Whether this update is a full snapshot.
+    #[serde(default)]
+    pub st: bool,
 }
 
 /// Level 3 order book update (individual order quantities).
@@ -374,6 +395,9 @@ pub struct AxMdBookL3 {
     pub b: Vec<AxBookLevelL3>,
     /// Ask levels with order breakdown.
     pub a: Vec<AxBookLevelL3>,
+    /// Whether this update is a full snapshot.
+    #[serde(default)]
+    pub st: bool,
 }
 
 /// Place order request via WebSocket.
@@ -1113,6 +1137,17 @@ mod tests {
         let json = include_str!("../../test_data/ws_md_ticker.json");
         let msg: AxMdTicker = serde_json::from_str(json).unwrap();
         assert_eq!(msg.s.as_str(), "EURUSD-PERP");
+        assert_eq!(msg.m, Some(dec!(50010.50)));
+        assert_eq!(msg.i, Some(AxInstrumentState::Open));
+    }
+
+    #[rstest]
+    fn test_load_md_ticker_captured_optional_fields_default_to_none() {
+        let json = include_str!("../../test_data/ws_md_ticker_captured.json");
+        let msg: AxMdTicker = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.s.as_str(), "EURUSD-PERP");
+        assert_eq!(msg.m, None);
+        assert_eq!(msg.i, None);
     }
 
     #[rstest]

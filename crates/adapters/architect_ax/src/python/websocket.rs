@@ -20,9 +20,12 @@
 //! components that emit venue-specific types; these wrappers parse them into Nautilus
 //! domain objects before passing them to Python callbacks.
 
-use std::{fmt::Debug, sync::Arc};
+use std::{
+    fmt::Debug,
+    sync::{Arc, Mutex},
+};
 
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use futures_util::StreamExt;
 use nautilus_common::live::get_runtime;
 use nautilus_core::{
@@ -31,8 +34,8 @@ use nautilus_core::{
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_model::{
-    data::{BarType, Data, OrderBookDeltas_API},
-    enums::{OrderSide, OrderType, TimeInForce},
+    data::{BarType, Data, InstrumentStatus, MarkPriceUpdate, OrderBookDeltas_API},
+    enums::{MarketStatusAction, OrderSide, OrderType, TimeInForce},
     events::OrderCancelRejected,
     identifiers::{AccountId, ClientOrderId, InstrumentId, StrategyId, TraderId, VenueOrderId},
     instruments::{Instrument, InstrumentAny},
@@ -43,7 +46,10 @@ use pyo3::{IntoPyObjectExt, prelude::*};
 use ustr::Ustr;
 
 use crate::{
-    common::enums::{AxCandleWidth, AxMarketDataLevel},
+    common::{
+        enums::{AxCandleWidth, AxInstrumentState, AxMarketDataLevel},
+        parse::ax_timestamp_stn_to_unix_nanos,
+    },
     execution::{
         cleanup_terminal_order_tracking, create_order_accepted, create_order_canceled,
         create_order_expired, create_order_filled, create_order_rejected,
@@ -156,6 +162,7 @@ impl PyAxMdWebSocketClient {
         let clock = get_atomic_clock_realtime();
         let instruments = Arc::clone(&self.instruments_cache);
         let symbol_data_types = self.inner.symbol_data_types();
+        let status_invalidations = self.inner.status_invalidations();
         let mut client = self.inner.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -169,9 +176,12 @@ impl PyAxMdWebSocketClient {
 
                 let mut book_sequences: AHashMap<Ustr, u64> = AHashMap::new();
                 let mut candle_cache: AHashMap<(Ustr, AxCandleWidth), AxMdCandle> = AHashMap::new();
+                let mut instrument_states: AHashMap<Ustr, AxInstrumentState> = AHashMap::new();
 
                 while let Some(msg) = stream.next().await {
                     let ts_init = clock.get_time_ns();
+
+                    drain_status_invalidations(&status_invalidations, &mut instrument_states);
 
                     match msg {
                         AxDataWsMessage::MdMessage(md_msg) => {
@@ -181,6 +191,7 @@ impl PyAxMdWebSocketClient {
                                 &symbol_data_types,
                                 &mut book_sequences,
                                 &mut candle_cache,
+                                &mut instrument_states,
                                 ts_init,
                                 &call_soon,
                                 &callback,
@@ -188,6 +199,7 @@ impl PyAxMdWebSocketClient {
                         }
                         AxDataWsMessage::Reconnected => {
                             candle_cache.clear();
+                            instrument_states.clear();
                             log::info!("AX WebSocket reconnected");
                         }
                         AxDataWsMessage::CandleUnsubscribed { symbol, width } => {
@@ -248,6 +260,40 @@ impl PyAxMdWebSocketClient {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             client
                 .subscribe_trades(&symbol)
+                .await
+                .map_err(to_pyruntime_err)
+        })
+    }
+
+    #[pyo3(name = "subscribe_mark_prices")]
+    fn py_subscribe_mark_prices<'py>(
+        &self,
+        py: Python<'py>,
+        instrument_id: InstrumentId,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.inner.clone();
+        let symbol = instrument_id.symbol.to_string();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .subscribe_mark_prices(&symbol)
+                .await
+                .map_err(to_pyruntime_err)
+        })
+    }
+
+    #[pyo3(name = "subscribe_instrument_status")]
+    fn py_subscribe_instrument_status<'py>(
+        &self,
+        py: Python<'py>,
+        instrument_id: InstrumentId,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.inner.clone();
+        let symbol = instrument_id.symbol.to_string();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .subscribe_instrument_status(&symbol)
                 .await
                 .map_err(to_pyruntime_err)
         })
@@ -335,6 +381,40 @@ impl PyAxMdWebSocketClient {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             client
                 .unsubscribe_candles(&symbol, width)
+                .await
+                .map_err(to_pyruntime_err)
+        })
+    }
+
+    #[pyo3(name = "unsubscribe_mark_prices")]
+    fn py_unsubscribe_mark_prices<'py>(
+        &self,
+        py: Python<'py>,
+        instrument_id: InstrumentId,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.inner.clone();
+        let symbol = instrument_id.symbol.to_string();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .unsubscribe_mark_prices(&symbol)
+                .await
+                .map_err(to_pyruntime_err)
+        })
+    }
+
+    #[pyo3(name = "unsubscribe_instrument_status")]
+    fn py_unsubscribe_instrument_status<'py>(
+        &self,
+        py: Python<'py>,
+        instrument_id: InstrumentId,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.inner.clone();
+        let symbol = instrument_id.symbol.to_string();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            client
+                .unsubscribe_instrument_status(&symbol)
                 .await
                 .map_err(to_pyruntime_err)
         })
@@ -628,6 +708,7 @@ fn handle_md_message(
     symbol_data_types: &Arc<AtomicMap<String, SymbolDataTypes>>,
     book_sequences: &mut AHashMap<Ustr, u64>,
     candle_cache: &mut AHashMap<(Ustr, AxCandleWidth), AxMdCandle>,
+    instrument_states: &mut AHashMap<Ustr, AxInstrumentState>,
     ts_init: UnixNanos,
     call_soon: &Py<PyAny>,
     callback: &Py<PyAny>,
@@ -749,7 +830,57 @@ fn handle_md_message(
                 }
             }
         }
-        AxMdMessage::Ticker(_) => {}
+        AxMdMessage::Ticker(ticker) => {
+            let Some(instrument) = instruments_snap.get(&ticker.s) else {
+                log::debug!("No instrument cached for ticker symbol '{}'", ticker.s);
+                return;
+            };
+
+            let instrument_id = instrument.id();
+            let price_precision = instrument.price_precision();
+            let ts_event = ax_timestamp_stn_to_unix_nanos(ticker.ts, ticker.tn).unwrap_or(ts_init);
+
+            let mark_prices_subscribed = sdt_snap
+                .get(ticker.s.as_str())
+                .is_some_and(|e| e.mark_prices);
+            if mark_prices_subscribed && let Some(mark_price) = ticker.m {
+                match Price::from_decimal_dp(mark_price, price_precision) {
+                    Ok(price) => {
+                        let update = MarkPriceUpdate::new(instrument_id, price, ts_event, ts_init);
+                        send_data_to_python(Data::MarkPriceUpdate(update), call_soon, callback);
+                    }
+                    Err(e) => {
+                        log::error!("Failed to parse mark price for {}: {e}", ticker.s);
+                    }
+                }
+            }
+
+            if let Some(state) = ticker.i {
+                let status_subscribed = sdt_snap
+                    .get(ticker.s.as_str())
+                    .is_some_and(|e| e.instrument_status);
+                if status_subscribed {
+                    let prev = instrument_states.insert(ticker.s, state);
+                    if prev != Some(state) {
+                        let action = MarketStatusAction::from(state);
+                        let status = InstrumentStatus::new(
+                            instrument_id,
+                            action,
+                            ts_event,
+                            ts_init,
+                            None,
+                            None,
+                            Some(state == AxInstrumentState::Open),
+                            None,
+                            None,
+                        );
+                        call_python_with_event(call_soon, callback, move |py| {
+                            status.into_py_any(py)
+                        });
+                    }
+                }
+            }
+        }
         AxMdMessage::Heartbeat(_) => {}
         AxMdMessage::SubscriptionResponse(_) => {}
         AxMdMessage::Error(err) => {
@@ -769,27 +900,31 @@ fn handle_order_event(
     match event {
         AxWsOrderEvent::Heartbeat => {}
         AxWsOrderEvent::Acknowledged(msg) => {
-            if let Some(event) = create_order_accepted(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_accepted(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
         }
         AxWsOrderEvent::PartiallyFilled(msg) => {
             if let Some(event) =
-                create_order_filled(&msg.o, &msg.xs, msg.ts, caches, account_id, clock)
+                create_order_filled(&msg.o, &msg.xs, msg.ts, msg.tn, caches, account_id, clock)
             {
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
         }
         AxWsOrderEvent::Filled(msg) => {
             if let Some(event) =
-                create_order_filled(&msg.o, &msg.xs, msg.ts, caches, account_id, clock)
+                create_order_filled(&msg.o, &msg.xs, msg.ts, msg.tn, caches, account_id, clock)
             {
                 cleanup_terminal_order_tracking(&msg.o, caches);
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
         }
         AxWsOrderEvent::Canceled(msg) => {
-            if let Some(event) = create_order_canceled(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_canceled(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 cleanup_terminal_order_tracking(&msg.o, caches);
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
@@ -803,25 +938,31 @@ fn handle_order_event(
                 .unwrap_or("UNKNOWN");
 
             if let Some(event) =
-                create_order_rejected(&msg.o, reason, msg.ts, caches, account_id, clock)
+                create_order_rejected(&msg.o, reason, msg.ts, msg.tn, caches, account_id, clock)
             {
                 cleanup_terminal_order_tracking(&msg.o, caches);
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
         }
         AxWsOrderEvent::Expired(msg) => {
-            if let Some(event) = create_order_expired(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_expired(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 cleanup_terminal_order_tracking(&msg.o, caches);
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
         }
         AxWsOrderEvent::Replaced(msg) => {
-            if let Some(event) = create_order_accepted(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_accepted(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
         }
         AxWsOrderEvent::DoneForDay(msg) => {
-            if let Some(event) = create_order_expired(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_expired(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 cleanup_terminal_order_tracking(&msg.o, caches);
                 call_python_with_event(call_soon, callback, move |py| event.into_py_any(py));
             }
@@ -851,6 +992,17 @@ fn handle_order_event(
                     msg.oid
                 );
             }
+        }
+    }
+}
+
+fn drain_status_invalidations(
+    invalidations: &Arc<Mutex<AHashSet<Ustr>>>,
+    instrument_states: &mut AHashMap<Ustr, AxInstrumentState>,
+) {
+    if let Ok(mut set) = invalidations.lock() {
+        for symbol in set.drain() {
+            instrument_states.remove(&symbol);
         }
     }
 }

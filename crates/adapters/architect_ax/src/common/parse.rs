@@ -47,6 +47,22 @@ pub fn ax_timestamp_s_to_unix_nanos(seconds: i64) -> anyhow::Result<UnixNanos> {
     Ok(UnixNanos::from(seconds as u64 * NANOSECONDS_IN_SECOND))
 }
 
+/// Converts AX `ts` (seconds) + `tn` (nanoseconds) fields to [`UnixNanos`].
+///
+/// # Errors
+///
+/// Returns an error if `seconds` is negative (malformed data from AX).
+pub fn ax_timestamp_stn_to_unix_nanos(seconds: i64, nanos: i64) -> anyhow::Result<UnixNanos> {
+    anyhow::ensure!(
+        seconds >= 0,
+        "AX timestamp must be non-negative, was {seconds}"
+    );
+    let nanos_part = nanos.max(0) as u64;
+    Ok(UnixNanos::from(
+        seconds as u64 * NANOSECONDS_IN_SECOND + nanos_part,
+    ))
+}
+
 /// Converts an AX nanosecond timestamp to [`UnixNanos`].
 ///
 /// # Errors
@@ -289,5 +305,28 @@ mod tests {
     #[rstest]
     fn test_ax_timestamp_ns_to_unix_nanos_negative_errors() {
         assert!(ax_timestamp_ns_to_unix_nanos(-1).is_err());
+    }
+
+    #[rstest]
+    fn test_ax_timestamp_stn_to_unix_nanos_combines_seconds_and_nanos() {
+        let result = ax_timestamp_stn_to_unix_nanos(1_000, 500).unwrap();
+        assert_eq!(result, UnixNanos::from(1_000_000_000_500u64));
+    }
+
+    #[rstest]
+    fn test_ax_timestamp_stn_to_unix_nanos_zero_nanos() {
+        let result = ax_timestamp_stn_to_unix_nanos(1_000, 0).unwrap();
+        assert_eq!(result, UnixNanos::from(1_000_000_000_000u64));
+    }
+
+    #[rstest]
+    fn test_ax_timestamp_stn_to_unix_nanos_negative_seconds_errors() {
+        assert!(ax_timestamp_stn_to_unix_nanos(-1, 0).is_err());
+    }
+
+    #[rstest]
+    fn test_ax_timestamp_stn_to_unix_nanos_negative_nanos_clamps_to_zero() {
+        let result = ax_timestamp_stn_to_unix_nanos(1_000, -1).unwrap();
+        assert_eq!(result, UnixNanos::from(1_000_000_000_000u64));
     }
 }

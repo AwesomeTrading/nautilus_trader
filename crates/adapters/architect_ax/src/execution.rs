@@ -61,7 +61,7 @@ use crate::{
         consts::{AX_POST_ONLY_REJECT, AX_VENUE},
         credential::Credential,
         enums::AxOrderSide,
-        parse::{ax_timestamp_s_to_unix_nanos, cid_to_client_order_id, quantity_to_contracts},
+        parse::{ax_timestamp_stn_to_unix_nanos, cid_to_client_order_id, quantity_to_contracts},
     },
     config::AxExecClientConfig,
     http::{
@@ -1020,12 +1020,15 @@ fn dispatch_order_event(
     match event {
         AxWsOrderEvent::Heartbeat => {}
         AxWsOrderEvent::Acknowledged(msg) => {
-            if let Some(event) = create_order_accepted(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_accepted(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 emitter.send_order_event(OrderEventAny::Accepted(event));
             } else if let Some(report) = create_order_status_report(
                 &msg.o,
                 OrderStatus::Accepted,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1036,13 +1039,14 @@ fn dispatch_order_event(
         }
         AxWsOrderEvent::PartiallyFilled(msg) => {
             if let Some(event) =
-                create_order_filled(&msg.o, &msg.xs, msg.ts, caches, account_id, clock)
+                create_order_filled(&msg.o, &msg.xs, msg.ts, msg.tn, caches, account_id, clock)
             {
                 emitter.send_order_event(OrderEventAny::Filled(event));
             } else if let Some(report) = create_fill_report(
                 &msg.o,
                 &msg.xs,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1053,13 +1057,14 @@ fn dispatch_order_event(
         }
         AxWsOrderEvent::Filled(msg) => {
             if let Some(event) =
-                create_order_filled(&msg.o, &msg.xs, msg.ts, caches, account_id, clock)
+                create_order_filled(&msg.o, &msg.xs, msg.ts, msg.tn, caches, account_id, clock)
             {
                 emitter.send_order_event(OrderEventAny::Filled(event));
             } else if let Some(report) = create_fill_report(
                 &msg.o,
                 &msg.xs,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1070,12 +1075,15 @@ fn dispatch_order_event(
             cleanup_terminal_order_tracking(&msg.o, caches);
         }
         AxWsOrderEvent::Canceled(msg) => {
-            if let Some(event) = create_order_canceled(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_canceled(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 emitter.send_order_event(OrderEventAny::Canceled(event));
             } else if let Some(report) = create_order_status_report(
                 &msg.o,
                 OrderStatus::Canceled,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1094,19 +1102,22 @@ fn dispatch_order_event(
                 .unwrap_or("UNKNOWN");
 
             if let Some(event) =
-                create_order_rejected(&msg.o, reason, msg.ts, caches, account_id, clock)
+                create_order_rejected(&msg.o, reason, msg.ts, msg.tn, caches, account_id, clock)
             {
                 emitter.send_order_event(OrderEventAny::Rejected(event));
             }
             cleanup_terminal_order_tracking(&msg.o, caches);
         }
         AxWsOrderEvent::Expired(msg) => {
-            if let Some(event) = create_order_expired(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_expired(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 emitter.send_order_event(OrderEventAny::Expired(event));
             } else if let Some(report) = create_order_status_report(
                 &msg.o,
                 OrderStatus::Expired,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1117,12 +1128,15 @@ fn dispatch_order_event(
             cleanup_terminal_order_tracking(&msg.o, caches);
         }
         AxWsOrderEvent::Replaced(msg) => {
-            if let Some(event) = create_order_updated(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_updated(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 emitter.send_order_event(OrderEventAny::Updated(event));
             } else if let Some(report) = create_order_status_report(
                 &msg.o,
                 OrderStatus::Accepted,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1132,12 +1146,15 @@ fn dispatch_order_event(
             }
         }
         AxWsOrderEvent::DoneForDay(msg) => {
-            if let Some(event) = create_order_expired(&msg.o, msg.ts, caches, account_id, clock) {
+            if let Some(event) =
+                create_order_expired(&msg.o, msg.ts, msg.tn, caches, account_id, clock)
+            {
                 emitter.send_order_event(OrderEventAny::Expired(event));
             } else if let Some(report) = create_order_status_report(
                 &msg.o,
                 OrderStatus::Expired,
                 msg.ts,
+                msg.tn,
                 caches,
                 account_id,
                 instruments,
@@ -1201,6 +1218,7 @@ pub(crate) fn lookup_order_metadata<'a>(
 pub(crate) fn create_order_accepted(
     order: &AxWsOrder,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     clock: &'static AtomicTime,
@@ -1222,7 +1240,7 @@ pub(crate) fn create_order_accepted(
         entry.venue_order_id = Some(venue_order_id);
     }
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
 
@@ -1243,6 +1261,7 @@ pub(crate) fn create_order_accepted(
 pub(crate) fn create_order_updated(
     order: &AxWsOrder,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     clock: &'static AtomicTime,
@@ -1272,7 +1291,7 @@ pub(crate) fn create_order_updated(
         entry.pending_trigger_price = None;
     }
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
 
@@ -1302,6 +1321,7 @@ pub(crate) fn create_order_filled(
     order: &AxWsOrder,
     execution: &AxWsTradeExecution,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     clock: &'static AtomicTime,
@@ -1309,7 +1329,7 @@ pub(crate) fn create_order_filled(
     let venue_order_id = VenueOrderId::new(&order.oid);
     let metadata = lookup_order_metadata(order, caches)?;
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
 
@@ -1350,6 +1370,7 @@ pub(crate) fn create_order_filled(
 pub(crate) fn create_order_canceled(
     order: &AxWsOrder,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     clock: &'static AtomicTime,
@@ -1357,7 +1378,7 @@ pub(crate) fn create_order_canceled(
     let venue_order_id = VenueOrderId::new(&order.oid);
     let metadata = lookup_order_metadata(order, caches)?;
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
 
@@ -1378,6 +1399,7 @@ pub(crate) fn create_order_canceled(
 pub(crate) fn create_order_expired(
     order: &AxWsOrder,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     clock: &'static AtomicTime,
@@ -1385,7 +1407,7 @@ pub(crate) fn create_order_expired(
     let venue_order_id = VenueOrderId::new(&order.oid);
     let metadata = lookup_order_metadata(order, caches)?;
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
 
@@ -1407,13 +1429,14 @@ pub(crate) fn create_order_rejected(
     order: &AxWsOrder,
     reason: &str,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     clock: &'static AtomicTime,
 ) -> Option<OrderRejected> {
     let metadata = lookup_order_metadata(order, caches)?;
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
     let due_post_only = reason.contains(AX_POST_ONLY_REJECT);
@@ -1454,10 +1477,12 @@ pub(crate) fn cleanup_terminal_order_tracking(order: &AxWsOrder, caches: &Orders
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_order_status_report(
     order: &AxWsOrder,
     order_status: OrderStatus,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     instruments: &AtomicMap<Ustr, InstrumentAny>,
@@ -1473,7 +1498,7 @@ fn create_order_status_report(
     let quantity = Quantity::new(order.q as f64, instrument.size_precision());
     let filled_qty = Quantity::new(order.xq as f64, instrument.size_precision());
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
     let ts_init = clock.get_time_ns();
@@ -1509,10 +1534,12 @@ fn create_order_status_report(
     Some(report)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_fill_report(
     order: &AxWsOrder,
     execution: &AxWsTradeExecution,
     event_ts: i64,
+    event_tn: i64,
     caches: &OrdersCaches,
     account_id: AccountId,
     instruments: &AtomicMap<Ustr, InstrumentAny>,
@@ -1533,7 +1560,7 @@ fn create_fill_report(
         LiquiditySide::Maker
     };
 
-    let ts_event = ax_timestamp_s_to_unix_nanos(event_ts)
+    let ts_event = ax_timestamp_stn_to_unix_nanos(event_ts, event_tn)
         .map_err(|e| log::error!("{e}"))
         .ok()?;
     let ts_init = clock.get_time_ns();
@@ -1655,9 +1682,15 @@ mod tests {
         let mut ws_order_with_cid = ws_order;
         ws_order_with_cid.cid = Some(cid_value);
 
-        let event =
-            create_order_updated(&ws_order_with_cid, 1609459200, &caches, account_id, clock)
-                .expect("should produce OrderUpdated");
+        let event = create_order_updated(
+            &ws_order_with_cid,
+            1609459200,
+            0,
+            &caches,
+            account_id,
+            clock,
+        )
+        .expect("should produce OrderUpdated");
 
         // Uses cached NEW-OID, not the WS event's OLD-OID
         assert_eq!(event.venue_order_id, Some(new_venue_id));
@@ -1695,7 +1728,7 @@ mod tests {
 
         let ws_order = test_ws_order("WS-OID", dec!(50500.00), 200);
 
-        let event = create_order_updated(&ws_order, 1609459200, &caches, account_id, clock)
+        let event = create_order_updated(&ws_order, 1609459200, 0, &caches, account_id, clock)
             .expect("should produce OrderUpdated");
 
         assert_eq!(event.venue_order_id, Some(ws_oid));

@@ -78,6 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bar_types(bar_types)
         .subscribe_quotes(true)
         .subscribe_trades(true)
+        .subscribe_mark_prices(true)
+        .subscribe_index_prices(true)
         .subscribe_funding_rates(true)
         // .subscribe_book_deltas(true)
         .subscribe_bars(true)
