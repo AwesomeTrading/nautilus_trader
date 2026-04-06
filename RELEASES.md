@@ -1,10 +1,11 @@
 # NautilusTrader 1.225.0 Beta
 
-Released on TBD (UTC).
+Released on 6th April 2026 (UTC).
 
 ### Enhancements
 - Added option chains and greeks in Rust (#3637), thanks @filipmacek
 - Added option chains and greeks in Python (#3677), thanks @filipmacek
+- Added cached futures-spread support to `GreeksCalculator` (#3792), thanks @faysou
 - Added custom data registration, persistence, and routing in Rust (#3542), thanks @faysou
 - Added `nautilus_actor!` macro in `nautilus_common` for `Deref`/`DerefMut` boilerplate on actor types (Rust)
 - Added `nautilus_strategy!` macro in `nautilus_trading` for `Deref`/`DerefMut` and `Strategy` trait boilerplate on strategy types, with optional block for hook overrides (Rust)
@@ -56,6 +57,7 @@ Released on TBD (UTC).
 - Added `DeltaNeutralVol` strategy strangle entry via `px_vol` limit orders with configurable IV offset, time-in-force, and cache-based re-entry guard
 - Added OKX missing WebSocket message fields across all channel structs
 - Added Polymarket instrument provider and filters in Rust (#3708), thanks @filipmacek
+- Added Polymarket strategy-driven data subscriptions (#3806), thanks @Javdu10
 - Added Tardis `MarkPriceUpdate` and `IndexPriceUpdate` parsing from `derivative_ticker` messages in Rust
 - Added Tardis `DerivativeTickerCache` for deduplicating unchanged funding rate, mark price, and index price updates
 - Added Tardis `TardisDataType` enum for normalized Tardis Machine data type identifiers
@@ -88,6 +90,7 @@ Released on TBD (UTC).
 ### Fixes
 - Fixed `OrderBook` L1 stale event mutation corrupting bid/ask (#3790), thanks for reporting @linimin
 - Fixed position index blob pollution in `update_position` (#3791), thanks @YeeTsai
+- Fixed `purge_order` `KeyError` for position/exec_algorithm index access (#3799)
 - Fixed strategy receiving historical events during startup reconciliation (#3793), thanks @filipmacek
 - Fixed `Trader::add_exec_algorithm` not registering the `{id}.execute` msgbus endpoint, causing orders with `exec_algorithm_id` to be silently dropped
 - Fixed `Trader::clear_exec_algorithms` and `dispose_components` not deregistering `{id}.execute` msgbus endpoints for removed algorithms
@@ -277,6 +280,7 @@ Released on TBD (UTC).
 - Standardized `type_name()` across order events and instruments
 - Wired `ExecutionManager` into live event loop with full inflight lifecycle (Rust) (#3798), thanks @filipmacek
 - Optimized network client performance and add benchmarks
+- Upgraded Interactive Brokers `ibapi` to 10.45 (#3804)
 - Upgraded Rust (MSRV) to 1.94.1
 - Upgraded `capnp` and `capnpc` crates to v0.25.3 (regenerated schemas with 4-space indents and version headers)
 - Upgraded `databento` crate to v0.45.0
@@ -301,7 +305,6 @@ Released on TBD (UTC).
 - Added OKX options trading section to integration guide with pricing modes, order types, restrictions, and configuration
 - Added Group 10 (options trading) to execution testing spec with venue-agnostic test cases
 - Added `DeltaNeutralVol` README updates for strangle entry flow, config fields, and usage examples
-- Added Interactive brokers docs `request_ticks` API fix and contract example (#3699), thanks @faysou
 - Added Binance Link & Trade `clientOrderId` decoding section with usage examples to integration docs
 - Added Bybit options support matrix and trading limitations to integration docs
 - Added OKX to adapter support tables in Options and Greeks concept guides
