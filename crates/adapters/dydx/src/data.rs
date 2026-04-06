@@ -417,7 +417,9 @@ impl DataClient for DydxDataClient {
     }
 
     fn subscribe_instruments(&mut self, _cmd: &SubscribeInstruments) -> anyhow::Result<()> {
-        log::debug!("subscribe_instruments: dYdX auto-subscribes via markets channel");
+        log::debug!(
+            "subscribe_instruments: dYdX instruments discovered via global v4_markets channel"
+        );
         Ok(())
     }
 

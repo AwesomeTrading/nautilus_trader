@@ -1040,7 +1040,7 @@ impl DataClient for PolymarketDataClient {
     }
 
     fn subscribe_instruments(&mut self, _cmd: &SubscribeInstruments) -> anyhow::Result<()> {
-        log::debug!("subscribe_instruments: Polymarket auto-subscribes via connect");
+        log::debug!("subscribe_instruments: subscribed individually via data subscription methods");
         Ok(())
     }
 
