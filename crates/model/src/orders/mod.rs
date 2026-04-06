@@ -1706,4 +1706,35 @@ mod tests {
         assert!(!order.is_quote_quantity());
         assert_eq!(order.quantity(), Quantity::new(8.0, 6));
     }
+
+    #[rstest]
+    fn test_canceled_then_partial_fill_then_canceled() {
+        let mut order: MarketOrder = OrderInitializedBuilder::default().build().unwrap().into();
+        let submitted = OrderSubmittedBuilder::default().build().unwrap();
+        let accepted = OrderAcceptedBuilder::default().build().unwrap();
+        let canceled1 = OrderCanceledBuilder::default().build().unwrap();
+        let fill = OrderFilledBuilder::default()
+            .last_qty(Quantity::from(50_000))
+            .trade_id(TradeId::from("FILL-1"))
+            .build()
+            .unwrap();
+        let canceled2 = OrderCanceledBuilder::default().build().unwrap();
+
+        order.apply(OrderEventAny::Submitted(submitted)).unwrap();
+        order.apply(OrderEventAny::Accepted(accepted)).unwrap();
+        order.apply(OrderEventAny::Canceled(canceled1)).unwrap();
+        assert_eq!(order.status(), OrderStatus::Canceled);
+        assert!(order.is_closed());
+
+        // Fill arrives after cancel (real-world race condition)
+        order.apply(OrderEventAny::Filled(fill)).unwrap();
+        assert_eq!(order.status(), OrderStatus::PartiallyFilled);
+        assert_eq!(order.filled_qty(), Quantity::from(50_000));
+        assert!(order.is_open());
+
+        // Re-emitted cancel restores terminal state
+        order.apply(OrderEventAny::Canceled(canceled2)).unwrap();
+        assert_eq!(order.status(), OrderStatus::Canceled);
+        assert!(order.is_closed());
+    }
 }
