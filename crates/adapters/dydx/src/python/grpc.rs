@@ -19,7 +19,10 @@
 
 use std::sync::Arc;
 
-use nautilus_core::python::{IntoPyObjectNautilusExt, to_pyruntime_err};
+use nautilus_core::{
+    hex,
+    python::{IntoPyObjectNautilusExt, to_pyruntime_err},
+};
 use pyo3::prelude::*;
 
 use crate::grpc::DydxGrpcClient;

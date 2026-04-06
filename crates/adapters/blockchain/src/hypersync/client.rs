@@ -24,6 +24,7 @@ use hypersync_client::{
     simple_types::Log,
 };
 use nautilus_common::live::get_runtime;
+use nautilus_core::hex;
 use nautilus_model::{
     defi::{Block, DexType, SharedChain},
     identifiers::InstrumentId,
@@ -173,7 +174,7 @@ impl HyperSyncClient {
                             for log in batch {
                                 let event_signature = match log.topics.first().and_then(|t| t.as_ref()) {
                                     Some(log_argument) => {
-                                        format!("0x{}", hex::encode(log_argument.as_ref()))
+                                        hex::encode_prefixed(log_argument.as_ref())
                                     }
                                     None => continue,
                                 };

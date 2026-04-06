@@ -21,7 +21,10 @@ use std::{
     path::Path,
 };
 
-use nautilus_core::env::{get_or_env_var, get_or_env_var_opt};
+use nautilus_core::{
+    env::{get_or_env_var, get_or_env_var_opt},
+    hex,
+};
 use serde::Deserialize;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -119,28 +122,15 @@ impl VaultAddress {
         let s = s.trim();
         let hex_part = s.strip_prefix("0x").unwrap_or(s);
 
-        if hex_part.len() != 40 {
-            return Err(Error::bad_request(
-                "Vault address must be 20 bytes (40 hex chars)",
-            ));
-        }
+        let bytes: [u8; 20] = hex::decode_array(hex_part)
+            .map_err(|_| Error::bad_request("Vault address must be 20 bytes of valid hex"))?;
 
-        let bytes = hex::decode(hex_part)
-            .map_err(|_| Error::bad_request("Invalid hex in vault address"))?;
-
-        if bytes.len() != 20 {
-            return Err(Error::bad_request("Vault address must be exactly 20 bytes"));
-        }
-
-        let mut addr_bytes = [0u8; 20];
-        addr_bytes.copy_from_slice(&bytes);
-
-        Ok(Self { bytes: addr_bytes })
+        Ok(Self { bytes })
     }
 
     /// Get address as 0x-prefixed hex string
     pub fn to_hex(&self) -> String {
-        format!("0x{}", hex::encode(self.bytes))
+        hex::encode_prefixed(self.bytes)
     }
 
     /// Get raw bytes

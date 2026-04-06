@@ -20,7 +20,7 @@ use std::{
 };
 
 use alloy_primitives::Address;
-use nautilus_core::correctness::FAILED;
+use nautilus_core::{correctness::FAILED, hex};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ustr::Ustr;
 
@@ -118,8 +118,7 @@ impl PoolIdentifier {
             bytes.len()
         );
 
-        let hex_string = format!("0x{}", hex::encode(bytes));
-        Ok(Self::PoolId(Ustr::from(&hex_string)))
+        Ok(Self::PoolId(Ustr::from(&hex::encode_prefixed(bytes))))
     }
 
     /// Creates a PoolId variant from a hex string (with or without 0x prefix).
@@ -198,13 +197,9 @@ impl PoolIdentifier {
     pub fn to_pool_id_bytes(&self) -> anyhow::Result<[u8; 32]> {
         match self {
             Self::PoolId(s) => {
-                let hex = s.as_str().strip_prefix("0x").unwrap_or(s.as_str());
-                let bytes = hex::decode(hex)
-                    .map_err(|e| anyhow::anyhow!("Failed to decode pool ID hex: {e}",))?;
-
-                bytes
-                    .try_into()
-                    .map_err(|_| anyhow::anyhow!("Pool ID must be exactly 32 bytes"))
+                let hex_str = s.as_str().strip_prefix("0x").unwrap_or(s.as_str());
+                hex::decode_array::<32>(hex_str)
+                    .map_err(|e| anyhow::anyhow!("Failed to decode pool ID hex: {e}"))
             }
             Self::Address(_) => anyhow::bail!("Cannot convert Address variant to PoolId bytes"),
         }

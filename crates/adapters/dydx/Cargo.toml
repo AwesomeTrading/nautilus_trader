@@ -68,7 +68,6 @@ derive_builder = { workspace = true }
 dotenvy = { workspace = true }
 dydx-proto = { workspace = true }
 futures-util = { workspace = true }
-hex = { workspace = true }
 log = { workspace = true }
 prost = { workspace = true }
 rust_decimal = { workspace = true }

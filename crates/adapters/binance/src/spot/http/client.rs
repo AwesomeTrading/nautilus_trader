@@ -36,7 +36,7 @@ use std::{collections::HashMap, fmt::Debug, num::NonZeroU32, sync::Arc};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use nautilus_core::{
-    consts::NAUTILUS_USER_AGENT, datetime::SECONDS_IN_DAY, nanos::UnixNanos, time::AtomicTime,
+    consts::NAUTILUS_USER_AGENT, datetime::SECONDS_IN_DAY, hex, nanos::UnixNanos, time::AtomicTime,
 };
 use nautilus_model::{
     data::{Bar, BarType, TradeTick},

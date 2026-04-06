@@ -257,6 +257,7 @@ fn order_side_to_u8(side: PolymarketOrderSide) -> u8 {
 #[cfg(test)]
 mod tests {
     use alloy_primitives::{Signature, keccak256};
+    use nautilus_core::hex;
     use rstest::rstest;
     use rust_decimal_macros::dec;
     use ustr::Ustr;

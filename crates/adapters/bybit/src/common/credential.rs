@@ -20,8 +20,7 @@
 use std::fmt::Debug;
 
 use aws_lc_rs::hmac;
-use hex;
-use nautilus_core::{env::resolve_env_var_pair, string::REDACTED};
+use nautilus_core::{env::resolve_env_var_pair, hex, string::REDACTED};
 use zeroize::ZeroizeOnDrop;
 
 use crate::common::enums::BybitEnvironment;

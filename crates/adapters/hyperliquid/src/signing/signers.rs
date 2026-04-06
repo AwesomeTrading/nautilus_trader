@@ -20,6 +20,7 @@ use alloy::{
     sol_types::{SolStruct, eip712_domain},
 };
 use alloy_primitives::{Address, B256, keccak256};
+use nautilus_core::hex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

@@ -25,6 +25,7 @@ use std::{
 };
 
 use aws_lc_rs::digest::{self, Context};
+use nautilus_core::hex;
 use nautilus_network::retry::RetryConfig;
 use rand::{RngExt, rng};
 use reqwest::blocking::Client;

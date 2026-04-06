@@ -63,6 +63,7 @@ pub mod datetime;
 pub mod drop;
 pub mod env;
 pub mod formatting;
+pub mod hex;
 pub mod math;
 pub mod message;
 pub mod nanos;

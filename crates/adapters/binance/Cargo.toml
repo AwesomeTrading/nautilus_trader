@@ -71,7 +71,6 @@ dashmap = { workspace = true }
 derive_builder = { workspace = true }
 ed25519-dalek = { workspace = true }
 futures-util = { workspace = true }
-hex = { workspace = true }
 log = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
