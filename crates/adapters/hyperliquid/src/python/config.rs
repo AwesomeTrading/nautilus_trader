@@ -20,7 +20,9 @@ use pyo3::prelude::*;
 use crate::config::{HyperliquidDataClientConfig, HyperliquidExecClientConfig};
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl HyperliquidDataClientConfig {
+    /// Configuration for the Hyperliquid data client.
     #[new]
     #[pyo3(signature = (
         is_testnet = None,
@@ -51,10 +53,10 @@ impl HyperliquidDataClientConfig {
             http_proxy_url,
             ws_proxy_url: None,
             is_testnet: is_testnet.unwrap_or(defaults.is_testnet),
-            http_timeout_secs: http_timeout_secs.or(defaults.http_timeout_secs),
-            ws_timeout_secs: ws_timeout_secs.or(defaults.ws_timeout_secs),
+            http_timeout_secs: http_timeout_secs.unwrap_or(defaults.http_timeout_secs),
+            ws_timeout_secs: ws_timeout_secs.unwrap_or(defaults.ws_timeout_secs),
             update_instruments_interval_mins: update_instruments_interval_mins
-                .or(defaults.update_instruments_interval_mins),
+                .unwrap_or(defaults.update_instruments_interval_mins),
         }
     }
 
@@ -64,11 +66,14 @@ impl HyperliquidDataClientConfig {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl HyperliquidExecClientConfig {
+    /// Configuration for the Hyperliquid execution client.
     #[new]
     #[pyo3(signature = (
         private_key = None,
         vault_address = None,
+        account_address = None,
         is_testnet = None,
         base_url_ws = None,
         base_url_http = None,
@@ -84,6 +89,7 @@ impl HyperliquidExecClientConfig {
     fn py_new(
         private_key: Option<String>,
         vault_address: Option<String>,
+        account_address: Option<String>,
         is_testnet: Option<bool>,
         base_url_ws: Option<String>,
         base_url_http: Option<String>,
@@ -99,6 +105,7 @@ impl HyperliquidExecClientConfig {
         Self {
             private_key,
             vault_address,
+            account_address,
             base_url_ws,
             base_url_http,
             base_url_exchange,

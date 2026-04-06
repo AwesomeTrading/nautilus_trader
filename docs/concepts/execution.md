@@ -2,7 +2,7 @@
 
 NautilusTrader can handle trade execution and order management for multiple strategies and venues
 simultaneously (per instance). Several interacting components are involved in execution, making it
-crucial to understand the possible flows of execution messages (commands and events).
+important to understand the possible flows of execution messages (commands and events).
 
 The main execution-related components include:
 
@@ -15,8 +15,8 @@ The main execution-related components include:
 
 ## Execution flow
 
-The `Strategy` base class inherits from `Actor` and so contains all of the common data related
-methods. It also provides methods for managing orders and trade execution:
+The `Strategy` base class inherits from `Actor` and contains all common data methods.
+It also provides methods for managing orders and trade execution:
 
 - `submit_order(...)`
 - `submit_order_list(...)`
@@ -29,9 +29,8 @@ methods. It also provides methods for managing orders and trade execution:
 - `query_account(...)`
 - `query_order(...)`
 
-These methods create the necessary execution commands under the hood and send them on the message
-bus to the relevant components (point-to-point), as well as publishing any events (such as the
-initialization of new orders i.e. `OrderInitialized` events).
+These methods create the necessary execution commands and send them on the message bus to the
+relevant components (point-to-point). They also publish events such as `OrderInitialized`.
 
 The general execution flow looks like the following (each arrow indicates movement across the message bus):
 
@@ -78,12 +77,12 @@ When the strategy and venue OMS types differ, the `ExecutionEngine` handles this
 A "virtual position" refers to a position ID that exists within the Nautilus system but not on the venue in
 reality.
 
-| Strategy OMS                 | Venue OMS              | Description                                                                                                                                                |
-|:-----------------------------|:-----------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `NETTING`                    | `NETTING`              | The strategy uses the venue's native OMS type, with a single position ID per instrument ID.                                                                 |
-| `HEDGING`                    | `HEDGING`              | The strategy uses the venue's native OMS type, with multiple position IDs per instrument ID (both `LONG` and `SHORT`).                                      |
-| `NETTING`                    | `HEDGING`              | The strategy **overrides** the venue's native OMS type. The venue tracks multiple positions per instrument ID, but Nautilus maintains a single position ID. |
-| `HEDGING`                    | `NETTING`              | The strategy **overrides** the venue's native OMS type. The venue tracks a single position per instrument ID, but Nautilus maintains multiple position IDs. |
+| Strategy OMS | Venue OMS | Description                                                                                                                                                 |
+|:-------------|:----------|:------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `NETTING`    | `NETTING` | The strategy uses the venue's native OMS type, with a single position ID per instrument ID.                                                                 |
+| `HEDGING`    | `HEDGING` | The strategy uses the venue's native OMS type, with multiple position IDs per instrument ID (both `LONG` and `SHORT`).                                      |
+| `NETTING`    | `HEDGING` | The strategy **overrides** the venue's native OMS type. The venue tracks multiple positions per instrument ID, but Nautilus maintains a single position ID. |
+| `HEDGING`    | `NETTING` | The strategy **overrides** the venue's native OMS type. The venue tracks a single position per instrument ID, but Nautilus maintains multiple position IDs. |
 
 :::note
 Configuring OMS types separately for strategies and venues increases platform complexity but allows
@@ -107,16 +106,15 @@ it will default to `UNSPECIFIED`. This means the `ExecutionEngine` will not over
 and the OMS type will follow the venue's OMS type.
 
 :::tip
-When configuring a backtest, you can specify the `oms_type` for the venue. To enhance backtest
-accuracy, it is recommended to match this with the actual OMS type used by the venue in practice.
+When configuring a backtest, you can specify the `oms_type` for the venue. For accuracy, match this with the OMS type used by the venue.
 :::
 
 ## Risk engine
 
-The `RiskEngine` is a core component of every Nautilus system, including backtest, sandbox, and live environments.
+The `RiskEngine` is a component of every Nautilus system, including backtest, sandbox, and live environments.
 Every order command and event passes through the `RiskEngine` unless specifically bypassed in the `RiskEngineConfig`.
 
-The `RiskEngine` includes several built-in pre-trade risk checks, including:
+The `RiskEngine` performs these pre-trade risk checks:
 
 - Price precisions correct for the instrument.
 - Prices are positive (unless an option type instrument)
@@ -125,8 +123,8 @@ The `RiskEngine` includes several built-in pre-trade risk checks, including:
 - Within maximum or minimum quantity for the instrument.
 - Only reducing position when a `reduce_only` execution instruction is specified for the order.
 
-If any risk check fails, the system generates an `OrderDenied` event, effectively closing the order and
-preventing it from progressing further. This event includes a human-readable reason for the denial.
+If any risk check fails, the system generates an `OrderDenied` event with a human-readable reason,
+closing the order.
 
 ### Trading state
 
@@ -138,22 +136,20 @@ The `TradingState` enum has three variants:
 - `HALTED`: Does not process further order commands until state changes.
 - `REDUCING`: Only processes cancels or commands that reduce open positions.
 
-See the [`RiskEngineConfig` API Reference](../api_reference/config#risk) for further details.
+See the [`RiskEngineConfig` API Reference](/docs/python-api-latest/config.html#nautilus_trader.risk.config.RiskEngineConfig) for further details.
 
 ## Execution algorithms
 
-The platform supports customized execution algorithm components and provides some built-in
-algorithms, such as the Time-Weighted Average Price (TWAP) algorithm.
+The platform supports custom execution algorithm components and provides built-in algorithms
+such as TWAP (Time-Weighted Average Price).
 
 ### TWAP (Time-Weighted Average Price)
 
-The TWAP execution algorithm aims to execute orders by evenly spreading them over a specified
-time horizon. The algorithm receives a primary order representing the total size and direction
-then splits this by spawning smaller child orders, which are then executed at regular intervals
-throughout the time horizon.
+The TWAP algorithm spreads execution evenly over a specified time horizon. It receives a
+primary order representing the total size and direction, then spawns smaller child orders
+executed at regular intervals.
 
-This helps to reduce the impact of the full size of the primary order on the market, by
-minimizing the concentration of trade size at any given time.
+This reduces the market impact of the full order size by spreading trade volume over time.
 
 The algorithm will immediately submit the first order, with the final order submitted being the
 primary order at the end of the horizon period.
@@ -212,7 +208,7 @@ over the wire, such as ints, floats, and strings).
 
 ### Writing execution algorithms
 
-To implement a custom execution algorithm you must define a class which inherits from `ExecAlgorithm`.
+To build a custom execution algorithm, define a class that inherits from `ExecAlgorithm`.
 
 An execution algorithm is a type of `Actor`, so it's capable of the following:
 
@@ -425,7 +421,7 @@ The likelihood of reconciliation race conditions increases when:
   provides time for WebSocket connections to stabilize before continuous reconciliation begins.
   Reducing this increases the chance of duplicate fills during the startup window.
 
-See [Continuous reconciliation](live.md#continuous-reconciliation) for configuration details.
+See [Continuous reconciliation](../how_to/configure_live_trading.md#continuous-reconciliation) for configuration details.
 
 ### System behavior
 
@@ -503,6 +499,7 @@ features to detect and resolve such discrepancies.
 
 ## Related guides
 
+- [Events](events.md) - Order and position event types and dispatch.
 - [Orders](orders.md) - Order types and management.
 - [Positions](positions.md) - Position tracking from executions.
 - [Strategies](strategies.md) - Order submission from strategies.

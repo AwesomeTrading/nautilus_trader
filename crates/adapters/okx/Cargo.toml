@@ -38,8 +38,10 @@ python = [
   "nautilus-system/python",
   "pyo3",
   "pyo3-async-runtimes",
+  "pyo3-stub-gen",
 ]
 high-precision = ["nautilus-model/high-precision"]
+examples = ["nautilus-trading/examples"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -52,6 +54,7 @@ nautilus-live = { workspace = true }
 nautilus-model = { workspace = true }
 nautilus-network = { workspace = true }
 nautilus-system = { workspace = true }
+nautilus-trading = { workspace = true }
 
 ahash = { workspace = true }
 anyhow = { workspace = true }
@@ -60,6 +63,7 @@ async-stream = { workspace = true }
 async-trait = { workspace = true }
 aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
+bon = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 derive_builder = { workspace = true }
@@ -80,6 +84,7 @@ zeroize = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
 nautilus-testkit = { workspace = true }
@@ -123,9 +128,23 @@ path = "examples/node_data_tester.rs"
 required-features = []
 doc = false
 
+# Run with `cargo run --example okx-greeks-tester --package nautilus-okx`.
+[[example]]
+name = "okx-greeks-tester"
+path = "examples/node_greeks.rs"
+required-features = []
+doc = false
+
 # Run with `cargo run --example okx-exec-tester --package nautilus-okx`.
 [[example]]
 name = "okx-exec-tester"
 path = "examples/node_exec_tester.rs"
 required-features = []
+doc = false
+
+# Run with `cargo run --example okx-delta-neutral --package nautilus-okx --features examples`.
+[[example]]
+name = "okx-delta-neutral"
+path = "examples/node_delta_neutral.rs"
+required-features = ["examples"]
 doc = false

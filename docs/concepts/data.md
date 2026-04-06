@@ -1,7 +1,6 @@
 # Data
 
-NautilusTrader provides a set of built-in data types specifically designed to represent a trading domain.
-These data types include:
+NautilusTrader provides built-in data types for the trading domain:
 
 - `OrderBookDelta` (L1/L2/L3): Represents the most granular order book updates.
 - `OrderBookDeltas` (L1/L2/L3): Batches multiple order book deltas for more efficient processing.
@@ -15,9 +14,9 @@ These data types include:
 - `InstrumentStatus`: An instrument-level status event.
 - `InstrumentClose`: The closing price of an instrument.
 
-NautilusTrader is designed primarily to operate on granular order book data, providing the highest realism
-for execution simulations in backtesting.
-However, backtests can also be conducted on any of the supported market data types, depending on the desired simulation fidelity.
+NautilusTrader operates primarily on granular order book data for the highest realism
+in execution simulations. Backtests can also run on any supported market data type,
+depending on the desired simulation fidelity.
 
 ## Order books
 
@@ -99,7 +98,7 @@ flowchart TD
 | `FuturesSpread`      | Deliverable futures spread.                                                      |
 | `CryptoFuture`       | Deliverable futures with crypto assets as underlying and settlement.             |
 | `CryptoPerpetual`    | Crypto perpetual futures (perpetual swap).                                       |
-| `PerpetualContract`  | Asset-class agnostic perpetual swap (any underlying).                            |
+| `PerpetualContract`  | Asset‑class agnostic perpetual swap (any underlying).                            |
 | `OptionContract`     | Generic option contract.                                                         |
 | `OptionSpread`       | Generic option spread.                                                           |
 | `CryptoOption`       | Crypto option contract.                                                          |
@@ -455,7 +454,7 @@ apply to all time-based aggregation (millisecond through year):
 |:------------------------------------|:-------|:--------------|:------------------------------------------------------------------------------------------------------------------------------------------------|
 | `time_bars_interval_type`           | `str`  | `"left-open"` | `"left-open"`: start excluded, end included. `"right-open"`: start included, end excluded.                                                      |
 | `time_bars_timestamp_on_close`      | `bool` | `True`        | When `True`, `ts_event` is the bar close time. When `False`, `ts_event` is the bar open time.                                                   |
-| `time_bars_skip_first_non_full_bar` | `bool` | `False`       | Skip emitting a bar when aggregation starts mid-interval, avoiding partial bars on startup.                                                     |
+| `time_bars_skip_first_non_full_bar` | `bool` | `False`       | Skip emitting a bar when aggregation starts mid‑interval, avoiding partial bars on startup.                                                     |
 | `time_bars_build_with_no_updates`   | `bool` | `True`        | When `True`, bars are emitted even if no market updates arrived during the interval.                                                            |
 | `time_bars_origin_offset`           | `dict` | `None`        | Maps `BarAggregation` types to `pd.Timedelta` offsets for shifting bar alignment (e.g., align to 09:30 market open).                            |
 | `time_bars_build_delay`             | `int`  | `0`           | Delay in microseconds before building a bar. Useful in backtests to ensure data at bar boundary timestamps is processed before the timer fires. |
@@ -537,9 +536,14 @@ The `ts_init` field indicates when the message was originally received.
 
 ## Data flow
 
-The platform ensures consistency by flowing data through the same pathways across all system [environment contexts](architecture.md#environment-contexts)
-(e.g., `backtest`, `sandbox`, `live`). Data is primarily transported via the `MessageBus` to the `DataEngine`
-and then distributed to subscribed or registered handlers.
+From the `DataEngine` onward, data follows the same pathway regardless of
+[environment context](architecture.md#environment-contexts) (backtest, sandbox,
+live). In live and sandbox modes a venue adapter creates a normalized data
+object and sends it through a channel; in backtests the engine feeds data
+directly. Either way the `DataEngine` stores it in the `Cache` (for cached
+types) and publishes it on the `MessageBus` to subscribed handlers.
+For a step-by-step trace with a sequence diagram, see
+[Data flow: life of a quote tick](architecture.md#data-flow-life-of-a-quote-tick).
 
 For users who need more flexibility, the platform also supports the creation of custom data types.
 For details on how to implement user-defined data types, see the [Custom Data](#custom-data) section below.
@@ -580,12 +584,12 @@ There are a number of **DataWrangler v2** components, which will take a `pd.Data
 with a different fixed width Nautilus Arrow v2 schema, and output PyO3 Nautilus objects which are only compatible with the new version
 of the Nautilus core, currently in development.
 
-**These PyO3 provided data objects are not compatible where the legacy Cython objects are currently used (e.g., adding directly to a `BacktestEngine`).**
+**These PyO3 data objects are not compatible where v1 legacy Cython objects are expected (e.g., adding directly to a `BacktestEngine`).**
 :::
 
 ### Fixed-point precision and raw values
 
-NautilusTrader uses fixed-point arithmetic for `Price` and `Quantity` types to ensure precise financial calculations without floating-point errors. Understanding how raw values work is essential when creating data or working with catalogs.
+NautilusTrader uses fixed-point arithmetic for `Price` and `Quantity` types for precise financial calculations without floating-point errors. Understanding how raw values work is essential when creating data or working with catalogs.
 
 #### Raw value requirements
 
@@ -599,26 +603,25 @@ When constructing `Price` or `Quantity` using `from_raw()`, the raw value **must
 Raw values that are not valid multiples will cause a panic. The raw value must be divisible by `10^(FIXED_PRECISION - precision)` where `FIXED_PRECISION` is 9 (standard mode) or 16 (high-precision mode).
 :::
 
-#### Legacy catalog data and floating-point errors
+#### Automatic raw value correction
 
-Data written to catalogs using V2 wranglers before 16th December 2025 may contain raw values with floating-point precision errors. This occurred because the wranglers used:
-
-```python
-int(value * FIXED_SCALAR)  # Introduces floating-point errors
-```
-
-For example, `int(0.67068 * 1e9)` produces `670680000000001` instead of the expected `670680000000000`. The correct approach is:
+Catalog data can contain raw values with floating-point precision errors.
+This happens when raw values are produced with `int(value * FIXED_SCALAR)`
+instead of precision-aware conversion:
 
 ```python
+int(value * FIXED_SCALAR)             # Introduces floating-point errors
 round(value * 10**precision) * scale  # Correct precision-aware conversion
 ```
 
-#### Automatic correction during catalog reads
+For example, `int(0.67068 * 1e9)` produces `670680000000001` instead of
+the expected `670680000000000`.
 
-To maintain backward compatibility with existing catalog data, the Arrow decode path automatically corrects raw values by rounding them to the nearest valid multiple. This ensures that legacy catalogs continue to work without requiring data migration.
+The Arrow decode path automatically corrects these values by rounding to
+the nearest valid multiple, so affected catalogs work without data migration.
 
 :::note
-This automatic correction adds a small amount of overhead during data decoding. In a future version, once catalogs have been repaired or migrated, this correction will become opt-in. A catalog repair/migration script may be provided to permanently fix legacy data.
+This correction adds a small amount of overhead during data decoding.
 :::
 
 ### Transformation pipeline
@@ -700,11 +703,7 @@ The NautilusTrader data catalog is built on a dual-backend architecture that com
 - Schema evolution support for data model changes.
 - Cross-language compatibility (Python, Rust, Java, C++, etc.).
 
-The Arrow schemas used for the Parquet format are primarily single-sourced in the core `persistence` Rust crate, with some legacy schemas available from the `/serialization/arrow/schema.py` module.
-
-:::note
-The current plan is to eventually phase out the Python schemas module, so that all schemas are single sourced in the Rust core for consistency and performance.
-:::
+The Arrow schemas used for the Parquet format are defined in two places: the Rust `model` and `persistence` crates for core market data types, and the Python `serialization/arrow/schema.py` module for additional types.
 
 ### Initializing
 
@@ -823,7 +822,7 @@ catalog = ParquetDataCatalog.from_uri("s3://my-bucket/nautilus-data/")
 # With storage options
 catalog = ParquetDataCatalog.from_uri(
     "s3://my-bucket/nautilus-data/",
-    storage_options={
+    fs_storage_options={
         "access_key_id": "your-key",
         "secret_access_key": "your-secret"
     }
@@ -1233,7 +1232,7 @@ catalog.query(
 
 ### Catalog operations
 
-The catalog provides several operation functions for maintaining and organizing data files. These operations help optimize storage, improve query performance, and ensure data integrity.
+The catalog provides several operation functions for maintaining and organizing data files. These operations help optimize storage, improve query performance, and maintain data integrity.
 
 #### Reset file names
 
@@ -1826,9 +1825,39 @@ GreeksTestData(
 )
 ```
 
+#### Python-only custom data with the PyO3 catalog
+
+To use custom data with the Rust-backed catalog (`ParquetDataCatalog` from `nautilus_pyo3`), use the
+`@customdataclass_pyo3()` decorator instead of `@customdataclass`. This adds the methods the Rust catalog
+expects (JSON and Arrow IPC serialization). After defining your class, register it once. You can pass either
+the **type** (recommended) or a **sample instance**:
+
+```python
+from nautilus_trader.core.nautilus_pyo3 import ParquetDataCatalog
+from nautilus_trader.core.nautilus_pyo3.model import register_custom_data_class
+from nautilus_trader.model.custom import customdataclass_pyo3
+
+
+@customdataclass_pyo3()
+class MarketTickPython:
+    symbol: str = ""
+    price: float = 0.0
+    volume: int = 0
+
+
+# Register by type (no instance needed; call once, e.g. at startup)
+register_custom_data_class(MarketTickPython)
+
+catalog = ParquetDataCatalog("/path/to/catalog")
+catalog.write_custom_data([MarketTickPython(1, 1, "AAPL", 150.5, 1000)])
+result = catalog.query("MarketTickPython", None, None, None, None, None, True)
+```
+
+See `nautilus_trader.model.custom.customdataclass_pyo3` for details.
+
 #### Custom data type stub
 
-To enhance development convenience and improve code suggestions in your IDE, you can create a `.pyi`
+For better IDE code suggestions, you can create a `.pyi`
 stub file with the proper constructor signature for your custom data types as well as type hints for attributes.
 This is particularly useful when the constructor is dynamically generated at runtime, as it allows the IDE to recognize
 and provide suggestions for the class's methods and attributes.
@@ -1857,5 +1886,7 @@ class GreeksData(Data):
 ## Related guides
 
 - [Instruments](instruments.md) - Financial instruments referenced by data.
+- [Options](options.md) - Option instruments, chain subscriptions, and strike filtering.
+- [Greeks](greeks.md) - Venue-provided and locally computed option Greeks.
 - [Cache](cache.md) - Data storage and retrieval.
 - [Adapters](adapters.md) - Data sources and connectivity.

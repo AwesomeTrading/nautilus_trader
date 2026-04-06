@@ -15,6 +15,12 @@
 
 //! Python bindings from [PyO3](https://pyo3.rs).
 
+#![allow(
+    clippy::missing_errors_doc,
+    reason = "errors documented on underlying Rust methods"
+)]
+
+pub mod algorithm;
 pub mod sessions;
 pub mod strategy;
 
@@ -36,5 +42,10 @@ pub fn trading(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<strategy::PyStrategy>()?;
     m.add_class::<crate::strategy::StrategyConfig>()?;
     m.add_class::<crate::strategy::ImportableStrategyConfig>()?;
+    m.add_class::<crate::algorithm::ImportableExecAlgorithmConfig>()?;
+    #[cfg(feature = "examples")]
+    m.add_class::<crate::examples::strategies::GridMarketMakerConfig>()?;
+    #[cfg(feature = "examples")]
+    m.add_class::<crate::examples::strategies::DeltaNeutralVolConfig>()?;
     Ok(())
 }

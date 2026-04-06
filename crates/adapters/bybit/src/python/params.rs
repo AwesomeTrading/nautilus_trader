@@ -19,13 +19,15 @@ use ustr::Ustr;
 
 use crate::{
     common::enums::{
-        BybitOrderSide, BybitOrderType, BybitProductType, BybitTimeInForce, BybitTriggerType,
+        BybitMarketUnit, BybitOrderSide, BybitOrderType, BybitProductType, BybitTimeInForce,
+        BybitTpSlMode, BybitTriggerType,
     },
     websocket::{error::BybitWsError, messages},
 };
 
 /// Parameters for placing an order via WebSocket.
 #[pyclass(from_py_object)]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")]
 #[derive(Clone, Debug)]
 pub struct BybitWsPlaceOrderParams {
     #[pyo3(get, set)]
@@ -80,10 +82,16 @@ pub struct BybitWsPlaceOrderParams {
     pub sl_limit_price: Option<String>,
     #[pyo3(get, set)]
     pub tp_limit_price: Option<String>,
+    #[pyo3(get, set)]
+    pub order_iv: Option<String>,
+    #[pyo3(get, set)]
+    pub mmp: Option<bool>,
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl BybitWsPlaceOrderParams {
+    /// Parameters for placing an order via WebSocket.
     #[new]
     #[allow(clippy::too_many_arguments)]
     fn py_new(
@@ -113,6 +121,8 @@ impl BybitWsPlaceOrderParams {
         tp_order_type: Option<String>,
         sl_limit_price: Option<String>,
         tp_limit_price: Option<String>,
+        order_iv: Option<String>,
+        mmp: Option<bool>,
     ) -> Self {
         Self {
             category,
@@ -141,6 +151,8 @@ impl BybitWsPlaceOrderParams {
             tp_order_type,
             sl_limit_price,
             tp_limit_price,
+            order_iv,
+            mmp,
         }
     }
 }
@@ -215,6 +227,23 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             })
             .transpose()?;
 
+        let tpsl_mode = params
+            .tpsl_mode
+            .map(|v| {
+                serde_json::from_str::<BybitTpSlMode>(&format!("\"{v}\""))
+                    .map_err(|e| BybitWsError::ClientError(format!("Invalid tpsl_mode '{v}': {e}")))
+            })
+            .transpose()?;
+
+        let market_unit = params
+            .market_unit
+            .map(|v| {
+                serde_json::from_str::<BybitMarketUnit>(&format!("\"{v}\"")).map_err(|e| {
+                    BybitWsError::ClientError(format!("Invalid market_unit '{v}': {e}"))
+                })
+            })
+            .transpose()?;
+
         Ok(Self {
             category: params.category,
             symbol: Ustr::from(&params.symbol),
@@ -222,7 +251,7 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             order_type,
             qty: params.qty,
             is_leverage: params.is_leverage,
-            market_unit: params.market_unit,
+            market_unit,
             price: params.price,
             time_in_force,
             order_link_id: params.order_link_id,
@@ -231,7 +260,7 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             trigger_price: params.trigger_price,
             trigger_by,
             trigger_direction: params.trigger_direction,
-            tpsl_mode: params.tpsl_mode,
+            tpsl_mode,
             take_profit: params.take_profit,
             stop_loss: params.stop_loss,
             tp_trigger_by,
@@ -242,6 +271,8 @@ impl TryFrom<BybitWsPlaceOrderParams> for messages::BybitWsPlaceOrderParams {
             tp_order_type,
             sl_limit_price: params.sl_limit_price,
             tp_limit_price: params.tp_limit_price,
+            order_iv: params.order_iv,
+            mmp: params.mmp,
         })
     }
 }
@@ -293,6 +324,19 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
                 .to_string()
         });
 
+        let tpsl_mode = params.tpsl_mode.map(|v| {
+            serde_json::to_string(&v)
+                .expect("Failed to serialize BybitTpSlMode")
+                .trim_matches('"')
+                .to_string()
+        });
+        let market_unit = params.market_unit.map(|v| {
+            serde_json::to_string(&v)
+                .expect("Failed to serialize BybitMarketUnit")
+                .trim_matches('"')
+                .to_string()
+        });
+
         Self {
             category: params.category,
             symbol: params.symbol.to_string(),
@@ -300,7 +344,7 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
             order_type,
             qty: params.qty,
             is_leverage: params.is_leverage,
-            market_unit: params.market_unit,
+            market_unit,
             price: params.price,
             time_in_force,
             order_link_id: params.order_link_id,
@@ -309,7 +353,7 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
             trigger_price: params.trigger_price,
             trigger_by,
             trigger_direction: params.trigger_direction,
-            tpsl_mode: params.tpsl_mode,
+            tpsl_mode,
             take_profit: params.take_profit,
             stop_loss: params.stop_loss,
             tp_trigger_by,
@@ -320,12 +364,15 @@ impl From<messages::BybitWsPlaceOrderParams> for BybitWsPlaceOrderParams {
             tp_order_type,
             sl_limit_price: params.sl_limit_price,
             tp_limit_price: params.tp_limit_price,
+            order_iv: params.order_iv,
+            mmp: params.mmp,
         }
     }
 }
 
 /// Parameters for amending an order via WebSocket.
 #[pyclass(from_py_object)]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")]
 #[derive(Clone, Debug)]
 pub struct BybitWsAmendOrderParams {
     #[pyo3(get, set)]
@@ -350,10 +397,14 @@ pub struct BybitWsAmendOrderParams {
     pub tp_trigger_by: Option<String>,
     #[pyo3(get, set)]
     pub sl_trigger_by: Option<String>,
+    #[pyo3(get, set)]
+    pub order_iv: Option<String>,
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl BybitWsAmendOrderParams {
+    /// Parameters for amending an order via WebSocket.
     #[new]
     #[allow(clippy::too_many_arguments)]
     fn py_new(
@@ -368,6 +419,7 @@ impl BybitWsAmendOrderParams {
         stop_loss: Option<String>,
         tp_trigger_by: Option<String>,
         sl_trigger_by: Option<String>,
+        order_iv: Option<String>,
     ) -> Self {
         Self {
             category,
@@ -381,6 +433,7 @@ impl BybitWsAmendOrderParams {
             stop_loss,
             tp_trigger_by,
             sl_trigger_by,
+            order_iv,
         }
     }
 }
@@ -419,6 +472,7 @@ impl TryFrom<BybitWsAmendOrderParams> for messages::BybitWsAmendOrderParams {
             stop_loss: params.stop_loss,
             tp_trigger_by,
             sl_trigger_by,
+            order_iv: params.order_iv,
         })
     }
 }
@@ -450,12 +504,14 @@ impl From<messages::BybitWsAmendOrderParams> for BybitWsAmendOrderParams {
             stop_loss: params.stop_loss,
             tp_trigger_by,
             sl_trigger_by,
+            order_iv: params.order_iv,
         }
     }
 }
 
 /// Parameters for canceling an order via WebSocket.
 #[pyclass(from_py_object)]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")]
 #[derive(Clone, Debug)]
 pub struct BybitWsCancelOrderParams {
     #[pyo3(get, set)]
@@ -469,7 +525,9 @@ pub struct BybitWsCancelOrderParams {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl BybitWsCancelOrderParams {
+    /// Parameters for canceling an order via WebSocket.
     #[new]
     fn py_new(
         category: BybitProductType,
@@ -512,6 +570,7 @@ impl From<messages::BybitWsCancelOrderParams> for BybitWsCancelOrderParams {
 
 /// Parameters for fetching tickers via HTTP API.
 #[pyclass(from_py_object)]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")]
 #[derive(Clone, Debug)]
 pub struct BybitTickersParams {
     #[pyo3(get, set)]
@@ -525,7 +584,12 @@ pub struct BybitTickersParams {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl BybitTickersParams {
+    /// Query parameters for `GET /v5/market/tickers`.
+    ///
+    /// # References
+    /// - <https://bybit-exchange.github.io/docs/v5/market/tickers>
     #[new]
     #[pyo3(signature = (category, symbol=None, base_coin=None, exp_date=None))]
     fn py_new(

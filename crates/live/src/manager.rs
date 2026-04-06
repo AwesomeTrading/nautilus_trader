@@ -28,11 +28,20 @@ use nautilus_common::{
     clock::Clock,
     enums::{LogColor, LogLevel},
     log_info,
-    messages::execution::report::{GenerateOrderStatusReports, GeneratePositionStatusReports},
+    messages::{
+        ExecutionReport,
+        execution::{
+            QueryOrder, TradingCommand,
+            report::{GenerateOrderStatusReports, GeneratePositionStatusReports},
+        },
+    },
 };
 use nautilus_core::{
     UUID4, UnixNanos,
-    datetime::{NANOSECONDS_IN_MILLISECOND, NANOSECONDS_IN_SECOND, nanos_to_millis},
+    datetime::{
+        NANOSECONDS_IN_MILLISECOND, NANOSECONDS_IN_SECOND, mins_to_nanos, mins_to_secs,
+        nanos_to_millis,
+    },
 };
 use nautilus_execution::{
     engine::ExecutionEngine,
@@ -46,7 +55,7 @@ use nautilus_execution::{
 };
 use nautilus_model::{
     enums::{OrderSide, OrderStatus, OrderType, TimeInForce},
-    events::{OrderEventAny, OrderFilled, OrderInitialized},
+    events::{OrderCanceled, OrderEventAny, OrderFilled, OrderInitialized},
     identifiers::{
         AccountId, ClientOrderId, InstrumentId, PositionId, StrategyId, TradeId, TraderId,
         VenueOrderId,
@@ -85,6 +94,15 @@ pub struct ReconciliationResult {
     pub events: Vec<OrderEventAny>,
     /// External orders that need to be registered with execution clients.
     pub external_orders: Vec<ExternalOrderMetadata>,
+}
+
+/// Result of inflight order checks containing terminal events and intermediate queries.
+#[derive(Debug, Default)]
+pub struct InflightCheckResult {
+    /// Terminal events (rejection/cancellation) for orders that exceeded max retries.
+    pub events: Vec<OrderEventAny>,
+    /// Intermediate venue queries for orders still within retry budget.
+    pub queries: Vec<TradingCommand>,
 }
 
 /// Configuration for execution manager.
@@ -244,18 +262,6 @@ impl ExecutionManagerConfig {
     }
 }
 
-/// Execution report for continuous reconciliation.
-/// This is a simplified report type used during runtime reconciliation.
-#[derive(Debug, Clone)]
-pub struct ExecutionReport {
-    pub client_order_id: ClientOrderId,
-    pub venue_order_id: Option<VenueOrderId>,
-    pub status: OrderStatus,
-    pub filled_qty: Quantity,
-    pub avg_px: Option<f64>,
-    pub ts_event: UnixNanos,
-}
-
 /// Information about an inflight order check.
 #[derive(Debug, Clone)]
 struct InflightCheck {
@@ -337,6 +343,12 @@ impl ExecutionManager {
             position_recon_retries: AHashMap::new(),
             recent_fills_cache: AHashMap::new(),
         }
+    }
+
+    /// Returns the current clock timestamp in nanoseconds.
+    #[must_use]
+    pub fn generate_timestamp_ns(&self) -> UnixNanos {
+        self.clock.borrow().timestamp_ns()
     }
 
     /// Reconciles orders and fills from a mass status report.
@@ -430,7 +442,7 @@ impl ExecutionManager {
                     continue;
                 }
 
-                if let Some(mut order) = self.get_order(client_order_id) {
+                if let Some(order) = self.get_order(client_order_id) {
                     let instrument = self.get_instrument(&report.instrument_id);
                     log::info!(
                         color = LogColor::Blue as u8;
@@ -447,7 +459,7 @@ impl ExecutionManager {
                         .map(|f| f.iter().collect())
                         .unwrap_or_default();
                     let order_events = self.reconcile_order_with_fills(
-                        &mut order,
+                        &order,
                         report,
                         &order_fills,
                         instrument.as_ref(),
@@ -470,8 +482,7 @@ impl ExecutionManager {
                     ) {
                         log::warn!("Failed to add venue order ID index: {e}");
                     }
-                } else if let Some(mut order) =
-                    self.get_order_by_venue_order_id(&report.venue_order_id)
+                } else if let Some(order) = self.get_order_by_venue_order_id(&report.venue_order_id)
                 {
                     // Fallback: match by venue_order_id
                     let instrument = self.get_instrument(&report.instrument_id);
@@ -491,7 +502,7 @@ impl ExecutionManager {
                         .map(|f| f.iter().collect())
                         .unwrap_or_default();
                     let order_events = self.reconcile_order_with_fills(
-                        &mut order,
+                        &order,
                         report,
                         &order_fills,
                         instrument.as_ref(),
@@ -548,8 +559,7 @@ impl ExecutionManager {
                         orders_skipped_no_instrument += 1;
                     }
                 }
-            } else if let Some(mut order) = self.get_order_by_venue_order_id(&report.venue_order_id)
-            {
+            } else if let Some(order) = self.get_order_by_venue_order_id(&report.venue_order_id) {
                 // Fallback: match by venue_order_id
                 let instrument = self.get_instrument(&report.instrument_id);
                 log::info!(
@@ -567,7 +577,7 @@ impl ExecutionManager {
                     .map(|f| f.iter().collect())
                     .unwrap_or_default();
                 let order_events = self.reconcile_order_with_fills(
-                    &mut order,
+                    &order,
                     report,
                     &order_fills,
                     instrument.as_ref(),
@@ -681,14 +691,14 @@ impl ExecutionManager {
                 continue;
             }
 
-            if let Some(mut order) = order {
+            if let Some(order) = order {
                 let instrument_id = order.instrument_id();
                 if let Some(instrument) = self.get_instrument(&instrument_id) {
                     let mut sorted_fills: Vec<&FillReport> = fills.iter().collect();
                     sorted_fills.sort_by_key(|f| f.ts_event);
 
                     for fill in sorted_fills {
-                        if let Some(event) = self.create_order_fill(&mut order, fill, &instrument) {
+                        if let Some(event) = self.create_order_fill(&order, fill, &instrument) {
                             fills_applied += 1;
                             events.push(event);
                         }
@@ -700,7 +710,7 @@ impl ExecutionManager {
         events.sort_by_key(|e| e.ts_event());
 
         for event in &events {
-            exec_engine.borrow_mut().process(event.clone());
+            exec_engine.borrow_mut().process(event);
         }
 
         let mut positions_created = 0usize;
@@ -753,7 +763,7 @@ impl ExecutionManager {
                         &positions_with_fills,
                     ) {
                         for event in position_events {
-                            exec_engine.borrow_mut().process(event.clone());
+                            exec_engine.borrow_mut().process(&event);
                             events.push(event);
                         }
                         positions_created += 1;
@@ -785,64 +795,13 @@ impl ExecutionManager {
         }
     }
 
-    /// Reconciles a single execution report during runtime.
+    /// Checks inflight orders and returns terminal events and intermediate venue queries.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the average price cannot be converted to a valid `Decimal`.
-    pub fn reconcile_report(
-        &mut self,
-        report: ExecutionReport,
-    ) -> anyhow::Result<Vec<OrderEventAny>> {
-        let mut events = Vec::new();
-
-        self.clear_recon_tracking(&report.client_order_id, true);
-
-        if let Some(order) = self.get_order(&report.client_order_id) {
-            let Some(account_id) = order.account_id() else {
-                log::error!("Cannot process fill report: order has no account_id");
-                return Ok(vec![]);
-            };
-            let Some(venue_order_id) = report.venue_order_id else {
-                log::error!("Cannot process fill report: report has no venue_order_id");
-                return Ok(vec![]);
-            };
-            let mut order_report = OrderStatusReport::new(
-                account_id,
-                order.instrument_id(),
-                Some(report.client_order_id),
-                venue_order_id,
-                order.order_side(),
-                order.order_type(),
-                order.time_in_force(),
-                report.status,
-                order.quantity(),
-                report.filled_qty,
-                report.ts_event, // Use ts_event as ts_accepted
-                report.ts_event, // Use ts_event as ts_last
-                self.clock.borrow().timestamp_ns(),
-                Some(UUID4::new()),
-            );
-
-            if let Some(avg_px) = report.avg_px {
-                order_report = order_report.with_avg_px(avg_px)?;
-            }
-
-            let instrument = self.get_instrument(&order.instrument_id());
-
-            if let Some(event) =
-                self.reconcile_order_report(&order, &order_report, instrument.as_ref())
-            {
-                events.push(event);
-            }
-        }
-
-        Ok(events)
-    }
-
-    /// Checks inflight orders and returns events for any that need reconciliation.
-    pub fn check_inflight_orders(&mut self) -> Vec<OrderEventAny> {
-        let mut events = Vec::new();
+    /// For retries below `inflight_max_retries`, generates `QueryOrder` commands to poll
+    /// the venue for the order's current status. At max retries, generates terminal events
+    /// (rejection or cancellation) based on the order's status.
+    pub fn check_inflight_orders(&mut self) -> InflightCheckResult {
+        let mut result = InflightCheckResult::default();
         let current_time = self.clock.borrow().timestamp_ns();
         let threshold_ns = self.config.inflight_threshold_ms * NANOSECONDS_IN_MILLISECOND;
 
@@ -877,22 +836,62 @@ impl ExecutionManager {
                     .insert(client_order_id, check.retry_count);
 
                 if check.retry_count >= self.config.inflight_max_retries {
-                    // Generate rejection after max retries
                     let ts_now = self.clock.borrow().timestamp_ns();
 
-                    if let Some(order) = self.get_order(&client_order_id)
-                        && let Some(event) =
-                            create_reconciliation_rejected(&order, Some("INFLIGHT_TIMEOUT"), ts_now)
-                    {
-                        events.push(event);
+                    if let Some(order) = self.get_order(&client_order_id) {
+                        match order.status() {
+                            OrderStatus::Submitted => {
+                                // Generate rejection for submitted orders that never got accepted
+                                if let Some(event) = create_reconciliation_rejected(
+                                    &order,
+                                    Some("INFLIGHT_TIMEOUT"),
+                                    ts_now,
+                                ) {
+                                    result.events.push(event);
+                                }
+                            }
+                            OrderStatus::PendingUpdate | OrderStatus::PendingCancel => {
+                                // Generate cancellation for orders stuck in pending modify/cancel
+                                let event = OrderEventAny::Canceled(OrderCanceled::new(
+                                    order.trader_id(),
+                                    order.strategy_id(),
+                                    order.instrument_id(),
+                                    order.client_order_id(),
+                                    UUID4::new(),
+                                    ts_now,
+                                    ts_now,
+                                    true, // reconciliation
+                                    order.venue_order_id(),
+                                    order.account_id(),
+                                ));
+                                result.events.push(event);
+                            }
+                            _ => {
+                                // Order already resolved, just clear tracking
+                            }
+                        }
                     }
                     // Remove from inflight checks regardless of whether order exists
                     self.clear_recon_tracking(&client_order_id, true);
+                } else if let Some(order) = self.get_order(&client_order_id) {
+                    // Intermediate retry: query the venue for current order status
+                    let client_id = self.cache.borrow().client_id(&client_order_id).copied();
+                    let query = TradingCommand::QueryOrder(QueryOrder::new(
+                        order.trader_id(),
+                        client_id,
+                        order.strategy_id(),
+                        order.instrument_id(),
+                        order.client_order_id(),
+                        order.venue_order_id(),
+                        UUID4::new(),
+                        current_time,
+                    ));
+                    result.queries.push(query);
                 }
             }
         }
 
-        events
+        result
     }
 
     /// Checks open orders consistency between cache and venue.
@@ -906,7 +905,7 @@ impl ExecutionManager {
     /// A vector of order events generated to reconcile discrepancies.
     pub async fn check_open_orders(
         &mut self,
-        clients: &[Rc<dyn ExecutionClient>],
+        clients: &[&dyn ExecutionClient],
     ) -> Vec<OrderEventAny> {
         log::debug!("Checking order consistency between cached-state and venues");
 
@@ -939,13 +938,19 @@ impl ExecutionManager {
         let mut all_reports = Vec::new();
         let mut venue_reported_ids = AHashSet::new();
 
+        let ts_now = self.clock.borrow().timestamp_ns();
+        let start = self.config.open_check_lookback_mins.map(|mins| {
+            let lookback_ns = mins_to_nanos(mins);
+            UnixNanos::from(ts_now.as_u64().saturating_sub(lookback_ns))
+        });
+
         for client in clients {
             let mut cmd = GenerateOrderStatusReports::new(
                 UUID4::new(),
-                self.clock.borrow().timestamp_ns(),
-                true, // open_only
+                ts_now,
+                self.config.open_check_open_only,
                 None, // instrument_id - query all
-                None, // start
+                start,
                 None, // end
                 None, // params
                 None, // correlation_id
@@ -1000,12 +1005,21 @@ impl ExecutionManager {
             }
         }
 
-        // Handle orders missing at venue
+        // Handle orders missing at venue (skip in open_only mode where the
+        // venue response may omit recently closed orders). When a lookback
+        // window is set, only consider orders within that window so older
+        // GTC orders outside the query range are not falsely marked missing.
         if !self.config.open_check_open_only {
-            let cached_ids: AHashSet<ClientOrderId> = filtered_orders
-                .iter()
-                .map(|o| o.client_order_id())
-                .collect();
+            let candidates: Vec<&OrderAny> = if let Some(cutoff) = start {
+                filtered_orders
+                    .iter()
+                    .filter(|o| o.ts_last() >= cutoff)
+                    .collect()
+            } else {
+                filtered_orders.iter().collect()
+            };
+            let cached_ids: AHashSet<ClientOrderId> =
+                candidates.iter().map(|o| o.client_order_id()).collect();
             let missing_at_venue: AHashSet<ClientOrderId> = cached_ids
                 .difference(&venue_reported_ids)
                 .copied()
@@ -1030,7 +1044,7 @@ impl ExecutionManager {
     /// A vector of fill events generated to reconcile position discrepancies.
     pub async fn check_positions_consistency(
         &mut self,
-        clients: &[Rc<dyn ExecutionClient>],
+        clients: &[&dyn ExecutionClient],
     ) -> Vec<OrderEventAny> {
         log::debug!("Checking position consistency between cached-state and venues");
 
@@ -1186,6 +1200,58 @@ impl ExecutionManager {
             .insert(instrument_id, ts_event);
     }
 
+    /// Observes an incoming execution report and updates tracking state.
+    ///
+    /// This should be called **before** the report is dispatched to the execution
+    /// engine, so that the manager's state is current when periodic checks run.
+    ///
+    /// Updates performed per report variant:
+    /// - `Order`: clears inflight tracking and records local activity
+    /// - `Fill`: marks fill as processed, records order and position activity
+    /// - `Position`: records position activity
+    /// - `MassStatus`: no-op (handled separately via startup reconciliation)
+    pub fn observe_execution_report(&mut self, report: &ExecutionReport) {
+        match report {
+            ExecutionReport::Order(order_report) => {
+                if let Some(client_order_id) = &order_report.client_order_id {
+                    // Only clear inflight tracking for non-pending states.
+                    // Pending reports (PendingUpdate, PendingCancel) are interim
+                    // acknowledgements; the order is still inflight until the
+                    // venue confirms the final state.
+                    if !matches!(
+                        order_report.order_status,
+                        OrderStatus::PendingUpdate | OrderStatus::PendingCancel
+                    ) {
+                        self.clear_recon_tracking(client_order_id, true);
+                    }
+                    self.record_local_activity(*client_order_id);
+                }
+            }
+            ExecutionReport::Fill(fill_report) => {
+                let client_order_id = fill_report.client_order_id.or_else(|| {
+                    self.cache
+                        .borrow()
+                        .client_order_id(&fill_report.venue_order_id)
+                        .copied()
+                });
+
+                if let Some(coid) = client_order_id {
+                    self.record_local_activity(coid);
+                }
+                self.record_position_activity(fill_report.instrument_id, fill_report.ts_event);
+            }
+            ExecutionReport::Position(position_report) => {
+                self.record_position_activity(
+                    position_report.instrument_id,
+                    position_report.ts_last,
+                );
+            }
+            ExecutionReport::MassStatus(_) => {
+                // Handled separately via reconcile_execution_mass_status
+            }
+        }
+    }
+
     /// Checks if a fill has been recently processed (for deduplication).
     pub fn is_fill_recently_processed(&self, trade_id: &TradeId) -> bool {
         self.recent_fills_cache.contains_key(trade_id)
@@ -1215,7 +1281,7 @@ impl ExecutionManager {
         };
 
         let ts_now = self.clock.borrow().timestamp_ns();
-        let buffer_secs = (buffer_mins as u64) * 60;
+        let buffer_secs = mins_to_secs(buffer_mins as u64);
 
         self.cache
             .borrow_mut()
@@ -1229,7 +1295,7 @@ impl ExecutionManager {
         };
 
         let ts_now = self.clock.borrow().timestamp_ns();
-        let buffer_secs = (buffer_mins as u64) * 60;
+        let buffer_secs = mins_to_secs(buffer_mins as u64);
 
         self.cache
             .borrow_mut()
@@ -1243,7 +1309,7 @@ impl ExecutionManager {
         };
 
         let ts_now = self.clock.borrow().timestamp_ns();
-        let lookback_secs = (lookback_mins as u64) * 60;
+        let lookback_secs = mins_to_secs(lookback_mins as u64);
 
         self.cache
             .borrow_mut()
@@ -1902,7 +1968,8 @@ impl ExecutionManager {
 
         let (cached_signed_qty, cached_avg_px) = {
             let cache = self.cache.borrow();
-            let positions = cache.positions_open(None, Some(&instrument_id), None, None, None);
+            let positions =
+                cache.positions_open(None, Some(&instrument_id), None, Some(account_id), None);
 
             if positions.is_empty() {
                 (Decimal::ZERO, None)
@@ -2074,7 +2141,7 @@ impl ExecutionManager {
     /// to ensure correct state transitions (matching Python behavior).
     fn reconcile_order_with_fills(
         &mut self,
-        order: &mut OrderAny,
+        order: &OrderAny,
         report: &OrderStatusReport,
         fills: &[&FillReport],
         instrument: Option<&InstrumentAny>,
@@ -2183,6 +2250,17 @@ impl ExecutionManager {
             .client_order_id
             .unwrap_or_else(|| ClientOrderId::from(report.venue_order_id.as_str()));
 
+        if !report.quantity.is_positive() {
+            log::error!(
+                "Skipping external order {} ({}) for {}: non-positive quantity in report {:?}",
+                client_order_id,
+                report.venue_order_id,
+                report.instrument_id,
+                report,
+            );
+            return (Vec::new(), None);
+        }
+
         let ts_now = self.clock.borrow().timestamp_ns();
 
         let initialized = OrderInitialized::new(
@@ -2261,7 +2339,7 @@ impl ExecutionManager {
             generate_external_order_status_events(&order, report, account_id, instrument, ts_now);
 
         if !fills.is_empty() {
-            let mut cached_order = self.get_order(&client_order_id).unwrap();
+            let cached_order = self.get_order(&client_order_id).unwrap();
             let mut sorted_fills: Vec<&FillReport> = fills.to_vec();
             sorted_fills.sort_by_key(|f| f.ts_event);
 
@@ -2270,7 +2348,7 @@ impl ExecutionManager {
                     let terminal_event = order_events.pop();
                     for fill in sorted_fills {
                         if let Some(fill_event) =
-                            self.create_order_fill(&mut cached_order, fill, instrument)
+                            self.create_order_fill(&cached_order, fill, instrument)
                         {
                             order_events.push(fill_event);
                         }
@@ -2292,7 +2370,7 @@ impl ExecutionManager {
                     let mut real_fill_total = Decimal::ZERO;
                     for fill in &sorted_fills {
                         if let Some(fill_event) =
-                            self.create_order_fill(&mut cached_order, fill, instrument)
+                            self.create_order_fill(&cached_order, fill, instrument)
                         {
                             real_fill_total += fill.last_qty.as_decimal();
                             order_events.push(fill_event);
@@ -2480,7 +2558,7 @@ impl ExecutionManager {
 
     fn create_order_fill(
         &mut self,
-        order: &mut OrderAny,
+        order: &OrderAny,
         fill: &FillReport,
         instrument: &InstrumentAny,
     ) -> Option<OrderEventAny> {

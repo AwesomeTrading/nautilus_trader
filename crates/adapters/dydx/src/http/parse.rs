@@ -444,7 +444,7 @@ mod tests {
             step_size: Decimal::from_str("0.001").unwrap(),
             tick_size: Decimal::from_str("1").unwrap(),
             index_price: Some(Decimal::from_str("50000").unwrap()),
-            oracle_price: Decimal::from_str("50000").unwrap(),
+            oracle_price: Some(Decimal::from_str("50000").unwrap()),
             price_change_24h: Decimal::ZERO,
             next_funding_rate: Decimal::ZERO,
             next_funding_at: Some(Utc::now()),
@@ -754,6 +754,66 @@ mod tests {
         assert_eq!(btc.ticker, "BTC-USD");
         assert_eq!(btc.clob_pair_id, 0);
         assert_eq!(btc.atomic_resolution, -10);
+    }
+
+    #[rstest]
+    fn test_parse_perpetual_market_with_null_oracle_price() {
+        let json = serde_json::json!({
+            "markets": {
+                "WTI-USD": {
+                    "clobPairId": "99",
+                    "ticker": "WTI-USD",
+                    "status": "ACTIVE",
+                    "oraclePrice": null,
+                    "priceChange24H": "0",
+                    "nextFundingRate": "0",
+                    "initialMarginFraction": "0.1",
+                    "maintenanceMarginFraction": "0.05",
+                    "openInterest": "0",
+                    "atomicResolution": -7,
+                    "quantumConversionExponent": -9,
+                    "tickSize": "0.01",
+                    "stepSize": "0.1",
+                    "stepBaseQuantums": 1000000,
+                    "subticksPerTick": 1000000
+                }
+            }
+        });
+        let response: MarketsResponse =
+            serde_json::from_value(json).expect("Failed to parse market with null oraclePrice");
+
+        let wti = response.markets.get("WTI-USD").unwrap();
+        assert_eq!(wti.ticker.as_str(), "WTI-USD");
+        assert_eq!(wti.oracle_price, None);
+    }
+
+    #[rstest]
+    fn test_parse_perpetual_market_with_missing_oracle_price() {
+        let json = serde_json::json!({
+            "markets": {
+                "WTI-USD": {
+                    "clobPairId": "99",
+                    "ticker": "WTI-USD",
+                    "status": "ACTIVE",
+                    "priceChange24H": "0",
+                    "nextFundingRate": "0",
+                    "initialMarginFraction": "0.1",
+                    "maintenanceMarginFraction": "0.05",
+                    "openInterest": "0",
+                    "atomicResolution": -7,
+                    "quantumConversionExponent": -9,
+                    "tickSize": "0.01",
+                    "stepSize": "0.1",
+                    "stepBaseQuantums": 1000000,
+                    "subticksPerTick": 1000000
+                }
+            }
+        });
+        let response: MarketsResponse =
+            serde_json::from_value(json).expect("Failed to parse market with missing oraclePrice");
+
+        let wti = response.markets.get("WTI-USD").unwrap();
+        assert_eq!(wti.oracle_price, None);
     }
 
     #[rstest]
@@ -1220,15 +1280,23 @@ pub fn parse_account_state(
     let mut balances = Vec::new();
 
     // Parse equity (total) and freeCollateral (free)
-    let equity: Decimal = subaccount
-        .equity
-        .parse()
-        .context(format!("Failed to parse equity '{}'", subaccount.equity))?;
+    let equity: Decimal = if subaccount.equity.is_empty() {
+        Decimal::ZERO
+    } else {
+        subaccount
+            .equity
+            .parse()
+            .context(format!("Failed to parse equity '{}'", subaccount.equity))?
+    };
 
-    let free_collateral: Decimal = subaccount.free_collateral.parse().context(format!(
-        "Failed to parse freeCollateral '{}'",
-        subaccount.free_collateral
-    ))?;
+    let free_collateral: Decimal = if subaccount.free_collateral.is_empty() {
+        Decimal::ZERO
+    } else {
+        subaccount.free_collateral.parse().context(format!(
+            "Failed to parse freeCollateral '{}'",
+            subaccount.free_collateral
+        ))?
+    };
 
     // dYdX uses USDC as the settlement currency
     let currency = Currency::get_or_create_crypto_with_context("USDC", None);
@@ -1993,5 +2061,44 @@ mod reconciliation_tests {
         let report = result.unwrap();
         assert_eq!(report.commission.as_decimal(), dec!(-2.5));
         assert_eq!(report.liquidity_side, LiquiditySide::Maker);
+    }
+
+    #[rstest]
+    fn test_parse_account_state_empty_balance() {
+        use crate::websocket::messages::DydxSubaccountInfo;
+
+        let subaccount = DydxSubaccountInfo {
+            address: "dydx1abc".to_string(),
+            subaccount_number: 0,
+            equity: String::new(),
+            free_collateral: String::new(),
+            open_perpetual_positions: None,
+            asset_positions: None,
+            margin_enabled: true,
+            updated_at_height: "0".to_string(),
+            latest_processed_block_height: "0".to_string(),
+        };
+
+        let account_id = AccountId::new("DYDX-001");
+        let instruments = std::collections::HashMap::new();
+        let oracle_prices = std::collections::HashMap::new();
+        let ts = UnixNanos::default();
+
+        let state = parse_account_state(
+            &subaccount,
+            account_id,
+            &instruments,
+            &oracle_prices,
+            ts,
+            ts,
+        )
+        .unwrap();
+
+        assert_eq!(state.account_id, account_id);
+        assert_eq!(state.balances.len(), 1);
+        let balance = &state.balances[0];
+        assert_eq!(balance.total.as_f64(), 0.0);
+        assert_eq!(balance.free.as_f64(), 0.0);
+        assert_eq!(balance.locked.as_f64(), 0.0);
     }
 }

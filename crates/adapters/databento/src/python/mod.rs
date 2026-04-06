@@ -15,6 +15,12 @@
 
 //! Python bindings from [PyO3](https://pyo3.rs).
 
+#![allow(
+    clippy::missing_errors_doc,
+    reason = "errors documented on underlying Rust methods"
+)]
+
+pub mod arrow;
 pub mod enums;
 pub mod historical;
 pub mod loader;
@@ -37,6 +43,7 @@ use pyo3::prelude::*;
 use crate::factories::{DatabentoDataClientFactory, DatabentoLiveClientConfig};
 
 #[cfg(feature = "live")]
+#[allow(clippy::needless_pass_by_value)]
 fn extract_databento_data_factory(
     py: Python<'_>,
     factory: Py<PyAny>,
@@ -50,6 +57,7 @@ fn extract_databento_data_factory(
 }
 
 #[cfg(feature = "live")]
+#[allow(clippy::needless_pass_by_value)]
 fn extract_databento_data_config(
     py: Python<'_>,
     config: Py<PyAny>,
@@ -80,6 +88,23 @@ pub fn databento(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<super::types::DatabentoImbalance>()?;
     m.add_class::<super::loader::DatabentoDataLoader>()?;
     m.add_class::<historical::DatabentoHistoricalClient>()?;
+    m.add_function(wrap_pyfunction!(arrow::get_databento_arrow_schema_map, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        arrow::py_databento_imbalance_to_arrow_record_batch_bytes,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        arrow::py_databento_imbalance_from_arrow_record_batch_bytes,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        arrow::py_databento_statistics_to_arrow_record_batch_bytes,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        arrow::py_databento_statistics_from_arrow_record_batch_bytes,
+        m
+    )?)?;
 
     #[cfg(feature = "live")]
     m.add_class::<live::DatabentoLiveClient>()?;

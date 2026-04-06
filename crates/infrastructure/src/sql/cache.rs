@@ -19,7 +19,6 @@ use ahash::AHashMap;
 use bytes::Bytes;
 use nautilus_common::{
     cache::database::{CacheDatabaseAdapter, CacheMap},
-    custom::CustomData,
     live::get_runtime,
     logging::{log_task_awaiting, log_task_started, log_task_stopped},
     signal::Signal,
@@ -27,7 +26,7 @@ use nautilus_common::{
 use nautilus_core::UnixNanos;
 use nautilus_model::{
     accounts::AccountAny,
-    data::{Bar, DataType, FundingRateUpdate, QuoteTick, TradeTick},
+    data::{Bar, CustomData, DataType, FundingRateUpdate, QuoteTick, TradeTick},
     events::{OrderEventAny, OrderSnapshot, position::snapshot::PositionSnapshot},
     identifiers::{
         AccountId, ClientId, ClientOrderId, ComponentId, InstrumentId, PositionId, StrategyId,
@@ -1039,6 +1038,10 @@ async fn drain_buffer(pool: &PgPool, buffer: &mut VecDeque<DatabaseQuery>) {
                     )
                     .await
                 }
+                InstrumentAny::TokenizedAsset(instrument) => {
+                    DatabaseQueries::add_instrument(pool, "TOKENIZED_ASSET", Box::new(instrument))
+                        .await
+                }
             },
             DatabaseQuery::AddOrder(order_any, client_id, updated) => match order_any {
                 OrderAny::Limit(order) => {
@@ -1127,11 +1130,14 @@ async fn drain_buffer(pool: &PgPool, buffer: &mut VecDeque<DatabaseQuery>) {
                 DatabaseQueries::add_position_snapshot(pool, snapshot).await
             }
             DatabaseQuery::AddAccount(account_any, updated) => match account_any {
+                AccountAny::Margin(account) => {
+                    DatabaseQueries::add_account(pool, "MARGIN", updated, Box::new(account)).await
+                }
                 AccountAny::Cash(account) => {
                     DatabaseQueries::add_account(pool, "CASH", updated, Box::new(account)).await
                 }
-                AccountAny::Margin(account) => {
-                    DatabaseQueries::add_account(pool, "MARGIN", updated, Box::new(account)).await
+                AccountAny::Betting(account) => {
+                    DatabaseQueries::add_account(pool, "BETTING", updated, Box::new(account)).await
                 }
             },
             DatabaseQuery::AddSignal(signal) => DatabaseQueries::add_signal(pool, &signal).await,

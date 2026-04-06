@@ -54,8 +54,10 @@ from nautilus_trader.model.events import OrderExpired
 from nautilus_trader.model.events import OrderModifyRejected
 from nautilus_trader.model.events import OrderRejected
 from nautilus_trader.model.events import OrderUpdated
+from nautilus_trader.model.functions import order_side_to_pyo3
 from nautilus_trader.model.functions import order_type_to_pyo3
 from nautilus_trader.model.functions import time_in_force_to_pyo3
+from nautilus_trader.model.functions import trigger_type_to_pyo3
 from nautilus_trader.model.identifiers import AccountId
 from nautilus_trader.model.identifiers import ClientId
 from nautilus_trader.model.identifiers import ClientOrderId
@@ -198,6 +200,7 @@ class DeribitExecutionClient(LiveExecutionClient):
         reports: list[OrderStatusReport] = []
         try:
             pyo3_instrument_id = None
+
             if command.instrument_id:
                 pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(
                     command.instrument_id.value,
@@ -237,6 +240,7 @@ class DeribitExecutionClient(LiveExecutionClient):
         reports: list[FillReport] = []
         try:
             pyo3_instrument_id = None
+
             if command.instrument_id:
                 pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(
                     command.instrument_id.value,
@@ -271,6 +275,7 @@ class DeribitExecutionClient(LiveExecutionClient):
         reports: list[PositionStatusReport] = []
         try:
             pyo3_instrument_id = None
+
             if command.instrument_id:
                 pyo3_instrument_id = nautilus_pyo3.InstrumentId.from_str(
                     command.instrument_id.value,
@@ -362,7 +367,15 @@ class DeribitExecutionClient(LiveExecutionClient):
                 ts_event=self._clock.timestamp_ns(),
             )
 
-            pyo3_order_side = nautilus_pyo3.OrderSide.from_str(order.side.name)
+            pyo3_order_side = order_side_to_pyo3(order.side)
+            pyo3_trigger_price = (
+                nautilus_pyo3.Price.from_str(str(order.trigger_price))
+                if order.has_trigger_price
+                else None
+            )
+            pyo3_trigger_type = (
+                trigger_type_to_pyo3(order.trigger_type) if order.has_trigger_price else None
+            )
             await self._ws_client.submit_order(
                 order_side=pyo3_order_side,
                 quantity=pyo3_quantity,
@@ -375,6 +388,8 @@ class DeribitExecutionClient(LiveExecutionClient):
                 time_in_force=pyo3_time_in_force,
                 post_only=order.is_post_only,
                 reduce_only=order.is_reduce_only,
+                trigger_price=pyo3_trigger_price,
+                trigger_type=pyo3_trigger_type,
             )
         except Exception as e:
             self._log.error(f"Failed to submit order: {e}")
@@ -431,7 +446,15 @@ class DeribitExecutionClient(LiveExecutionClient):
                     f"({order.side.name} {order.quantity} @ {order.price})",
                 )
 
-                pyo3_order_side = nautilus_pyo3.OrderSide.from_str(order.side.name)
+                pyo3_order_side = order_side_to_pyo3(order.side)
+                pyo3_trigger_price = (
+                    nautilus_pyo3.Price.from_str(str(order.trigger_price))
+                    if order.has_trigger_price
+                    else None
+                )
+                pyo3_trigger_type = (
+                    trigger_type_to_pyo3(order.trigger_type) if order.has_trigger_price else None
+                )
                 await self._ws_client.submit_order(
                     order_side=pyo3_order_side,
                     quantity=pyo3_quantity,
@@ -444,6 +467,8 @@ class DeribitExecutionClient(LiveExecutionClient):
                     time_in_force=pyo3_time_in_force,
                     post_only=order.is_post_only,
                     reduce_only=order.is_reduce_only,
+                    trigger_price=pyo3_trigger_price,
+                    trigger_type=pyo3_trigger_type,
                 )
             except Exception as e:
                 self._log.error(f"Failed to submit order from list: {e}")

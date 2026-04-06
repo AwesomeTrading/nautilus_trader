@@ -2,7 +2,6 @@
 
 The Portfolio is the central hub for managing and tracking all positions across active strategies for the trading node or backtest.
 It consolidates position data from multiple instruments, providing a unified view of your holdings, risk exposure, and overall performance.
-Explore this section to understand how NautilusTrader aggregates and updates portfolio state to support effective trading and risk management.
 
 ## Currency conversion
 
@@ -73,7 +72,7 @@ the method type:
   Omit instruments that fail conversion but return results for successful conversions.
 
 :::warning
-Ensure exchange rate data is available when using `target_currency` for cross-currency
+Exchange rate data must be available when using `target_currency` for cross-currency
 aggregation.
 :::
 
@@ -96,7 +95,7 @@ If `use_mark_xrates` is enabled in the portfolio configuration, `MARK` prices re
 ## Portfolio statistics
 
 There are a variety of [built-in portfolio statistics](https://github.com/nautechsystems/nautilus_trader/tree/develop/crates/analysis/src/statistics)
-which are used to analyse a trading portfolios performance for both backtests and live trading.
+which analyse a trading portfolio's performance for both backtests and live trading.
 
 The statistics are generally categorized as follows.
 
@@ -105,7 +104,7 @@ The statistics are generally categorized as follows.
 - Positions based statistics
 - Orders based statistics
 
-It's also possible to call a traders `PortfolioAnalyzer` and calculate statistics at any arbitrary
+You can also call a trader's `PortfolioAnalyzer` and calculate statistics at any arbitrary
 time, including *during* a backtest, or live trading session.
 
 ## Custom statistics
@@ -147,17 +146,53 @@ stat = WinRate()
 engine.portfolio.analyzer.register_statistic(stat)
 ```
 
-See the [`PortfolioAnalyzer` API Reference](../api_reference/analysis.md#class-portfolioanalyzer) for all available methods.
+See the [`PortfolioAnalyzer` API Reference](/docs/python-api-latest/analysis.html#nautilus_trader.analysis.analyzer.PortfolioAnalyzer) for all available methods.
 
 :::tip
-Ensure your statistic is robust to degenerate inputs such as `None`, empty series, or insufficient data.
+Your statistic should handle degenerate inputs such as `None`, empty series, or insufficient data.
 Return `None` for unknown/incalculable values, or a reasonable default like `0.0` when semantically appropriate (e.g., win rate with no trades).
 :::
 
+## Returns: position vs portfolio
+
+The analyzer tracks two distinct return series:
+
+- **Position returns** (`analyzer.position_returns()`) measure realized return per position
+  as a side-aware price return relative to the average open price. This reflects the
+  instrument's price movement between entry and exit, independent of account size or
+  leverage.
+- **Portfolio returns** (`analyzer.portfolio_returns()`) measure daily percentage change in
+  total account balance. A $900 gain on a $100,000 account reports roughly 0.9% for that day.
+
+When the analyzer has account state history spanning at least two distinct calendar days,
+it computes portfolio returns automatically and uses them as the primary series for
+statistics, tearsheets, and the monthly returns heatmap. Multiple snapshots on the same
+day count as one day, so intra-day trading alone does not produce portfolio returns. When
+portfolio returns are unavailable, it falls back to position returns.
+
+The convenience accessor `analyzer.returns()` resolves this preference: portfolio returns
+when present, position returns otherwise.
+
+### Multi-currency accounts
+
+Portfolio returns require a single-currency balance history. When the account carries
+balances in multiple currencies, the analyzer cannot produce a single return series and
+falls back to position returns silently. Statistics and tearsheet charts use whichever
+series `returns()` resolves to.
+
+If you need portfolio-level returns for a multi-currency account, compute them externally
+by converting balances to a common currency before calculating percentage changes.
+
+### Per-venue calculation
+
+In the backtest engine, the analyzer runs per venue (`engine.pyx`). Each venue's account
+produces its own portfolio return series. The tearsheet aggregates across all cached
+accounts to produce a combined return series for multi-venue backtests.
+
 ## Backtest analysis
 
-Following a backtest run, a performance analysis will be carried out by passing realized PnLs, returns, positions and orders data to each registered
-statistic in turn. Any output is then displayed in the tear sheet under the `Portfolio Performance` heading, grouped as:
+Following a backtest run, the engine passes realized PnLs, returns, positions, and orders data to each registered
+statistic. Any output is then displayed in the tear sheet under the `Portfolio Performance` heading, grouped as:
 
 - Realized PnL statistics (per currency)
 - Returns statistics (for the entire portfolio)

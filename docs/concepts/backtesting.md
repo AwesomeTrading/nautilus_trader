@@ -1,13 +1,12 @@
 # Backtesting
 
-Backtesting with NautilusTrader is a methodical simulation process that replicates trading
-activities using a specific system implementation. This system is composed of various components
-including the built-in engines, `Cache`, [MessageBus](message_bus.md), `Portfolio`, [Actors](actors.md), [Strategies](strategies.md), [Execution Algorithms](execution.md),
-and other user-defined modules. The entire trading simulation is predicated on a stream of historical data processed by a
-`BacktestEngine`. Once this data stream is exhausted, the engine concludes its operation, producing
-detailed results and performance metrics for in-depth analysis.
+Backtesting simulates trading using a specific system implementation. The system comprises the
+built-in engines, `Cache`, [MessageBus](message_bus.md), `Portfolio`, [Actors](actors.md),
+[Strategies](strategies.md), [Execution Algorithms](execution.md), and user-defined modules.
+A `BacktestEngine` processes a stream of historical data. When the stream is exhausted, the
+engine produces results and performance metrics for analysis.
 
-It's important to recognize that NautilusTrader offers two distinct API levels for setting up and conducting backtests:
+NautilusTrader offers two API levels for backtesting:
 
 - **High-level API**: Uses a `BacktestNode` and configuration objects (`BacktestEngine`s are used internally).
 - **Low-level API**: Uses a `BacktestEngine` directly with more "manual" setup.
@@ -24,7 +23,7 @@ Consider using the **low-level** API when:
 Consider using the **high-level** API when:
 
 - Your data stream exceeds available memory, requiring streaming data in batches.
-- You want to leverage the performance and convenience of the `ParquetDataCatalog` for storing data in the Nautilus-specific Parquet format.
+- You want the performance and convenience of the `ParquetDataCatalog` for storing data in the Nautilus-specific Parquet format.
 - You value the flexibility and functionality of passing configuration objects to define and manage multiple backtest runs across various engines simultaneously.
 
 ## Low-level API
@@ -1142,11 +1141,11 @@ for more sophisticated liquidity modeling.
 | `TwoTierFillModel`           | 10 contracts at best price, remainder one tick worse.   | Basic market depth simulation.               |
 | `ThreeTierFillModel`         | 50/30/20 contracts across three price levels.           | More realistic depth simulation.             |
 | `ProbabilisticFillModel`     | 50% chance best price, 50% chance one tick slippage.    | Randomized execution quality.                |
-| `SizeAwareFillModel`         | Different execution based on order size (≤10 vs >10).   | Size-dependent market impact.                |
+| `SizeAwareFillModel`         | Different execution based on order size (≤10 vs >10).   | Size‑dependent market impact.                |
 | `LimitOrderPartialFillModel` | Max 5 contracts fill per price touch.                   | Queue position via partial fills.            |
-| `MarketHoursFillModel`       | Wider spreads during low liquidity periods.             | Session-aware execution.                     |
-| `VolumeSensitiveFillModel`   | Liquidity based on recent trading volume.               | Volume-adaptive depth.                       |
-| `CompetitionAwareFillModel`  | Only percentage of visible liquidity available.         | Multi-participant competition.               |
+| `MarketHoursFillModel`       | Wider spreads during low liquidity periods.             | Session‑aware execution.                     |
+| `VolumeSensitiveFillModel`   | Liquidity based on recent trading volume.               | Volume‑adaptive depth.                       |
+| `CompetitionAwareFillModel`  | Only percentage of visible liquidity available.         | Multi‑participant competition.               |
 
 #### Configuring fill models
 
@@ -1313,7 +1312,7 @@ Also verify that:
 
 When you attach a venue to the engine, either for live trading or a backtest, you must pick one of three accounting modes by passing the `account_type` parameter:
 
-| Account type | Typical use-case                                 | What the engine locks                                                     |
+| Account type | Typical use‑case                                 | What the engine locks                                                     |
 | ------------ | ------------------------------------------------ | ------------------------------------------------------------------------- |
 | Cash         | Spot trading (e.g., BTC/USDT, stocks).           | Notional value for every position a pending order would open.             |
 | Margin       | Derivatives or any product that allows leverage. | Initial margin for each order plus maintenance margin for open positions. |

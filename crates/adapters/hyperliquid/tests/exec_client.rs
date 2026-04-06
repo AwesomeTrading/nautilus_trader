@@ -42,8 +42,11 @@ use axum::{
 };
 use futures_util::StreamExt;
 use nautilus_common::{
-    cache::Cache, clients::ExecutionClient, live::runner::set_exec_event_sender,
-    messages::ExecutionEvent, testing::wait_until_async,
+    cache::Cache,
+    clients::ExecutionClient,
+    live::runner::set_exec_event_sender,
+    messages::{ExecutionEvent, execution::QueryAccount},
+    testing::wait_until_async,
 };
 use nautilus_core::{UUID4, UnixNanos};
 use nautilus_hyperliquid::{
@@ -123,6 +126,10 @@ async fn handle_info(body: axum::body::Bytes) -> Response {
         "meta" => {
             let meta = load_json("http_meta_perp_sample.json");
             Json(meta).into_response()
+        }
+        "allPerpMetas" => {
+            let meta = load_json("http_meta_perp_sample.json");
+            Json(json!([meta])).into_response()
         }
         "metaAndAssetCtxs" => {
             let meta = load_json("http_meta_perp_sample.json");
@@ -753,4 +760,33 @@ async fn test_exec_client_connect_disconnect() {
 
     client.disconnect().await.unwrap();
     assert!(!client.is_connected());
+}
+
+#[rstest]
+#[tokio::test(flavor = "multi_thread")]
+async fn test_query_account_does_not_block_within_runtime() {
+    let state = TestServerState::default();
+    let addr = start_mock_server(state).await;
+    let (mut client, mut rx, cache) = create_test_execution_client(addr);
+    add_test_account_to_cache(&cache, AccountId::from("HYPERLIQUID-001"));
+
+    client.start().unwrap();
+
+    let cmd = QueryAccount::new(
+        TraderId::from("TESTER-001"),
+        Some(ClientId::from("HYPERLIQUID")),
+        AccountId::from("HYPERLIQUID-001"),
+        UUID4::new(),
+        UnixNanos::default(),
+    );
+
+    let result = client.query_account(&cmd);
+    assert!(result.is_ok());
+
+    let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+        .await
+        .expect("timed out waiting for account event")
+        .expect("channel closed without event");
+
+    assert!(matches!(event, ExecutionEvent::Account(_)));
 }

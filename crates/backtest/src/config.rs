@@ -15,7 +15,7 @@
 
 //! Configuration types for the backtest engine, venues, data, and run parameters.
 
-use std::{collections::HashMap, fmt::Display, str::FromStr, time::Duration};
+use std::{fmt::Display, str::FromStr, time::Duration};
 
 use ahash::AHashMap;
 use nautilus_common::{
@@ -27,7 +27,7 @@ use nautilus_data::engine::config::DataEngineConfig;
 use nautilus_execution::engine::config::ExecutionEngineConfig;
 use nautilus_model::{
     data::{BarSpecification, BarType},
-    enums::{AccountType, BookType, OmsType},
+    enums::{AccountType, BookType, OmsType, OtoTriggerMode},
     identifiers::{ClientId, InstrumentId, TraderId},
     types::Currency,
 };
@@ -74,35 +74,50 @@ impl FromStr for NautilusDataType {
 }
 
 /// Configuration for ``BacktestEngine`` instances.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.backtest", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.backtest")
+)]
 pub struct BacktestEngineConfig {
     /// The kernel environment context.
+    #[builder(default = Environment::Backtest)]
     pub environment: Environment,
     /// The trader ID for the node.
+    #[builder(default)]
     pub trader_id: TraderId,
     /// If trading strategy state should be loaded from the database on start.
+    #[builder(default)]
     pub load_state: bool,
     /// If trading strategy state should be saved to the database on stop.
+    #[builder(default)]
     pub save_state: bool,
     /// The logging configuration for the kernel.
+    #[builder(default)]
     pub logging: LoggerConfig,
     /// The unique instance identifier for the kernel.
     pub instance_id: Option<UUID4>,
     /// The timeout for all clients to connect and initialize.
+    #[builder(default = Duration::from_secs(60))]
     pub timeout_connection: Duration,
     /// The timeout for execution state to reconcile.
+    #[builder(default = Duration::from_secs(30))]
     pub timeout_reconciliation: Duration,
     /// The timeout for portfolio to initialize margins and unrealized pnls.
+    #[builder(default = Duration::from_secs(10))]
     pub timeout_portfolio: Duration,
     /// The timeout for all engine clients to disconnect.
+    #[builder(default = Duration::from_secs(10))]
     pub timeout_disconnection: Duration,
     /// The delay after stopping the node to await residual events before final shutdown.
+    #[builder(default = Duration::from_secs(10))]
     pub delay_post_stop: Duration,
     /// The timeout to await pending tasks cancellation during shutdown.
+    #[builder(default = Duration::from_secs(5))]
     pub timeout_shutdown: Duration,
     /// The cache configuration.
     pub cache: Option<CacheConfig>,
@@ -119,61 +134,11 @@ pub struct BacktestEngineConfig {
     /// The configuration for streaming to feather files.
     pub streaming: Option<StreamingConfig>,
     /// If logging should be bypassed.
+    #[builder(default)]
     pub bypass_logging: bool,
     /// If post backtest performance analysis should be run.
+    #[builder(default = true)]
     pub run_analysis: bool,
-}
-
-impl BacktestEngineConfig {
-    #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        environment: Environment,
-        trader_id: TraderId,
-        load_state: Option<bool>,
-        save_state: Option<bool>,
-        bypass_logging: Option<bool>,
-        run_analysis: Option<bool>,
-        timeout_connection: Option<u64>,
-        timeout_reconciliation: Option<u64>,
-        timeout_portfolio: Option<u64>,
-        timeout_disconnection: Option<u64>,
-        delay_post_stop: Option<u64>,
-        timeout_shutdown: Option<u64>,
-        logging: Option<LoggerConfig>,
-        instance_id: Option<UUID4>,
-        cache: Option<CacheConfig>,
-        msgbus: Option<MessageBusConfig>,
-        data_engine: Option<DataEngineConfig>,
-        risk_engine: Option<RiskEngineConfig>,
-        exec_engine: Option<ExecutionEngineConfig>,
-        portfolio: Option<PortfolioConfig>,
-        streaming: Option<StreamingConfig>,
-    ) -> Self {
-        Self {
-            environment,
-            trader_id,
-            load_state: load_state.unwrap_or(false),
-            save_state: save_state.unwrap_or(false),
-            logging: logging.unwrap_or_default(),
-            instance_id,
-            timeout_connection: Duration::from_secs(timeout_connection.unwrap_or(60)),
-            timeout_reconciliation: Duration::from_secs(timeout_reconciliation.unwrap_or(30)),
-            timeout_portfolio: Duration::from_secs(timeout_portfolio.unwrap_or(10)),
-            timeout_disconnection: Duration::from_secs(timeout_disconnection.unwrap_or(10)),
-            delay_post_stop: Duration::from_secs(delay_post_stop.unwrap_or(10)),
-            timeout_shutdown: Duration::from_secs(timeout_shutdown.unwrap_or(5)),
-            cache,
-            msgbus,
-            data_engine,
-            risk_engine,
-            exec_engine,
-            portfolio,
-            streaming,
-            bypass_logging: bypass_logging.unwrap_or(false),
-            run_analysis: run_analysis.unwrap_or(true),
-        }
-    }
 }
 
 impl NautilusKernelConfig for BacktestEngineConfig {
@@ -246,7 +211,7 @@ impl NautilusKernelConfig for BacktestEngineConfig {
     }
 
     fn portfolio(&self) -> Option<PortfolioConfig> {
-        self.portfolio.clone()
+        self.portfolio
     }
 
     fn streaming(&self) -> Option<StreamingConfig> {
@@ -256,132 +221,19 @@ impl NautilusKernelConfig for BacktestEngineConfig {
 
 impl Default for BacktestEngineConfig {
     fn default() -> Self {
-        Self {
-            environment: Environment::Backtest,
-            trader_id: TraderId::default(),
-            load_state: false,
-            save_state: false,
-            logging: LoggerConfig::default(),
-            instance_id: None,
-            timeout_connection: Duration::from_secs(60),
-            timeout_reconciliation: Duration::from_secs(30),
-            timeout_portfolio: Duration::from_secs(10),
-            timeout_disconnection: Duration::from_secs(10),
-            delay_post_stop: Duration::from_secs(10),
-            timeout_shutdown: Duration::from_secs(5),
-            cache: None,
-            msgbus: None,
-            data_engine: None,
-            risk_engine: None,
-            exec_engine: None,
-            portfolio: None,
-            streaming: None,
-            bypass_logging: false,
-            run_analysis: true,
-        }
-    }
-}
-
-#[cfg(feature = "python")]
-#[pyo3::pymethods]
-impl BacktestEngineConfig {
-    #[new]
-    #[pyo3(signature = (
-        trader_id = None,
-        load_state = None,
-        save_state = None,
-        bypass_logging = None,
-        run_analysis = None,
-        timeout_connection = None,
-        timeout_reconciliation = None,
-        timeout_portfolio = None,
-        timeout_disconnection = None,
-        delay_post_stop = None,
-        timeout_shutdown = None,
-        logging = None,
-        instance_id = None,
-    ))]
-    #[allow(clippy::too_many_arguments)]
-    fn py_new(
-        trader_id: Option<TraderId>,
-        load_state: Option<bool>,
-        save_state: Option<bool>,
-        bypass_logging: Option<bool>,
-        run_analysis: Option<bool>,
-        timeout_connection: Option<u64>,
-        timeout_reconciliation: Option<u64>,
-        timeout_portfolio: Option<u64>,
-        timeout_disconnection: Option<u64>,
-        delay_post_stop: Option<u64>,
-        timeout_shutdown: Option<u64>,
-        logging: Option<LoggerConfig>,
-        instance_id: Option<UUID4>,
-    ) -> Self {
-        Self::new(
-            Environment::Backtest,
-            trader_id.unwrap_or_default(),
-            load_state,
-            save_state,
-            bypass_logging,
-            run_analysis,
-            timeout_connection,
-            timeout_reconciliation,
-            timeout_portfolio,
-            timeout_disconnection,
-            delay_post_stop,
-            timeout_shutdown,
-            logging,
-            instance_id,
-            None, // cache
-            None, // msgbus
-            None, // data_engine
-            None, // risk_engine
-            None, // exec_engine
-            None, // portfolio
-            None, // streaming
-        )
-    }
-
-    #[getter]
-    #[pyo3(name = "trader_id")]
-    fn py_trader_id(&self) -> TraderId {
-        self.trader_id
-    }
-
-    #[getter]
-    #[pyo3(name = "load_state")]
-    const fn py_load_state(&self) -> bool {
-        self.load_state
-    }
-
-    #[getter]
-    #[pyo3(name = "save_state")]
-    const fn py_save_state(&self) -> bool {
-        self.save_state
-    }
-
-    #[getter]
-    #[pyo3(name = "bypass_logging")]
-    const fn py_bypass_logging(&self) -> bool {
-        self.bypass_logging
-    }
-
-    #[getter]
-    #[pyo3(name = "run_analysis")]
-    const fn py_run_analysis(&self) -> bool {
-        self.run_analysis
-    }
-
-    fn __repr__(&self) -> String {
-        format!("{self:?}")
+        Self::builder().build()
     }
 }
 
 /// Represents a venue configuration for one specific backtest engine.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.backtest", from_py_object)
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.backtest")
 )]
 pub struct BacktestVenueConfig {
     /// The name of the venue.
@@ -393,25 +245,35 @@ pub struct BacktestVenueConfig {
     /// The default order book type.
     book_type: BookType,
     /// The starting account balances (specify one for a single asset account).
+    #[builder(default)]
     starting_balances: Vec<String>,
     /// If multi-venue routing should be enabled for the execution client.
+    #[builder(default)]
     routing: bool,
     /// If the account for this exchange is frozen (balances will not change).
+    #[builder(default)]
     frozen_account: bool,
     /// If stop orders are rejected on submission if trigger price is in the market.
+    #[builder(default = true)]
     reject_stop_orders: bool,
     /// If orders with GTD time in force will be supported by the venue.
+    #[builder(default = true)]
     support_gtd_orders: bool,
     /// If contingent orders will be supported/respected by the venue.
     /// If False, then it's expected the strategy will be managing any contingent orders.
+    #[builder(default = true)]
     support_contingent_orders: bool,
     /// If venue position IDs will be generated on order fills.
+    #[builder(default = true)]
     use_position_ids: bool,
     /// If all venue generated identifiers will be random UUID4's.
+    #[builder(default)]
     use_random_ids: bool,
     /// If the `reduce_only` execution instruction on orders will be honored.
+    #[builder(default = true)]
     use_reduce_only: bool,
     /// If bars should be processed by the matching engine(s) (and move the market).
+    #[builder(default = true)]
     bar_execution: bool,
     /// Determines whether the processing order of bar prices is adaptive based on a heuristic.
     /// This setting is only relevant when `bar_execution` is True.
@@ -419,15 +281,26 @@ pub struct BacktestVenueConfig {
     /// If True, the processing order adapts with the heuristic:
     /// - If High is closer to Open than Low then the processing order is Open, High, Low, Close.
     /// - If Low is closer to Open than High then the processing order is Open, Low, High, Close.
+    #[builder(default)]
     bar_adaptive_high_low_ordering: bool,
     /// If trades should be processed by the matching engine(s) (and move the market).
+    #[builder(default = true)]
     trade_execution: bool,
     /// If `OrderAccepted` events should be generated for market orders.
+    #[builder(default)]
     use_market_order_acks: bool,
     /// If order book liquidity consumption should be tracked per level.
+    #[builder(default)]
     liquidity_consumption: bool,
     /// If negative cash balances are allowed (borrowing).
+    #[builder(default)]
     allow_cash_borrowing: bool,
+    /// If limit order queue position tracking is enabled during trade execution.
+    #[builder(default)]
+    queue_position: bool,
+    /// When OTO child orders are released relative to parent fills.
+    #[builder(default)]
+    oto_trigger_mode: OtoTriggerMode,
     /// The account base currency for the exchange. Use `None` for multi-currency accounts.
     base_currency: Option<Currency>,
     /// The account default leverage (for margin accounts).
@@ -436,64 +309,11 @@ pub struct BacktestVenueConfig {
     leverages: Option<AHashMap<InstrumentId, f64>>,
     /// Defines an exchange-calculated price boundary to prevent a market order from being
     /// filled at an extremely aggressive price.
+    #[builder(default)]
     price_protection_points: u32,
 }
 
 impl BacktestVenueConfig {
-    #[allow(clippy::too_many_arguments)]
-    #[must_use]
-    pub fn new(
-        name: Ustr,
-        oms_type: OmsType,
-        account_type: AccountType,
-        book_type: BookType,
-        routing: Option<bool>,
-        frozen_account: Option<bool>,
-        reject_stop_orders: Option<bool>,
-        support_gtd_orders: Option<bool>,
-        support_contingent_orders: Option<bool>,
-        use_position_ids: Option<bool>,
-        use_random_ids: Option<bool>,
-        use_reduce_only: Option<bool>,
-        bar_execution: Option<bool>,
-        bar_adaptive_high_low_ordering: Option<bool>,
-        trade_execution: Option<bool>,
-        use_market_order_acks: Option<bool>,
-        liquidity_consumption: Option<bool>,
-        allow_cash_borrowing: Option<bool>,
-        starting_balances: Vec<String>,
-        base_currency: Option<Currency>,
-        default_leverage: Option<f64>,
-        leverages: Option<AHashMap<InstrumentId, f64>>,
-        price_protection_points: Option<u32>,
-    ) -> Self {
-        Self {
-            name,
-            oms_type,
-            account_type,
-            book_type,
-            routing: routing.unwrap_or(false),
-            frozen_account: frozen_account.unwrap_or(false),
-            reject_stop_orders: reject_stop_orders.unwrap_or(true),
-            support_gtd_orders: support_gtd_orders.unwrap_or(true),
-            support_contingent_orders: support_contingent_orders.unwrap_or(true),
-            use_position_ids: use_position_ids.unwrap_or(true),
-            use_random_ids: use_random_ids.unwrap_or(false),
-            use_reduce_only: use_reduce_only.unwrap_or(true),
-            bar_execution: bar_execution.unwrap_or(true),
-            bar_adaptive_high_low_ordering: bar_adaptive_high_low_ordering.unwrap_or(false),
-            trade_execution: trade_execution.unwrap_or(true),
-            use_market_order_acks: use_market_order_acks.unwrap_or(false),
-            liquidity_consumption: liquidity_consumption.unwrap_or(false),
-            allow_cash_borrowing: allow_cash_borrowing.unwrap_or(false),
-            starting_balances,
-            base_currency,
-            default_leverage,
-            leverages,
-            price_protection_points: price_protection_points.unwrap_or(0),
-        }
-    }
-
     #[must_use]
     pub fn name(&self) -> Ustr {
         self.name
@@ -590,6 +410,16 @@ impl BacktestVenueConfig {
     }
 
     #[must_use]
+    pub fn queue_position(&self) -> bool {
+        self.queue_position
+    }
+
+    #[must_use]
+    pub fn oto_trigger_mode(&self) -> OtoTriggerMode {
+        self.oto_trigger_mode
+    }
+
+    #[must_use]
     pub fn base_currency(&self) -> Option<Currency> {
         self.base_currency
     }
@@ -610,141 +440,15 @@ impl BacktestVenueConfig {
     }
 }
 
-#[cfg(feature = "python")]
-#[pyo3::pymethods]
-impl BacktestVenueConfig {
-    #[new]
-    #[pyo3(signature = (
-        name,
-        oms_type,
-        account_type,
-        book_type,
-        starting_balances,
-        routing = None,
-        frozen_account = None,
-        reject_stop_orders = None,
-        support_gtd_orders = None,
-        support_contingent_orders = None,
-        use_position_ids = None,
-        use_random_ids = None,
-        use_reduce_only = None,
-        bar_execution = None,
-        bar_adaptive_high_low_ordering = None,
-        trade_execution = None,
-        use_market_order_acks = None,
-        liquidity_consumption = None,
-        allow_cash_borrowing = None,
-        base_currency = None,
-        default_leverage = None,
-        leverages = None,
-        price_protection_points = None,
-    ))]
-    #[allow(clippy::too_many_arguments)]
-    fn py_new(
-        name: &str,
-        oms_type: OmsType,
-        account_type: AccountType,
-        book_type: BookType,
-        starting_balances: Vec<String>,
-        routing: Option<bool>,
-        frozen_account: Option<bool>,
-        reject_stop_orders: Option<bool>,
-        support_gtd_orders: Option<bool>,
-        support_contingent_orders: Option<bool>,
-        use_position_ids: Option<bool>,
-        use_random_ids: Option<bool>,
-        use_reduce_only: Option<bool>,
-        bar_execution: Option<bool>,
-        bar_adaptive_high_low_ordering: Option<bool>,
-        trade_execution: Option<bool>,
-        use_market_order_acks: Option<bool>,
-        liquidity_consumption: Option<bool>,
-        allow_cash_borrowing: Option<bool>,
-        base_currency: Option<Currency>,
-        default_leverage: Option<f64>,
-        leverages: Option<HashMap<InstrumentId, f64>>,
-        price_protection_points: Option<u32>,
-    ) -> Self {
-        let leverages = leverages.map(|m| m.into_iter().collect());
-        Self::new(
-            Ustr::from(name),
-            oms_type,
-            account_type,
-            book_type,
-            routing,
-            frozen_account,
-            reject_stop_orders,
-            support_gtd_orders,
-            support_contingent_orders,
-            use_position_ids,
-            use_random_ids,
-            use_reduce_only,
-            bar_execution,
-            bar_adaptive_high_low_ordering,
-            trade_execution,
-            use_market_order_acks,
-            liquidity_consumption,
-            allow_cash_borrowing,
-            starting_balances,
-            base_currency,
-            default_leverage,
-            leverages,
-            price_protection_points,
-        )
-    }
-
-    #[getter]
-    #[pyo3(name = "name")]
-    fn py_name(&self) -> &str {
-        self.name.as_str()
-    }
-
-    #[getter]
-    #[pyo3(name = "oms_type")]
-    const fn py_oms_type(&self) -> OmsType {
-        self.oms_type
-    }
-
-    #[getter]
-    #[pyo3(name = "account_type")]
-    const fn py_account_type(&self) -> AccountType {
-        self.account_type
-    }
-
-    #[getter]
-    #[pyo3(name = "book_type")]
-    const fn py_book_type(&self) -> BookType {
-        self.book_type
-    }
-
-    #[getter]
-    #[pyo3(name = "starting_balances")]
-    fn py_starting_balances(&self) -> Vec<String> {
-        self.starting_balances.clone()
-    }
-
-    #[getter]
-    #[pyo3(name = "bar_execution")]
-    const fn py_bar_execution(&self) -> bool {
-        self.bar_execution
-    }
-
-    #[getter]
-    #[pyo3(name = "trade_execution")]
-    const fn py_trade_execution(&self) -> bool {
-        self.trade_execution
-    }
-
-    fn __repr__(&self) -> String {
-        format!("{self:?}")
-    }
-}
-
 /// Represents the data configuration for one specific backtest run.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.backtest", from_py_object)
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.backtest")
 )]
 pub struct BacktestDataConfig {
     /// The type of data to query from the catalog.
@@ -775,46 +479,11 @@ pub struct BacktestDataConfig {
     /// Explicit bar type strings for the data catalog query (e.g. "EUR/USD.SIM-1-MINUTE-LAST-EXTERNAL").
     bar_types: Option<Vec<String>>,
     /// If directory-based file registration should be used for more efficient loading.
+    #[builder(default)]
     optimize_file_loading: bool,
 }
 
 impl BacktestDataConfig {
-    #[allow(clippy::too_many_arguments)]
-    #[must_use]
-    pub fn new(
-        data_type: NautilusDataType,
-        catalog_path: String,
-        catalog_fs_protocol: Option<String>,
-        catalog_fs_storage_options: Option<AHashMap<String, String>>,
-        instrument_id: Option<InstrumentId>,
-        instrument_ids: Option<Vec<InstrumentId>>,
-        start_time: Option<UnixNanos>,
-        end_time: Option<UnixNanos>,
-        filter_expr: Option<String>,
-        client_id: Option<ClientId>,
-        metadata: Option<AHashMap<String, String>>,
-        bar_spec: Option<BarSpecification>,
-        bar_types: Option<Vec<String>>,
-        optimize_file_loading: Option<bool>,
-    ) -> Self {
-        Self {
-            data_type,
-            catalog_path,
-            catalog_fs_protocol,
-            catalog_fs_storage_options,
-            instrument_id,
-            instrument_ids,
-            start_time,
-            end_time,
-            filter_expr,
-            client_id,
-            metadata,
-            bar_spec,
-            bar_types,
-            optimize_file_loading: optimize_file_loading.unwrap_or(false),
-        }
-    }
-
     #[must_use]
     pub const fn data_type(&self) -> NautilusDataType {
         self.data_type
@@ -959,105 +628,27 @@ impl BacktestDataConfig {
     }
 }
 
-#[cfg(feature = "python")]
-#[pyo3::pymethods]
-impl BacktestDataConfig {
-    #[new]
-    #[pyo3(signature = (
-        data_type,
-        catalog_path,
-        catalog_fs_protocol = None,
-        catalog_fs_storage_options = None,
-        instrument_id = None,
-        instrument_ids = None,
-        start_time = None,
-        end_time = None,
-        filter_expr = None,
-        client_id = None,
-        metadata = None,
-        bar_spec = None,
-        bar_types = None,
-        optimize_file_loading = None,
-    ))]
-    #[allow(clippy::too_many_arguments)]
-    fn py_new(
-        data_type: &str,
-        catalog_path: String,
-        catalog_fs_protocol: Option<String>,
-        catalog_fs_storage_options: Option<HashMap<String, String>>,
-        instrument_id: Option<InstrumentId>,
-        instrument_ids: Option<Vec<InstrumentId>>,
-        start_time: Option<u64>,
-        end_time: Option<u64>,
-        filter_expr: Option<String>,
-        client_id: Option<ClientId>,
-        metadata: Option<HashMap<String, String>>,
-        bar_spec: Option<BarSpecification>,
-        bar_types: Option<Vec<String>>,
-        optimize_file_loading: Option<bool>,
-    ) -> pyo3::PyResult<Self> {
-        let data_type = data_type
-            .parse::<NautilusDataType>()
-            .map_err(nautilus_core::python::to_pyvalue_err)?;
-        let catalog_fs_storage_options =
-            catalog_fs_storage_options.map(|m| m.into_iter().collect());
-        let metadata = metadata.map(|m| m.into_iter().collect());
-        Ok(Self::new(
-            data_type,
-            catalog_path,
-            catalog_fs_protocol,
-            catalog_fs_storage_options,
-            instrument_id,
-            instrument_ids,
-            start_time.map(UnixNanos::from),
-            end_time.map(UnixNanos::from),
-            filter_expr,
-            client_id,
-            metadata,
-            bar_spec,
-            bar_types,
-            optimize_file_loading,
-        ))
-    }
-
-    #[getter]
-    #[pyo3(name = "data_type")]
-    fn py_data_type(&self) -> String {
-        self.data_type.to_string()
-    }
-
-    #[getter]
-    #[pyo3(name = "catalog_path")]
-    fn py_catalog_path(&self) -> &str {
-        &self.catalog_path
-    }
-
-    #[getter]
-    #[pyo3(name = "instrument_id")]
-    fn py_instrument_id(&self) -> Option<InstrumentId> {
-        self.instrument_id
-    }
-
-    fn __repr__(&self) -> String {
-        format!("{self:?}")
-    }
-}
-
 /// Represents the configuration for one specific backtest run.
 /// This includes a backtest engine with its actors and strategies, with the external inputs of venues and data.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.backtest", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.backtest")
+)]
 pub struct BacktestRunConfig {
     /// The unique identifier for this run configuration.
+    #[builder(default = UUID4::new().to_string())]
     id: String,
     /// The venue configurations for the backtest run.
     venues: Vec<BacktestVenueConfig>,
     /// The data configurations for the backtest run.
     data: Vec<BacktestDataConfig>,
     /// The backtest engine configuration (the core system kernel).
+    #[builder(default)]
     engine: BacktestEngineConfig,
     /// The number of data points to process in each chunk during streaming mode.
     /// If `None`, the backtest will run without streaming, loading all data at once.
@@ -1065,6 +656,7 @@ pub struct BacktestRunConfig {
     /// If the backtest engine should be disposed on completion of the run.
     /// If `True`, then will drop data and all state.
     /// If `False`, then will *only* drop data.
+    #[builder(default = true)]
     dispose_on_completion: bool,
     /// The start datetime (UTC) for the backtest run.
     /// If `None` engine runs from the start of the data.
@@ -1075,30 +667,6 @@ pub struct BacktestRunConfig {
 }
 
 impl BacktestRunConfig {
-    #[allow(clippy::too_many_arguments)]
-    #[must_use]
-    pub fn new(
-        id: Option<String>,
-        venues: Vec<BacktestVenueConfig>,
-        data: Vec<BacktestDataConfig>,
-        engine: BacktestEngineConfig,
-        chunk_size: Option<usize>,
-        dispose_on_completion: Option<bool>,
-        start: Option<UnixNanos>,
-        end: Option<UnixNanos>,
-    ) -> Self {
-        Self {
-            id: id.unwrap_or_else(|| UUID4::new().to_string()),
-            venues,
-            data,
-            engine,
-            chunk_size,
-            dispose_on_completion: dispose_on_completion.unwrap_or(true),
-            start,
-            end,
-        }
-    }
-
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
@@ -1137,53 +705,5 @@ impl BacktestRunConfig {
     #[must_use]
     pub fn end(&self) -> Option<UnixNanos> {
         self.end
-    }
-}
-
-#[cfg(feature = "python")]
-#[pyo3::pymethods]
-impl BacktestRunConfig {
-    #[new]
-    #[pyo3(signature = (
-        venues,
-        data,
-        engine = None,
-        id = None,
-        chunk_size = None,
-        dispose_on_completion = None,
-        start = None,
-        end = None,
-    ))]
-    #[allow(clippy::too_many_arguments)]
-    fn py_new(
-        venues: Vec<BacktestVenueConfig>,
-        data: Vec<BacktestDataConfig>,
-        engine: Option<BacktestEngineConfig>,
-        id: Option<String>,
-        chunk_size: Option<usize>,
-        dispose_on_completion: Option<bool>,
-        start: Option<u64>,
-        end: Option<u64>,
-    ) -> Self {
-        Self::new(
-            id,
-            venues,
-            data,
-            engine.unwrap_or_default(),
-            chunk_size,
-            dispose_on_completion,
-            start.map(UnixNanos::from),
-            end.map(UnixNanos::from),
-        )
-    }
-
-    #[getter]
-    #[pyo3(name = "id")]
-    fn py_id(&self) -> &str {
-        &self.id
-    }
-
-    fn __repr__(&self) -> String {
-        format!("{self:?}")
     }
 }

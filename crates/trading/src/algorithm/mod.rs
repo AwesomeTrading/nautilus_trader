@@ -41,7 +41,7 @@ pub mod twap;
 
 pub use core::{ExecutionAlgorithmCore, StrategyEventHandlers};
 
-pub use config::ExecutionAlgorithmConfig;
+pub use config::{ExecutionAlgorithmConfig, ImportableExecAlgorithmConfig};
 use nautilus_common::{
     actor::{DataActor, registry::try_get_actor_unchecked},
     enums::ComponentState,
@@ -504,6 +504,7 @@ pub trait ExecutionAlgorithm: DataActor {
             None, // price
             None, // trigger_price
             None, // protection_price
+            primary.is_quote_quantity(),
         );
 
         primary
@@ -577,6 +578,7 @@ pub trait ExecutionAlgorithm: DataActor {
             None, // price
             None, // trigger_price
             None, // protection_price
+            primary.is_quote_quantity(),
         );
 
         if let Err(e) = primary.apply(OrderEventAny::Updated(updated)) {
@@ -816,6 +818,7 @@ pub trait ExecutionAlgorithm: DataActor {
             price,
             trigger_price,
             None, // protection_price
+            order.is_quote_quantity(),
         );
 
         order
@@ -1198,18 +1201,11 @@ pub trait ExecutionAlgorithm: DataActor {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        cell::RefCell,
-        ops::{Deref, DerefMut},
-        rc::Rc,
-    };
+    use std::{cell::RefCell, rc::Rc};
 
     use nautilus_common::{
-        actor::{DataActor, DataActorCore},
-        cache::Cache,
-        clock::TestClock,
-        component::Component,
-        enums::ComponentTrigger,
+        actor::DataActor, cache::Cache, clock::TestClock, component::Component,
+        enums::ComponentTrigger, nautilus_actor,
     };
     use nautilus_model::{
         enums::OrderSide,
@@ -1242,20 +1238,9 @@ mod tests {
         }
     }
 
-    impl Deref for TestAlgorithm {
-        type Target = DataActorCore;
-        fn deref(&self) -> &Self::Target {
-            &self.core.actor
-        }
-    }
-
-    impl DerefMut for TestAlgorithm {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.core.actor
-        }
-    }
-
     impl DataActor for TestAlgorithm {}
+
+    nautilus_actor!(TestAlgorithm);
 
     impl ExecutionAlgorithm for TestAlgorithm {
         fn core_mut(&mut self) -> &mut ExecutionAlgorithmCore {

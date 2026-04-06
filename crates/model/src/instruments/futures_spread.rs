@@ -44,6 +44,10 @@ use crate::{
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.model", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct FuturesSpread {
     /// The instrument ID.
     pub id: InstrumentId,
@@ -135,7 +139,7 @@ impl FuturesSpread {
         ts_event: UnixNanos,
         ts_init: UnixNanos,
     ) -> anyhow::Result<Self> {
-        check_valid_string_ascii_optional(exchange.map(|u| u.as_str()), stringify!(isin))?;
+        check_valid_string_ascii_optional(exchange.map(|u| u.as_str()), stringify!(exchange))?;
         check_valid_string_ascii(strategy_type.as_str(), stringify!(strategy_type))?;
         check_equal_u8(
             price_precision,
@@ -372,16 +376,120 @@ impl Instrument for FuturesSpread {
     fn ts_init(&self) -> UnixNanos {
         self.ts_init
     }
+
+    fn margin_init(&self) -> Decimal {
+        self.margin_init
+    }
+
+    fn margin_maint(&self) -> Decimal {
+        self.margin_maint
+    }
+
+    fn maker_fee(&self) -> Decimal {
+        self.maker_fee
+    }
+
+    fn taker_fee(&self) -> Decimal {
+        self.taker_fee
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use ustr::Ustr;
 
-    use crate::instruments::{FuturesSpread, stubs::*};
+    use crate::{
+        enums::{AssetClass, InstrumentClass},
+        identifiers::{InstrumentId, Symbol},
+        instruments::{FuturesSpread, Instrument, stubs::*},
+        types::{Currency, Price, Quantity},
+    };
 
     #[rstest]
-    fn test_equality(futures_spread_es: FuturesSpread) {
-        assert_eq!(futures_spread_es, futures_spread_es.clone());
+    fn test_trait_accessors(futures_spread_es: FuturesSpread) {
+        assert_eq!(futures_spread_es.id(), InstrumentId::from("ESM4-ESU4.GLBX"));
+        assert_eq!(futures_spread_es.asset_class(), AssetClass::Index);
+        assert_eq!(
+            futures_spread_es.instrument_class(),
+            InstrumentClass::FuturesSpread
+        );
+        assert_eq!(futures_spread_es.quote_currency(), Currency::USD());
+        assert!(!futures_spread_es.is_inverse());
+        assert_eq!(futures_spread_es.exchange(), Some(Ustr::from("XCME")));
+        assert_eq!(futures_spread_es.size_precision(), 0);
+        assert_eq!(futures_spread_es.size_increment(), Quantity::from("1"));
+        assert_eq!(futures_spread_es.min_quantity(), Some(Quantity::from("1")));
+        assert!(futures_spread_es.activation_ns().is_some());
+        assert!(futures_spread_es.expiration_ns().is_some());
+    }
+
+    #[rstest]
+    fn test_new_checked_price_precision_mismatch() {
+        let result = FuturesSpread::new_checked(
+            InstrumentId::from("TEST.GLBX"),
+            Symbol::from("TEST"),
+            AssetClass::Index,
+            Some(Ustr::from("XCME")),
+            Ustr::from("ES"),
+            Ustr::from("EQ"),
+            0.into(),
+            0.into(),
+            Currency::USD(),
+            4, // mismatch
+            Price::from("0.01"),
+            Quantity::from(1),
+            Quantity::from(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0.into(),
+            0.into(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn test_new_checked_zero_multiplier() {
+        let result = FuturesSpread::new_checked(
+            InstrumentId::from("TEST.GLBX"),
+            Symbol::from("TEST"),
+            AssetClass::Index,
+            Some(Ustr::from("XCME")),
+            Ustr::from("ES"),
+            Ustr::from("EQ"),
+            0.into(),
+            0.into(),
+            Currency::USD(),
+            2,
+            Price::from("0.01"),
+            Quantity::from("0"), // zero multiplier
+            Quantity::from(1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            0.into(),
+            0.into(),
+        );
+        assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn test_serialization_roundtrip(futures_spread_es: FuturesSpread) {
+        let json = serde_json::to_string(&futures_spread_es).unwrap();
+        let deserialized: FuturesSpread = serde_json::from_str(&json).unwrap();
+        assert_eq!(futures_spread_es, deserialized);
     }
 }

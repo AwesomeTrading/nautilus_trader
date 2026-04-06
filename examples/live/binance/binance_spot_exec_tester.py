@@ -39,7 +39,7 @@ from nautilus_trader.test_kit.strategies.tester_exec import ExecTesterConfig
 # Strategy config params
 symbol = "ETHUSDT"
 instrument_id = InstrumentId.from_str(f"{symbol}.{BINANCE}")
-order_qty = Decimal("0.02")
+order_qty = Decimal("0.01")
 
 # Configure the trading node
 config_node = TradingNodeConfig(
@@ -111,9 +111,11 @@ config_strat = ExecTesterConfig(
     # open_position_on_start_qty=order_qty,
     enable_limit_buys=True,
     enable_limit_sells=False,
+    use_post_only=True,
     # enable_stop_buys=True,
     # enable_stop_sells=True,
     # tob_offset_ticks=0,
+    # test_reject_post_only=True,
     log_data=False,
 )
 

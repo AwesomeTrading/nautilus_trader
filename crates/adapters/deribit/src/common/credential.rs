@@ -20,9 +20,8 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use aws_lc_rs::hmac;
-use hex;
 use nautilus_core::{
-    UUID4, env::resolve_env_var_pair, string::REDACTED, time::get_atomic_clock_realtime,
+    UUID4, env::resolve_env_var_pair, hex, string::REDACTED, time::get_atomic_clock_realtime,
 };
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;

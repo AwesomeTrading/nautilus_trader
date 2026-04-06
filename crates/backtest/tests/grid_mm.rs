@@ -13,6 +13,8 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
+#![cfg(feature = "examples")]
+
 use ahash::AHashMap;
 use nautilus_backtest::{config::BacktestEngineConfig, engine::BacktestEngine};
 use nautilus_execution::models::{fee::FeeModelAny, fill::FillModelAny};
@@ -39,9 +41,12 @@ fn create_engine() -> BacktestEngine {
             None,
             None,
             AHashMap::new(),
+            None,
             vec![],
             FillModelAny::default(),
             FeeModelAny::default(),
+            None,
+            None,
             None,
             None,
             None,
@@ -81,7 +86,7 @@ fn test_generates_orders(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let config = GridMarketMakerConfig::new(instrument_id, Quantity::from("10.0"))
         .with_trade_size(Quantity::from("0.100"))
@@ -142,7 +147,7 @@ fn test_skips_requote_within_threshold(crypto_perpetual_ethusdt: CryptoPerpetual
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let config = GridMarketMakerConfig::new(instrument_id, Quantity::from("10.0"))
         .with_trade_size(Quantity::from("0.100"))
@@ -183,7 +188,7 @@ fn test_enforces_max_position_across_levels(crypto_perpetual_ethusdt: CryptoPerp
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let config = GridMarketMakerConfig::new(instrument_id, Quantity::from("0.150"))
         .with_trade_size(Quantity::from("0.100"))

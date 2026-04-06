@@ -14,20 +14,34 @@
 // -------------------------------------------------------------------------------------------------
 
 /// Configuration for `OrderMatchingEngine` instances.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bon::Builder)]
 pub struct OrderMatchingEngineConfig {
+    #[builder(default)]
     pub bar_execution: bool,
+    #[builder(default)]
     pub bar_adaptive_high_low_ordering: bool,
+    #[builder(default = true)]
     pub trade_execution: bool,
+    #[builder(default)]
     pub liquidity_consumption: bool,
+    #[builder(default)]
     pub reject_stop_orders: bool,
+    #[builder(default)]
     pub support_gtd_orders: bool,
+    #[builder(default)]
     pub support_contingent_orders: bool,
+    #[builder(default)]
     pub use_position_ids: bool,
+    #[builder(default)]
     pub use_random_ids: bool,
+    #[builder(default)]
     pub use_reduce_only: bool,
+    #[builder(default)]
     pub use_market_order_acks: bool,
+    #[builder(default)]
     pub queue_position: bool,
+    #[builder(default)]
+    pub oto_full_trigger: bool,
     pub price_protection_points: Option<u32>,
 }
 
@@ -47,6 +61,8 @@ impl OrderMatchingEngineConfig {
         use_random_ids: bool,
         use_reduce_only: bool,
         use_market_order_acks: bool,
+        queue_position: bool,
+        oto_full_trigger: bool,
     ) -> Self {
         Self {
             bar_execution,
@@ -60,7 +76,8 @@ impl OrderMatchingEngineConfig {
             use_random_ids,
             use_reduce_only,
             use_market_order_acks,
-            queue_position: false,
+            queue_position,
+            oto_full_trigger,
             price_protection_points: None,
         }
     }
@@ -76,24 +93,8 @@ impl OrderMatchingEngineConfig {
     }
 }
 
-#[allow(clippy::derivable_impls)]
 impl Default for OrderMatchingEngineConfig {
-    /// Creates a new default [`OrderMatchingEngineConfig`] instance.
     fn default() -> Self {
-        Self {
-            bar_execution: false,
-            bar_adaptive_high_low_ordering: false,
-            trade_execution: true,
-            liquidity_consumption: false,
-            reject_stop_orders: false,
-            support_gtd_orders: false,
-            support_contingent_orders: false,
-            use_position_ids: false,
-            use_random_ids: false,
-            use_reduce_only: false,
-            use_market_order_acks: false,
-            queue_position: false,
-            price_protection_points: None,
-        }
+        Self::builder().build()
     }
 }

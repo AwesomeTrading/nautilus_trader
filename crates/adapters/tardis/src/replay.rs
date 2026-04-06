@@ -14,19 +14,16 @@
 // -------------------------------------------------------------------------------------------------
 
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
 
+use ahash::{AHashMap, AHashSet};
 use anyhow::Context;
 use arrow::record_batch::RecordBatch;
 use chrono::{DateTime, Duration, NaiveDate};
-use futures_util::{StreamExt, future::join_all, pin_mut};
-use heck::ToSnakeCase;
-use nautilus_core::{
-    UnixNanos, datetime::unix_nanos_to_iso8601, formatting::Separable, parsing::precision_from_str,
-};
+use futures_util::{StreamExt, pin_mut};
+use nautilus_core::{UnixNanos, datetime::unix_nanos_to_iso8601, formatting::Separable};
 use nautilus_model::{
     data::{
         Bar, BarType, Data, OrderBookDelta, OrderBookDeltas_API, OrderBookDepth10, QuoteTick,
@@ -40,14 +37,11 @@ use nautilus_serialization::arrow::{
     trades_to_arrow_record_batch_bytes,
 };
 use parquet::{arrow::ArrowWriter, basic::Compression, file::properties::WriterProperties};
-use ustr::Ustr;
 
-use super::{enums::TardisExchange, http::models::TardisInstrumentInfo};
 use crate::{
     config::{BookSnapshotOutput, TardisReplayConfig},
     http::TardisHttpClient,
-    machine::{TardisMachineClient, types::TardisInstrumentMiniInfo},
-    parse::{normalize_instrument_id, parse_instrument_id},
+    machine::TardisMachineClient,
 };
 
 struct DateCursor {
@@ -72,53 +66,23 @@ impl DateCursor {
     }
 }
 
-async fn gather_instruments_info(
-    config: &TardisReplayConfig,
-    http_client: &TardisHttpClient,
-) -> HashMap<TardisExchange, Vec<TardisInstrumentInfo>> {
-    let futures = config.options.iter().map(|options| {
-        let exchange = options.exchange;
-        let client = &http_client;
-
-        log::info!("Requesting instruments for {exchange}");
-
-        async move {
-            match client.instruments_info(exchange, None, None).await {
-                Ok(instruments) => Some((exchange, instruments)),
-                Err(e) => {
-                    log::error!("Error fetching instruments for {exchange}: {e}");
-                    None
-                }
-            }
-        }
-    });
-
-    let results: HashMap<TardisExchange, Vec<TardisInstrumentInfo>> =
-        join_all(futures).await.into_iter().flatten().collect();
-
-    log::info!("Received all instruments");
-
-    results
-}
-
-/// Run the Tardis Machine replay from a JSON configuration file.
+/// Runs the Tardis Machine replay from a JSON configuration file.
 ///
 /// # Errors
 ///
 /// Returns an error if reading or parsing the config file fails,
 /// or if any downstream replay operation fails.
-/// Run the Tardis Machine replay from a JSON configuration file.
 ///
 /// # Panics
 ///
 /// Panics if unable to determine the output path (current directory fallback fails).
 pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> anyhow::Result<()> {
     log::info!("Starting replay");
-    log::info!("Config filepath: {config_filepath:?}");
+    log::info!("Config filepath: {}", config_filepath.display());
 
     // Load and parse the replay configuration
     let config_data = fs::read_to_string(config_filepath)
-        .with_context(|| format!("Failed to read config file: {config_filepath:?}"))?;
+        .with_context(|| format!("Failed to read config file: {}", config_filepath.display()))?;
     let config: TardisReplayConfig = serde_json::from_str(&config_data)
         .context("failed to parse config JSON into TardisReplayConfig")?;
 
@@ -134,7 +98,7 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
         })
         .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
 
-    log::info!("Output path: {path:?}");
+    log::info!("Output path: {}", path.display());
 
     let normalize_symbols = config.normalize_symbols.unwrap_or(true);
     log::info!("normalize_symbols={normalize_symbols}");
@@ -152,29 +116,14 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
         book_snapshot_output,
     )?;
 
-    let info_map = gather_instruments_info(&config, &http_client).await;
+    let exchanges: AHashSet<_> = config.options.iter().map(|opt| opt.exchange).collect();
+    let (instrument_map, _instruments) = http_client
+        .bootstrap_instruments(&exchanges)
+        .await
+        .context("failed to bootstrap instruments")?;
 
-    for (exchange, instruments) in &info_map {
-        for inst in instruments {
-            let instrument_type = inst.instrument_type;
-            let price_precision = precision_from_str(&inst.price_increment.to_string());
-            let size_precision = precision_from_str(&inst.amount_increment.to_string());
-
-            let instrument_id = if normalize_symbols {
-                normalize_instrument_id(exchange, inst.id, &instrument_type, inst.inverse)
-            } else {
-                parse_instrument_id(exchange, inst.id)
-            };
-
-            let info = TardisInstrumentMiniInfo::new(
-                instrument_id,
-                Some(Ustr::from(&inst.id)),
-                *exchange,
-                price_precision,
-                size_precision,
-            );
-            machine_client.add_instrument_info(info);
-        }
+    for (_, info) in &instrument_map {
+        machine_client.add_instrument_info((**info).clone());
     }
 
     log::info!("Starting tardis-machine stream");
@@ -182,18 +131,18 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
     pin_mut!(stream);
 
     // Initialize date cursors
-    let mut deltas_cursors: HashMap<InstrumentId, DateCursor> = HashMap::new();
-    let mut depths_cursors: HashMap<InstrumentId, DateCursor> = HashMap::new();
-    let mut quotes_cursors: HashMap<InstrumentId, DateCursor> = HashMap::new();
-    let mut trades_cursors: HashMap<InstrumentId, DateCursor> = HashMap::new();
-    let mut bars_cursors: HashMap<BarType, DateCursor> = HashMap::new();
+    let mut deltas_cursors: AHashMap<InstrumentId, DateCursor> = AHashMap::new();
+    let mut depths_cursors: AHashMap<InstrumentId, DateCursor> = AHashMap::new();
+    let mut quotes_cursors: AHashMap<InstrumentId, DateCursor> = AHashMap::new();
+    let mut trades_cursors: AHashMap<InstrumentId, DateCursor> = AHashMap::new();
+    let mut bars_cursors: AHashMap<BarType, DateCursor> = AHashMap::new();
 
     // Initialize date collection maps
-    let mut deltas_map: HashMap<InstrumentId, Vec<OrderBookDelta>> = HashMap::new();
-    let mut depths_map: HashMap<InstrumentId, Vec<OrderBookDepth10>> = HashMap::new();
-    let mut quotes_map: HashMap<InstrumentId, Vec<QuoteTick>> = HashMap::new();
-    let mut trades_map: HashMap<InstrumentId, Vec<TradeTick>> = HashMap::new();
-    let mut bars_map: HashMap<BarType, Vec<Bar>> = HashMap::new();
+    let mut deltas_map: AHashMap<InstrumentId, Vec<OrderBookDelta>> = AHashMap::new();
+    let mut depths_map: AHashMap<InstrumentId, Vec<OrderBookDepth10>> = AHashMap::new();
+    let mut quotes_map: AHashMap<InstrumentId, Vec<QuoteTick>> = AHashMap::new();
+    let mut trades_map: AHashMap<InstrumentId, Vec<TradeTick>> = AHashMap::new();
+    let mut bars_map: AHashMap<BarType, Vec<Bar>> = AHashMap::new();
 
     let mut msg_count = 0;
 
@@ -202,7 +151,7 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
             Ok(msg) => {
                 match msg {
                     Data::Deltas(msg) => {
-                        handle_deltas_msg(msg, &mut deltas_map, &mut deltas_cursors, &path);
+                        handle_deltas_msg(&msg, &mut deltas_map, &mut deltas_cursors, &path);
                     }
                     Data::Depth10(msg) => {
                         handle_depth10_msg(*msg, &mut depths_map, &mut depths_cursors, &path);
@@ -222,7 +171,8 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
                     }
                     Data::MarkPriceUpdate(_)
                     | Data::IndexPriceUpdate(_)
-                    | Data::InstrumentClose(_) => {
+                    | Data::InstrumentClose(_)
+                    | Data::Custom(_) => {
                         log::debug!(
                             "Skipping unsupported data type for instrument {}",
                             msg.instrument_id()
@@ -244,29 +194,29 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
 
     // Iterate through every remaining type and instrument sequentially
 
-    for (instrument_id, deltas) in deltas_map {
-        let cursor = deltas_cursors.get(&instrument_id).expect("Expected cursor");
-        batch_and_write_deltas(deltas, &instrument_id, cursor.date_utc, &path);
+    for (instrument_id, deltas) in &deltas_map {
+        let cursor = deltas_cursors.get(instrument_id).expect("Expected cursor");
+        batch_and_write_deltas(deltas, instrument_id, cursor.date_utc, &path);
     }
 
-    for (instrument_id, depths) in depths_map {
-        let cursor = depths_cursors.get(&instrument_id).expect("Expected cursor");
-        batch_and_write_depths(depths, &instrument_id, cursor.date_utc, &path);
+    for (instrument_id, depths) in &depths_map {
+        let cursor = depths_cursors.get(instrument_id).expect("Expected cursor");
+        batch_and_write_depths(depths, instrument_id, cursor.date_utc, &path);
     }
 
-    for (instrument_id, quotes) in quotes_map {
-        let cursor = quotes_cursors.get(&instrument_id).expect("Expected cursor");
-        batch_and_write_quotes(quotes, &instrument_id, cursor.date_utc, &path);
+    for (instrument_id, quotes) in &quotes_map {
+        let cursor = quotes_cursors.get(instrument_id).expect("Expected cursor");
+        batch_and_write_quotes(quotes, instrument_id, cursor.date_utc, &path);
     }
 
-    for (instrument_id, trades) in trades_map {
-        let cursor = trades_cursors.get(&instrument_id).expect("Expected cursor");
-        batch_and_write_trades(trades, &instrument_id, cursor.date_utc, &path);
+    for (instrument_id, trades) in &trades_map {
+        let cursor = trades_cursors.get(instrument_id).expect("Expected cursor");
+        batch_and_write_trades(trades, instrument_id, cursor.date_utc, &path);
     }
 
-    for (bar_type, bars) in bars_map {
-        let cursor = bars_cursors.get(&bar_type).expect("Expected cursor");
-        batch_and_write_bars(bars, &bar_type, cursor.date_utc, &path);
+    for (bar_type, bars) in &bars_map {
+        let cursor = bars_cursors.get(bar_type).expect("Expected cursor");
+        batch_and_write_bars(bars, bar_type, cursor.date_utc, &path);
     }
 
     log::info!(
@@ -277,9 +227,9 @@ pub async fn run_tardis_machine_replay_from_config(config_filepath: &Path) -> an
 }
 
 fn handle_deltas_msg(
-    deltas: OrderBookDeltas_API,
-    map: &mut HashMap<InstrumentId, Vec<OrderBookDelta>>,
-    cursors: &mut HashMap<InstrumentId, DateCursor>,
+    deltas: &OrderBookDeltas_API,
+    map: &mut AHashMap<InstrumentId, Vec<OrderBookDelta>>,
+    cursors: &mut AHashMap<InstrumentId, DateCursor>,
     path: &Path,
 ) {
     let cursor = cursors
@@ -288,7 +238,7 @@ fn handle_deltas_msg(
 
     if deltas.ts_init > cursor.end_ns {
         if let Some(deltas_vec) = map.remove(&deltas.instrument_id) {
-            batch_and_write_deltas(deltas_vec, &deltas.instrument_id, cursor.date_utc, path);
+            batch_and_write_deltas(&deltas_vec, &deltas.instrument_id, cursor.date_utc, path);
         }
         // Update cursor
         *cursor = DateCursor::new(deltas.ts_init);
@@ -301,8 +251,8 @@ fn handle_deltas_msg(
 
 fn handle_depth10_msg(
     depth10: OrderBookDepth10,
-    map: &mut HashMap<InstrumentId, Vec<OrderBookDepth10>>,
-    cursors: &mut HashMap<InstrumentId, DateCursor>,
+    map: &mut AHashMap<InstrumentId, Vec<OrderBookDepth10>>,
+    cursors: &mut AHashMap<InstrumentId, DateCursor>,
     path: &Path,
 ) {
     let cursor = cursors
@@ -311,7 +261,7 @@ fn handle_depth10_msg(
 
     if depth10.ts_init > cursor.end_ns {
         if let Some(depths_vec) = map.remove(&depth10.instrument_id) {
-            batch_and_write_depths(depths_vec, &depth10.instrument_id, cursor.date_utc, path);
+            batch_and_write_depths(&depths_vec, &depth10.instrument_id, cursor.date_utc, path);
         }
         // Update cursor
         *cursor = DateCursor::new(depth10.ts_init);
@@ -324,8 +274,8 @@ fn handle_depth10_msg(
 
 fn handle_quote_msg(
     quote: QuoteTick,
-    map: &mut HashMap<InstrumentId, Vec<QuoteTick>>,
-    cursors: &mut HashMap<InstrumentId, DateCursor>,
+    map: &mut AHashMap<InstrumentId, Vec<QuoteTick>>,
+    cursors: &mut AHashMap<InstrumentId, DateCursor>,
     path: &Path,
 ) {
     let cursor = cursors
@@ -334,7 +284,7 @@ fn handle_quote_msg(
 
     if quote.ts_init > cursor.end_ns {
         if let Some(quotes_vec) = map.remove(&quote.instrument_id) {
-            batch_and_write_quotes(quotes_vec, &quote.instrument_id, cursor.date_utc, path);
+            batch_and_write_quotes(&quotes_vec, &quote.instrument_id, cursor.date_utc, path);
         }
         // Update cursor
         *cursor = DateCursor::new(quote.ts_init);
@@ -347,8 +297,8 @@ fn handle_quote_msg(
 
 fn handle_trade_msg(
     trade: TradeTick,
-    map: &mut HashMap<InstrumentId, Vec<TradeTick>>,
-    cursors: &mut HashMap<InstrumentId, DateCursor>,
+    map: &mut AHashMap<InstrumentId, Vec<TradeTick>>,
+    cursors: &mut AHashMap<InstrumentId, DateCursor>,
     path: &Path,
 ) {
     let cursor = cursors
@@ -357,7 +307,7 @@ fn handle_trade_msg(
 
     if trade.ts_init > cursor.end_ns {
         if let Some(trades_vec) = map.remove(&trade.instrument_id) {
-            batch_and_write_trades(trades_vec, &trade.instrument_id, cursor.date_utc, path);
+            batch_and_write_trades(&trades_vec, &trade.instrument_id, cursor.date_utc, path);
         }
         // Update cursor
         *cursor = DateCursor::new(trade.ts_init);
@@ -370,8 +320,8 @@ fn handle_trade_msg(
 
 fn handle_bar_msg(
     bar: Bar,
-    map: &mut HashMap<BarType, Vec<Bar>>,
-    cursors: &mut HashMap<BarType, DateCursor>,
+    map: &mut AHashMap<BarType, Vec<Bar>>,
+    cursors: &mut AHashMap<BarType, DateCursor>,
     path: &Path,
 ) {
     let cursor = cursors
@@ -380,7 +330,7 @@ fn handle_bar_msg(
 
     if bar.ts_init > cursor.end_ns {
         if let Some(bars_vec) = map.remove(&bar.bar_type) {
-            batch_and_write_bars(bars_vec, &bar.bar_type, cursor.date_utc, path);
+            batch_and_write_bars(&bars_vec, &bar.bar_type, cursor.date_utc, path);
         }
         // Update cursor
         *cursor = DateCursor::new(bar.ts_init);
@@ -392,30 +342,27 @@ fn handle_bar_msg(
 }
 
 fn batch_and_write_deltas(
-    deltas: Vec<OrderBookDelta>,
+    deltas: &[OrderBookDelta],
     instrument_id: &InstrumentId,
     date: NaiveDate,
     path: &Path,
 ) {
-    let typename = stringify!(OrderBookDeltas);
     match book_deltas_to_arrow_record_batch_bytes(deltas) {
-        Ok(batch) => write_batch(batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "order_book_deltas", instrument_id, date, path),
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting OrderBookDeltas to Arrow: {e:?}");
         }
     }
 }
 
 fn batch_and_write_depths(
-    depths: Vec<OrderBookDepth10>,
+    depths: &[OrderBookDepth10],
     instrument_id: &InstrumentId,
     date: NaiveDate,
     path: &Path,
 ) {
-    // Use "order_book_depths" to match catalog path prefix
-    let typename = "order_book_depths";
     match book_depth10_to_arrow_record_batch_bytes(depths) {
-        Ok(batch) => write_batch(batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "order_book_depths", instrument_id, date, path),
         Err(e) => {
             log::error!("Error converting OrderBookDepth10 to Arrow: {e:?}");
         }
@@ -423,50 +370,47 @@ fn batch_and_write_depths(
 }
 
 fn batch_and_write_quotes(
-    quotes: Vec<QuoteTick>,
+    quotes: &[QuoteTick],
     instrument_id: &InstrumentId,
     date: NaiveDate,
     path: &Path,
 ) {
-    let typename = stringify!(QuoteTick);
     match quotes_to_arrow_record_batch_bytes(quotes) {
-        Ok(batch) => write_batch(batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "quote_tick", instrument_id, date, path),
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting QuoteTick to Arrow: {e:?}");
         }
     }
 }
 
 fn batch_and_write_trades(
-    trades: Vec<TradeTick>,
+    trades: &[TradeTick],
     instrument_id: &InstrumentId,
     date: NaiveDate,
     path: &Path,
 ) {
-    let typename = stringify!(TradeTick);
     match trades_to_arrow_record_batch_bytes(trades) {
-        Ok(batch) => write_batch(batch, typename, instrument_id, date, path),
+        Ok(batch) => write_batch(&batch, "trade_tick", instrument_id, date, path),
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting TradeTick to Arrow: {e:?}");
         }
     }
 }
 
-fn batch_and_write_bars(bars: Vec<Bar>, bar_type: &BarType, date: NaiveDate, path: &Path) {
-    let typename = stringify!(Bar);
+fn batch_and_write_bars(bars: &[Bar], bar_type: &BarType, date: NaiveDate, path: &Path) {
     let batch = match bars_to_arrow_record_batch_bytes(bars) {
         Ok(batch) => batch,
         Err(e) => {
-            log::error!("Error converting `{typename}` to Arrow: {e:?}");
+            log::error!("Error converting Bar to Arrow: {e:?}");
             return;
         }
     };
 
     let filepath = path.join(parquet_filepath_bars(bar_type, date));
-    if let Err(e) = write_parquet_local(batch, &filepath) {
-        log::error!("Error writing {filepath:?}: {e:?}");
+    if let Err(e) = write_parquet_local(&batch, &filepath) {
+        log::error!("Error writing {}: {e}", filepath.display());
     } else {
-        log::info!("File written: {filepath:?}");
+        log::info!("File written: {}", filepath.display());
     }
 }
 
@@ -506,7 +450,6 @@ fn timestamps_to_filename(timestamp_1: UnixNanos, timestamp_2: UnixNanos) -> Str
 fn parquet_filepath(typename: &str, instrument_id: &InstrumentId, date: NaiveDate) -> PathBuf {
     assert_post_epoch(date);
 
-    let typename = typename.to_snake_case();
     let instrument_id_str = instrument_id.to_string().replace('/', "");
 
     let start_utc = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
@@ -555,7 +498,7 @@ fn parquet_filepath_bars(bar_type: &BarType, date: NaiveDate) -> PathBuf {
 }
 
 fn write_batch(
-    batch: RecordBatch,
+    batch: &RecordBatch,
     typename: &str,
     instrument_id: &InstrumentId,
     date: NaiveDate,
@@ -563,13 +506,13 @@ fn write_batch(
 ) {
     let filepath = path.join(parquet_filepath(typename, instrument_id, date));
     if let Err(e) = write_parquet_local(batch, &filepath) {
-        log::error!("Error writing {filepath:?}: {e:?}");
+        log::error!("Error writing {}: {e}", filepath.display());
     } else {
-        log::info!("File written: {filepath:?}");
+        log::info!("File written: {}", filepath.display());
     }
 }
 
-fn write_parquet_local(batch: RecordBatch, file_path: &Path) -> anyhow::Result<()> {
+fn write_parquet_local(batch: &RecordBatch, file_path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = file_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -580,7 +523,7 @@ fn write_parquet_local(batch: RecordBatch, file_path: &Path) -> anyhow::Result<(
         .build();
 
     let mut writer = ArrowWriter::try_new(file, batch.schema(), Some(props))?;
-    writer.write(&batch)?;
+    writer.write(batch)?;
     writer.close()?;
     Ok(())
 }

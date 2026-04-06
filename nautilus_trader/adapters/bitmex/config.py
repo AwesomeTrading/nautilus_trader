@@ -48,11 +48,11 @@ class BitmexDataClientConfig(LiveDataClientConfig, frozen=True):
         If the client is connecting to the BitMEX testnet.
     http_timeout_secs : PositiveInt, default 60
         The timeout for HTTP requests in seconds.
-    max_retries : PositiveInt, optional
+    max_retries : PositiveInt, default 3
         The maximum number of retries for HTTP requests.
     retry_delay_initial_ms : PositiveInt, default 1_000
         The initial delay (milliseconds) between retries.
-    retry_delay_max_ms : PositiveInt, default 5_000
+    retry_delay_max_ms : PositiveInt, default 10_000
         The maximum delay (milliseconds) between retries.
     recv_window_ms : PositiveInt, default 10_000
         The expiration window (milliseconds) for signed requests.
@@ -78,9 +78,9 @@ class BitmexDataClientConfig(LiveDataClientConfig, frozen=True):
     ws_proxy_url: str | None = None
     testnet: bool = False
     http_timeout_secs: PositiveInt | None = 60
-    max_retries: PositiveInt | None = None
+    max_retries: PositiveInt | None = 3
     retry_delay_initial_ms: PositiveInt | None = 1_000
-    retry_delay_max_ms: PositiveInt | None = 5_000
+    retry_delay_max_ms: PositiveInt | None = 10_000
     recv_window_ms: PositiveInt | None = 10_000
     update_instruments_interval_mins: PositiveInt | None = 60
     max_requests_per_second: PositiveInt = 10
@@ -117,11 +117,11 @@ class BitmexExecClientConfig(LiveExecClientConfig, frozen=True):
         If the client is connecting to the BitMEX testnet.
     http_timeout_secs : PositiveInt, default 60
         The timeout for HTTP requests in seconds.
-    max_retries : PositiveInt, optional
+    max_retries : PositiveInt, default 3
         The maximum number of retries for HTTP requests.
     retry_delay_initial_ms : PositiveInt, default 1_000
         The initial delay (milliseconds) between retries.
-    retry_delay_max_ms : PositiveInt, default 5_000
+    retry_delay_max_ms : PositiveInt, default 10_000
         The maximum delay (milliseconds) between retries.
     recv_window_ms : PositiveInt, default 10_000
         The expiration window (milliseconds) for signed requests.
@@ -167,9 +167,9 @@ class BitmexExecClientConfig(LiveExecClientConfig, frozen=True):
     ws_proxy_url: str | None = None
     testnet: bool = False
     http_timeout_secs: PositiveInt | None = 60
-    max_retries: PositiveInt | None = None
+    max_retries: PositiveInt | None = 3
     retry_delay_initial_ms: PositiveInt | None = 1_000
-    retry_delay_max_ms: PositiveInt | None = 5_000
+    retry_delay_max_ms: PositiveInt | None = 10_000
     recv_window_ms: PositiveInt | None = 10_000
     max_requests_per_second: PositiveInt = 10
     max_requests_per_minute: PositiveInt = 120

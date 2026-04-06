@@ -32,7 +32,9 @@ use crate::{
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl CryptoPerpetual {
+    /// Represents a crypto perpetual futures contract instrument (a.k.a. perpetual swap).
     #[allow(clippy::too_many_arguments)]
     #[new]
     #[pyo3(signature = (instrument_id, raw_symbol, base_currency, quote_currency, settlement_currency, is_inverse, price_precision, size_precision, price_increment, size_increment, ts_event, ts_init, multiplier=None, lot_size=None, max_quantity=None, min_quantity=None, max_notional=None, min_notional=None, max_price=None, min_price=None, margin_init=None, margin_maint=None, maker_fee=None, taker_fee=None, info=None))]
@@ -115,7 +117,7 @@ impl CryptoPerpetual {
     }
 
     #[getter]
-    fn type_str(&self) -> &str {
+    fn type_name(&self) -> &'static str {
         stringify!(CryptoPerpetual)
     }
 

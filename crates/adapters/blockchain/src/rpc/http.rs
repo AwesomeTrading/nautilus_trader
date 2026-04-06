@@ -17,6 +17,7 @@ use std::{collections::HashMap, num::NonZeroU32, str::FromStr};
 
 use alloy::primitives::{Address, U256};
 use bytes::Bytes;
+use nautilus_core::hex;
 use nautilus_model::defi::rpc::{RpcLog, RpcNodeHttpResponse};
 use nautilus_network::{
     http::{HttpClient, Method},
@@ -161,7 +162,7 @@ impl BlockchainHttpRpcClient {
         call_data: &[u8],
         block: Option<u64>,
     ) -> serde_json::Value {
-        let encoded_data = format!("0x{}", hex::encode(call_data));
+        let encoded_data = hex::encode_prefixed(call_data);
         let call = serde_json::json!({
             "to": to,
             "data": encoded_data

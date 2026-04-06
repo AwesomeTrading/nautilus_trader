@@ -13,7 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-use nautilus_core::UnixNanos;
+use nautilus_core::{Params, UnixNanos};
 use nautilus_model::{
     identifiers::{InstrumentId, Symbol},
     instruments::{CryptoFuture, CryptoOption, CryptoPerpetual, CurrencyPair, InstrumentAny},
@@ -22,7 +22,7 @@ use nautilus_model::{
 use rust_decimal::Decimal;
 
 use super::{models::TardisInstrumentInfo, parse::parse_settlement_currency};
-use crate::parse::parse_option_kind;
+use crate::common::parse::parse_option_kind;
 
 /// Returns a currency from the internal map or creates a new crypto currency.
 ///
@@ -30,6 +30,23 @@ use crate::parse::parse_option_kind;
 /// which automatically registers newly listed exchange assets.
 pub(crate) fn get_currency(code: &str) -> Currency {
     Currency::get_or_create_crypto(code)
+}
+
+/// Builds an `Option<Params>` from raw Tardis instrument metadata.
+fn build_info_params(info: &TardisInstrumentInfo) -> Option<Params> {
+    match serde_json::to_value(info) {
+        Ok(value) => match serde_json::from_value(value) {
+            Ok(params) => Some(params),
+            Err(e) => {
+                log::warn!("Failed to convert instrument info to Params: {e}");
+                None
+            }
+        },
+        Err(e) => {
+            log::warn!("Failed to serialize instrument info: {e}");
+            None
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -69,7 +86,7 @@ pub fn create_currency_pair(
         Some(margin_maint),
         Some(maker_fee),
         Some(taker_fee),
-        None,
+        build_info_params(info),
         ts_event,
         ts_init,
     ))
@@ -116,7 +133,7 @@ pub fn create_crypto_perpetual(
         Some(margin_maint),
         Some(maker_fee),
         Some(taker_fee),
-        None,
+        build_info_params(info),
         ts_event,
         ts_init,
     ))
@@ -167,7 +184,7 @@ pub fn create_crypto_future(
         Some(margin_maint),
         Some(maker_fee),
         Some(taker_fee),
-        None,
+        build_info_params(info),
         ts_event,
         ts_init,
     ))
@@ -238,7 +255,7 @@ pub fn create_crypto_option(
         Some(margin_maint),
         Some(maker_fee),
         Some(taker_fee),
-        None,
+        build_info_params(info),
         ts_event,
         ts_init,
     )))

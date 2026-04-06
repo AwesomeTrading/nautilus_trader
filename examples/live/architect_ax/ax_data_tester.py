@@ -72,6 +72,7 @@ config_tester = DataTesterConfig(
     bar_types=[bar_type],
     subscribe_quotes=True,
     subscribe_trades=True,
+    subscribe_mark_prices=True,
     subscribe_bars=True,
     subscribe_funding_rates=True,
     request_trades=True,

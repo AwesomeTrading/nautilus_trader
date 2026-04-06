@@ -15,10 +15,12 @@
 
 use std::str::FromStr;
 
+use alloy::{
+    signers::{SignerSync, local::PrivateKeySigner},
+    sol_types::{SolStruct, eip712_domain},
+};
 use alloy_primitives::{Address, B256, keccak256};
-use alloy_signer::SignerSync;
-use alloy_signer_local::PrivateKeySigner;
-use alloy_sol_types::{SolStruct, eip712_domain};
+use nautilus_core::hex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -29,7 +31,7 @@ use crate::{
 };
 
 // Define the Agent struct for L1 signing
-alloy_sol_types::sol! {
+alloy::sol! {
     #[derive(Debug, Serialize, Deserialize)]
     struct Agent {
         string source;
@@ -185,7 +187,7 @@ impl HyperliquidEip712Signer {
 
 #[cfg(test)]
 mod tests {
-    use alloy_sol_types::SolStruct;
+    use alloy::sol_types::SolStruct;
     use nautilus_model::{identifiers::ClientOrderId, types::Price};
     use rstest::rstest;
     use rust_decimal_macros::dec;
@@ -200,7 +202,7 @@ mod tests {
     #[rstest]
     fn test_sign_request_l1_action() {
         let private_key = EvmPrivateKey::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         )
         .unwrap();
         let signer = HyperliquidEip712Signer::new(private_key);
@@ -227,7 +229,7 @@ mod tests {
     #[rstest]
     fn test_sign_user_signed_returns_error() {
         let private_key = EvmPrivateKey::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         )
         .unwrap();
         let signer = HyperliquidEip712Signer::new(private_key);
@@ -252,7 +254,7 @@ mod tests {
         // Connection ID: 207b9fb52defb524f5a7f1c80f069ff8b58556b018532401de0e1342bcb13b40
 
         let private_key = EvmPrivateKey::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         )
         .unwrap();
         let signer = HyperliquidEip712Signer::new(private_key);
@@ -377,7 +379,7 @@ mod tests {
         // The key difference: production always includes a cloid field.
 
         let private_key = EvmPrivateKey::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         )
         .unwrap();
         let _signer = HyperliquidEip712Signer::new(private_key);
@@ -465,7 +467,7 @@ mod tests {
         // Full production-like test with cloid from ClientOrderId
 
         let private_key = EvmPrivateKey::new(
-            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
+            "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         )
         .unwrap();
         let signer = HyperliquidEip712Signer::new(private_key);

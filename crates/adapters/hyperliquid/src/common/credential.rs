@@ -21,7 +21,10 @@ use std::{
     path::Path,
 };
 
-use nautilus_core::env::{get_or_env_var, get_or_env_var_opt};
+use nautilus_core::{
+    env::{get_or_env_var, get_or_env_var_opt},
+    hex,
+};
 use serde::Deserialize;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -49,7 +52,7 @@ pub struct EvmPrivateKey {
 
 impl EvmPrivateKey {
     /// Creates a new EVM private key from hex string.
-    pub fn new(key: String) -> Result<Self> {
+    pub fn new(key: &str) -> Result<Self> {
         let key = key.trim().to_string();
         let hex_key = key.strip_prefix("0x").unwrap_or(&key);
 
@@ -119,28 +122,15 @@ impl VaultAddress {
         let s = s.trim();
         let hex_part = s.strip_prefix("0x").unwrap_or(s);
 
-        if hex_part.len() != 40 {
-            return Err(Error::bad_request(
-                "Vault address must be 20 bytes (40 hex chars)",
-            ));
-        }
+        let bytes: [u8; 20] = hex::decode_array(hex_part)
+            .map_err(|_| Error::bad_request("Vault address must be 20 bytes of valid hex"))?;
 
-        let bytes = hex::decode(hex_part)
-            .map_err(|_| Error::bad_request("Invalid hex in vault address"))?;
-
-        if bytes.len() != 20 {
-            return Err(Error::bad_request("Vault address must be exactly 20 bytes"));
-        }
-
-        let mut addr_bytes = [0u8; 20];
-        addr_bytes.copy_from_slice(&bytes);
-
-        Ok(Self { bytes: addr_bytes })
+        Ok(Self { bytes })
     }
 
     /// Get address as 0x-prefixed hex string
     pub fn to_hex(&self) -> String {
-        format!("0x{}", hex::encode(self.bytes))
+        hex::encode_prefixed(self.bytes)
     }
 
     /// Get raw bytes
@@ -214,7 +204,7 @@ impl Secrets {
         )
         .filter(|s| !s.trim().is_empty());
 
-        let private_key = EvmPrivateKey::new(pk_str)?;
+        let private_key = EvmPrivateKey::new(&pk_str)?;
         let vault_address = match vault_str {
             Some(addr) => Some(VaultAddress::parse(&addr)?),
             None => None,
@@ -248,7 +238,7 @@ impl Secrets {
         vault_address_str: Option<&str>,
         is_testnet: bool,
     ) -> Result<Self> {
-        let private_key = EvmPrivateKey::new(private_key_str.to_string())?;
+        let private_key = EvmPrivateKey::new(private_key_str)?;
 
         let vault_address = match vault_address_str {
             Some(addr_str) if !addr_str.trim().is_empty() => Some(VaultAddress::parse(addr_str)?),
@@ -298,7 +288,7 @@ impl Secrets {
         let raw: RawSecrets = serde_json::from_str(json)
             .map_err(|e| Error::bad_request(format!("Invalid JSON: {e}")))?;
 
-        let private_key = EvmPrivateKey::new(raw.private_key)?;
+        let private_key = EvmPrivateKey::new(&raw.private_key)?;
 
         let vault_address = match raw.vault_address {
             Some(addr) => Some(VaultAddress::parse(&addr)?),
@@ -348,7 +338,7 @@ mod tests {
 
     #[rstest]
     fn test_evm_private_key_creation() {
-        let key = EvmPrivateKey::new(TEST_PRIVATE_KEY.to_string()).unwrap();
+        let key = EvmPrivateKey::new(TEST_PRIVATE_KEY).unwrap();
         assert_eq!(key.as_hex(), TEST_PRIVATE_KEY);
         assert_eq!(key.as_bytes().len(), 32);
     }
@@ -356,27 +346,27 @@ mod tests {
     #[rstest]
     fn test_evm_private_key_without_0x_prefix() {
         let key_without_prefix = &TEST_PRIVATE_KEY[2..]; // Remove 0x
-        let key = EvmPrivateKey::new(key_without_prefix.to_string()).unwrap();
+        let key = EvmPrivateKey::new(key_without_prefix).unwrap();
         assert_eq!(key.as_hex(), TEST_PRIVATE_KEY);
     }
 
     #[rstest]
     fn test_evm_private_key_invalid_length() {
-        let result = EvmPrivateKey::new("0x123".to_string());
+        let result = EvmPrivateKey::new("0x123");
         assert!(result.is_err());
     }
 
     #[rstest]
     fn test_evm_private_key_invalid_hex() {
         let result = EvmPrivateKey::new(
-            "0x123g567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
+            "0x123g567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
         );
         assert!(result.is_err());
     }
 
     #[rstest]
     fn test_evm_private_key_debug_redacts() {
-        let key = EvmPrivateKey::new(TEST_PRIVATE_KEY.to_string()).unwrap();
+        let key = EvmPrivateKey::new(TEST_PRIVATE_KEY).unwrap();
         let debug_str = format!("{key:?}");
         assert_eq!(debug_str, "EvmPrivateKey(***redacted***)");
         assert!(!debug_str.contains("1234"));

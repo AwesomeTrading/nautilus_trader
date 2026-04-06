@@ -27,6 +27,7 @@ from nautilus_trader.adapters.hyperliquid.constants import HYPERLIQUID_POST_ONLY
 from nautilus_trader.adapters.hyperliquid.constants import HYPERLIQUID_VENUE
 from nautilus_trader.adapters.hyperliquid.providers import HyperliquidInstrumentProvider
 from nautilus_trader.cache.cache import Cache
+from nautilus_trader.cache.transformers import transform_order_to_pyo3
 from nautilus_trader.common.component import LiveClock
 from nautilus_trader.common.component import MessageBus
 from nautilus_trader.common.enums import LogColor
@@ -148,15 +149,22 @@ class HyperliquidExecutionClient(LiveExecutionClient):
         self._terminal_orders: nautilus_pyo3.FifoCache = nautilus_pyo3.FifoCache()
         self._pending_filled: set[str] = set()
 
-        # Get user address from HTTP client for WebSocket subscriptions
-        # Use vault address when vault trading, otherwise order/fill
-        # updates for the vault will be missed
+        self._fee_refresh_task: asyncio.Task | None = None
+
+        # Get user address from HTTP client for WebSocket subscriptions.
+        # Resolution order: account_address (agent wallet) → vault_address → EOA
         self._user_address: str | None = None
         try:
             eoa_address = self._client.get_user_address()
-            self._user_address = config.vault_address or eoa_address
+            self._user_address = config.account_address or config.vault_address or eoa_address
             self._log.info(f"User address (EOA): {eoa_address}", LogColor.BLUE)
-            if config.vault_address:
+
+            if config.account_address:
+                self._log.info(
+                    f"Account address (agent wallet, WS subscriptions): {config.account_address}",
+                    LogColor.BLUE,
+                )
+            elif config.vault_address:
                 self._log.info(
                     f"Vault address (WS subscriptions): {config.vault_address}",
                     LogColor.BLUE,
@@ -526,6 +534,7 @@ class HyperliquidExecutionClient(LiveExecutionClient):
         # TODO: Extract this to Rust
         # Round in the direction that preserves slippage buffer
         quantizer = Decimal(10) ** -instrument.price_precision
+
         if order.side == OrderSide.BUY:
             price = price.quantize(quantizer, rounding=ROUND_CEILING)
         else:
@@ -554,6 +563,7 @@ class HyperliquidExecutionClient(LiveExecutionClient):
         instrument = self._cache.instrument(order.instrument_id)
         if instrument is not None:
             quantizer = Decimal(10) ** -instrument.price_precision
+
             if order.side == OrderSide.BUY:
                 price = price.quantize(quantizer, rounding=ROUND_CEILING)
             else:
@@ -696,7 +706,8 @@ class HyperliquidExecutionClient(LiveExecutionClient):
             self._ws_client.cache_cloid_mapping(cloid, pyo3_client_order_id)
 
         try:
-            await self._client.submit_orders(orders)
+            pyo3_orders = [transform_order_to_pyo3(order) for order in orders]
+            await self._client.submit_orders(pyo3_orders)
         except Exception as e:
             error_str = str(e)
             due_post_only = HYPERLIQUID_POST_ONLY_WOULD_MATCH in error_str
@@ -777,7 +788,7 @@ class HyperliquidExecutionClient(LiveExecutionClient):
                 command.instrument_id.value,
             )
             pyo3_venue_order_id = nautilus_pyo3.VenueOrderId(venue_order_id.value)
-            pyo3_order_side = nautilus_pyo3.OrderSide.from_str(order.side.name)
+            pyo3_order_side = order_side_to_pyo3(order.side)
             pyo3_order_type = order_type_to_pyo3(order.order_type)
             pyo3_price = nautilus_pyo3.Price.from_str(str(price))
             pyo3_quantity = nautilus_pyo3.Quantity.from_str(str(quantity))
@@ -787,6 +798,7 @@ class HyperliquidExecutionClient(LiveExecutionClient):
             )
 
             pyo3_trigger_price = None
+
             if trigger_price is not None:
                 pyo3_trigger_price = nautilus_pyo3.Price.from_str(str(trigger_price))
 

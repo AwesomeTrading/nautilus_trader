@@ -15,7 +15,10 @@
 
 //! Python bindings from `pyo3`.
 
-#![allow(clippy::missing_errors_doc)]
+#![allow(
+    clippy::missing_errors_doc,
+    reason = "errors documented on underlying Rust methods"
+)]
 
 pub mod config;
 pub mod encoder;
@@ -40,6 +43,7 @@ use crate::{
     factories::{DydxDataClientFactory, DydxExecutionClientFactory},
 };
 
+#[allow(clippy::needless_pass_by_value)]
 fn extract_dydx_data_factory(
     py: Python<'_>,
     factory: Py<PyAny>,
@@ -52,6 +56,7 @@ fn extract_dydx_data_factory(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn extract_dydx_exec_factory(
     py: Python<'_>,
     factory: Py<PyAny>,
@@ -64,6 +69,7 @@ fn extract_dydx_exec_factory(
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn extract_dydx_data_config(py: Python<'_>, config: Py<PyAny>) -> PyResult<Box<dyn ClientConfig>> {
     match config.extract::<DydxDataClientConfig>(py) {
         Ok(c) => Ok(Box::new(c)),
@@ -73,6 +79,7 @@ fn extract_dydx_data_config(py: Python<'_>, config: Py<PyAny>) -> PyResult<Box<d
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn extract_dydx_exec_config(py: Python<'_>, config: Py<PyAny>) -> PyResult<Box<dyn ClientConfig>> {
     match config.extract::<DydxExecClientConfig>(py) {
         Ok(c) => Ok(Box::new(c)),

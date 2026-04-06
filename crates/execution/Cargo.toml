@@ -35,6 +35,7 @@ python = [
   "nautilus-core/python",
   "nautilus-model/python",
   "pyo3",
+  "pyo3-stub-gen",
 ]
 
 [package.metadata.docs.rs]
@@ -49,6 +50,7 @@ nautilus-model = { workspace = true, features = ["stubs"] }
 ahash = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+bon = { workspace = true }
 chrono = { workspace = true }
 criterion = { workspace = true }
 futures = { workspace = true }
@@ -62,3 +64,4 @@ ustr = { workspace = true }
 uuid = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }

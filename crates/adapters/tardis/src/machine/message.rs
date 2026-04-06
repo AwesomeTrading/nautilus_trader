@@ -17,7 +17,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use ustr::Ustr;
 
-use crate::{enums::TardisExchange, parse::deserialize_uppercase};
+use crate::common::{enums::TardisExchange, parse::deserialize_uppercase};
 
 /// Represents a single level in the order book (bid or ask).
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -32,26 +32,29 @@ use crate::{
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl BitmexHttpClient {
+    /// Provides a HTTP client for connecting to the [BitMEX](https://bitmex.com) REST API.
+    ///
+    /// This is the high-level client that wraps the inner client and provides
+    /// Nautilus-specific functionality for trading operations.
     #[new]
-    #[pyo3(signature = (api_key=None, api_secret=None, base_url=None, testnet=false, timeout_secs=None, max_retries=None, retry_delay_ms=None, retry_delay_max_ms=None, recv_window_ms=None, max_requests_per_second=None, max_requests_per_minute=None, proxy_url=None))]
+    #[pyo3(signature = (api_key=None, api_secret=None, base_url=None, testnet=false, timeout_secs=60, max_retries=3, retry_delay_ms=1_000, retry_delay_max_ms=10_000, recv_window_ms=10_000, max_requests_per_second=10, max_requests_per_minute=120, proxy_url=None))]
     #[allow(clippy::too_many_arguments)]
     fn py_new(
         api_key: Option<&str>,
         api_secret: Option<&str>,
         base_url: Option<&str>,
         testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
-        max_requests_per_second: Option<u32>,
-        max_requests_per_minute: Option<u32>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
+        max_requests_per_second: u32,
+        max_requests_per_minute: u32,
         proxy_url: Option<&str>,
     ) -> PyResult<Self> {
-        let timeout = timeout_secs.or(Some(60));
-
         // If credentials not provided, try to load from environment
         let (final_api_key, final_api_secret) = if api_key.is_none() && api_secret.is_none() {
             // Choose environment variables based on testnet flag
@@ -69,7 +72,7 @@ impl BitmexHttpClient {
             final_api_key,
             final_api_secret,
             testnet,
-            timeout,
+            timeout_secs,
             max_retries,
             retry_delay_ms,
             retry_delay_max_ms,
@@ -81,12 +84,19 @@ impl BitmexHttpClient {
         .map_err(to_pyvalue_err)
     }
 
+    /// Creates a new `BitmexHttpClient` instance using environment variables and
+    /// the default BitMEX HTTP base URL.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required environment variables are not set or invalid.
     #[staticmethod]
     #[pyo3(name = "from_env")]
     fn py_from_env() -> PyResult<Self> {
         Self::from_env().map_err(to_pyvalue_err)
     }
 
+    /// Returns the base url being used by the client.
     #[getter]
     #[pyo3(name = "base_url")]
     #[must_use]
@@ -94,6 +104,7 @@ impl BitmexHttpClient {
         self.base_url()
     }
 
+    /// Returns the public API key being used by the client.
     #[getter]
     #[pyo3(name = "api_key")]
     #[must_use]
@@ -101,6 +112,7 @@ impl BitmexHttpClient {
         self.api_key()
     }
 
+    /// Returns a masked version of the API key for logging purposes.
     #[getter]
     #[pyo3(name = "api_key_masked")]
     #[must_use]
@@ -108,6 +120,7 @@ impl BitmexHttpClient {
         self.api_key_masked()
     }
 
+    /// Update position leverage.
     #[pyo3(name = "update_position_leverage")]
     fn py_update_position_leverage<'py>(
         &self,
@@ -130,6 +143,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request a single instrument and parse it into a Nautilus type.
     #[pyo3(name = "request_instrument")]
     fn py_request_instrument<'py>(
         &self,
@@ -151,6 +165,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request all available instruments and parse them into Nautilus types.
     #[pyo3(name = "request_instruments")]
     fn py_request_instruments<'py>(
         &self,
@@ -179,6 +194,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request trades for the given instrument.
     #[pyo3(name = "request_trades")]
     #[pyo3(signature = (instrument_id, start=None, end=None, limit=None))]
     fn py_request_trades<'py>(
@@ -208,6 +224,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request bars for the given bar type.
     #[pyo3(name = "request_bars")]
     #[pyo3(signature = (bar_type, start=None, end=None, limit=None, partial=false))]
     fn py_request_bars<'py>(
@@ -236,6 +253,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Query a single order by client order ID or venue order ID.
     #[pyo3(name = "query_order")]
     #[pyo3(signature = (instrument_id, client_order_id=None, venue_order_id=None))]
     fn py_query_order<'py>(
@@ -259,6 +277,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request multiple order status reports.
     #[pyo3(name = "request_order_status_reports")]
     #[pyo3(signature = (instrument_id=None, open_only=false, limit=None))]
     fn py_request_order_status_reports<'py>(
@@ -287,6 +306,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request fill reports for the given instrument.
     #[pyo3(name = "request_fill_reports")]
     #[pyo3(signature = (instrument_id=None, limit=None))]
     fn py_request_fill_reports<'py>(
@@ -314,6 +334,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request position reports.
     #[pyo3(name = "request_position_status_reports")]
     fn py_request_position_status_reports<'py>(
         &self,
@@ -338,6 +359,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Submit a new order.
     #[pyo3(name = "submit_order")]
     #[pyo3(signature = (
         instrument_id,
@@ -420,6 +442,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Cancel an order.
     #[pyo3(name = "cancel_order")]
     #[pyo3(signature = (instrument_id, client_order_id=None, venue_order_id=None))]
     fn py_cancel_order<'py>(
@@ -441,6 +464,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Cancel multiple orders.
     #[pyo3(name = "cancel_orders")]
     #[pyo3(signature = (instrument_id, client_order_ids=None, venue_order_ids=None))]
     fn py_cancel_orders<'py>(
@@ -469,6 +493,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Cancel all orders for an instrument and optionally an order side.
     #[pyo3(name = "cancel_all_orders")]
     #[pyo3(signature = (instrument_id, order_side))]
     fn py_cancel_all_orders<'py>(
@@ -496,6 +521,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Modify an existing order.
     #[pyo3(name = "modify_order")]
     #[pyo3(signature = (
         instrument_id,
@@ -535,6 +561,9 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Caches a single instrument.
+    ///
+    /// Any existing instrument with the same symbol will be replaced.
     #[pyo3(name = "cache_instrument")]
     fn py_cache_instrument(&mut self, py: Python, instrument: Py<PyAny>) -> PyResult<()> {
         let inst_any = pyobject_to_instrument_any(py, instrument)?;
@@ -542,11 +571,17 @@ impl BitmexHttpClient {
         Ok(())
     }
 
+    /// Cancel all pending HTTP requests.
     #[pyo3(name = "cancel_all_requests")]
     fn py_cancel_all_requests(&self) {
         self.cancel_all_requests();
     }
 
+    /// Get user margin information for a specific currency.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if credentials are missing, the request fails, or the API returns an error.
     #[pyo3(name = "get_margin")]
     fn py_get_margin<'py>(&self, py: Python<'py>, currency: String) -> PyResult<Bound<'py, PyAny>> {
         let client = self.clone();
@@ -578,6 +613,7 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Request account state for the given account.
     #[pyo3(name = "request_account_state")]
     fn py_request_account_state<'py>(
         &self,
@@ -664,6 +700,9 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Sets the dead man's switch (cancel all orders after timeout).
+    ///
+    /// Calling with `timeout_ms=0` disarms the switch.
     #[pyo3(name = "cancel_all_after")]
     fn py_cancel_all_after<'py>(
         &self,
@@ -682,6 +721,13 @@ impl BitmexHttpClient {
         })
     }
 
+    /// Requests the current server time from BitMEX.
+    ///
+    /// Returns the BitMEX system time as a Unix timestamp in milliseconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or if the response cannot be parsed.
     #[pyo3(name = "get_server_time")]
     fn py_get_server_time<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = self.clone();

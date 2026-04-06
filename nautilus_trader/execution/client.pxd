@@ -150,6 +150,7 @@ cdef class ExecutionClient(Component):
         Price trigger_price,
         uint64_t ts_event,
         bint venue_order_id_modified=*,
+        object is_quote_quantity=*,
     )
     cpdef void generate_order_canceled(
         self,

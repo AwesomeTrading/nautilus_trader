@@ -10,10 +10,11 @@ on:
 
 jobs:
   performance-benchmarks:
-    runs-on: ubuntu-latest
+    runs-on: depot-ubuntu-22.04-8
     env:
       BUILD_MODE: release
       RUST_BACKTRACE: 1
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/performance-py3.12
       SCCACHE_CACHE_SIZE: 1G
     # yamllint disable rule:line-length
     services:
@@ -34,13 +35,19 @@ jobs:
           POSTGRES_DB: nautilus
         ports:
           - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        options: --health-cmd "pg_isready -U postgres -d nautilus" --health-interval 10s --health-timeout 5s --health-retries 5
     # yamllint enable rule:line-length
     steps:
       # https://github.com/step-security/harden-runner
-      - uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b # v2.15.0
         with:
-          egress-policy: audit
+          egress-policy: ${{ vars.STEP_SECURITY_EGRESS_POLICY || 'block' }}
+          # Required for CodSpeed results upload
+          allowed-endpoints: >-
+            ${{ vars.COMMON_ALLOWED_ENDPOINTS }}
+            ${{ vars.CI_ALLOWED_ENDPOINTS }}
+            api.codspeed.io:443
+            *.s3.eu-west-1.amazonaws.com:443
 
       - name: Checkout repository
         # https://github.com/actions/checkout
@@ -48,6 +55,10 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (post-checkout)
+        run: bash scripts/ci/verify-ci-inputs.sh post-checkout
 
       - name: Aggressive disk cleanup (pre-setup)
         if: runner.os == 'Linux'
@@ -79,6 +90,8 @@ jobs:
         with:
           python-version: "3.12"
           free-disk-space: "true"
+          rust-cache-key: performance-3.12
+          rust-cache-workspaces: . -> target/performance-py3.12
 
       - name: Prune unused Docker images
         if: runner.os == 'Linux'
@@ -99,8 +112,11 @@ jobs:
           POSTGRES_PASSWORD: pass
           POSTGRES_DATABASE: nautilus
 
+      - name: Set compile jobs from cache state
+        run: bash scripts/ci/set-cargo-build-jobs.sh
+
       - name: Run Rust tests
-        run: make cargo-test
+        run: make cargo-test NEXTEST_PROFILE=ci
 
       # TODO: Add nautilus-persistence once required test data available
       - name: Run Rust benchmarks crate-by-crate
@@ -110,6 +126,10 @@ jobs:
           CARGO_PROFILE_BENCH_DEBUG: 0
           CARGO_PROFILE_BENCH_INCREMENTAL: false
         run: make cargo-ci-benches
+
+      # Temporary: fail fast on rare runner worktree corruption while we isolate the root cause
+      - name: Verify immutable CI inputs (pre-wheel build)
+        run: bash scripts/ci/verify-ci-inputs.sh pre-wheel-build
 
       - name: Build and install wheel
         uses: ./.github/actions/common-wheel-build
@@ -121,7 +141,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -euxo pipefail
-          rm -rf target || true
+          rm -rf "$CARGO_TARGET_DIR" target || true
           rm -rf ~/.cargo/registry ~/.cargo/git || true
           uv cache prune || true
           rm -rf dist build || true
@@ -129,7 +149,7 @@ jobs:
       # Run codspeed once only
       - name: Run benchmarks
         # https://github.com/CodSpeedHQ/action
-        uses: CodSpeedHQ/action@9a74b6ba663684052277e8f342b5eb99c7442a03 # v4.10.5
+        uses: CodSpeedHQ/action@4deb3275dd364fb96fb074c953133d29ec96f80f # v4.10.6
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           mode: instrumentation

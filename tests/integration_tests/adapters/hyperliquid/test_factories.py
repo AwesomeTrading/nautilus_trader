@@ -17,6 +17,7 @@ import pytest
 
 from nautilus_trader.adapters.hyperliquid.config import HyperliquidDataClientConfig
 from nautilus_trader.adapters.hyperliquid.config import HyperliquidExecClientConfig
+from nautilus_trader.adapters.hyperliquid.enums import HyperliquidProductType
 
 
 class TestHyperliquidDataClientConfig:
@@ -61,6 +62,21 @@ class TestHyperliquidDataClientConfig:
         # Assert
         assert config.http_proxy_url == "http://proxy:8080"
 
+    def test_with_product_types(self):
+        # Arrange & Act
+        config = HyperliquidDataClientConfig(
+            product_types=(
+                HyperliquidProductType.PERP,
+                HyperliquidProductType.PERP_HIP3,
+            ),
+        )
+
+        # Assert
+        assert config.product_types == (
+            HyperliquidProductType.PERP,
+            HyperliquidProductType.PERP_HIP3,
+        )
+
 
 class TestHyperliquidExecClientConfig:
     def test_default_config(self):
@@ -91,6 +107,22 @@ class TestHyperliquidExecClientConfig:
         # Assert
         assert config.vault_address == "0xabcdef1234567890abcdef1234567890abcdef12"
 
+    def test_default_has_no_account_address(self):
+        # Arrange & Act
+        config = HyperliquidExecClientConfig()
+
+        # Assert
+        assert config.account_address is None
+
+    def test_with_account_address(self):
+        # Arrange & Act
+        config = HyperliquidExecClientConfig(
+            account_address="0xabcdef1234567890abcdef1234567890abcdef12",
+        )
+
+        # Assert
+        assert config.account_address == "0xabcdef1234567890abcdef1234567890abcdef12"
+
     def test_testnet_config(self):
         # Arrange & Act
         config = HyperliquidExecClientConfig(testnet=True)
@@ -119,6 +151,21 @@ class TestHyperliquidExecClientConfig:
 
         # Assert
         assert config.base_url_ws == "wss://custom.ws.com"
+
+    def test_with_product_types(self):
+        # Arrange & Act
+        config = HyperliquidExecClientConfig(
+            product_types=(
+                HyperliquidProductType.PERP,
+                HyperliquidProductType.PERP_HIP3,
+            ),
+        )
+
+        # Assert
+        assert config.product_types == (
+            HyperliquidProductType.PERP,
+            HyperliquidProductType.PERP_HIP3,
+        )
 
 
 class TestConfigValidation:

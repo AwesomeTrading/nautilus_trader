@@ -82,6 +82,7 @@ from nautilus_trader.core.datetime cimport maybe_dt_to_unix_nanos
 from nautilus_trader.core.datetime cimport unix_nanos_to_dt
 from nautilus_trader.core.rust.backtest cimport TimeEventAccumulator_API
 from nautilus_trader.core.rust.backtest cimport time_event_accumulator_advance_clock
+from nautilus_trader.core.rust.backtest cimport time_event_accumulator_clear
 from nautilus_trader.core.rust.backtest cimport time_event_accumulator_drop
 from nautilus_trader.core.rust.backtest cimport time_event_accumulator_new
 from nautilus_trader.core.rust.backtest cimport time_event_accumulator_peek_next_time
@@ -1224,6 +1225,10 @@ cdef class BacktestEngine:
         for exchange in self._venues.values():
             exchange.reset()
 
+        # Clear accumulated timer events from previous run
+        if self._accumulator._0 != NULL:
+            time_event_accumulator_clear(&self._accumulator)
+
         # Reset run IDs
         self._run_config_id = None
         self._run_id = None
@@ -1295,6 +1300,11 @@ cdef class BacktestEngine:
 
         """
         self.clear_data()
+
+        if self._accumulator._0 != NULL:
+            time_event_accumulator_drop(self._accumulator)
+            self._accumulator._0 = NULL
+
         self._kernel.dispose()
 
     def run(
@@ -3231,8 +3241,11 @@ cdef class SimulatedExchange:
             )
             return
 
-        balance.total = balance.total + adjustment
-        balance.free = balance.free + adjustment
+        cdef AccountBalance new_balance = AccountBalance(
+            total=balance.total.add(adjustment),
+            locked=balance.locked,
+            free=balance.free.add(adjustment),
+        )
 
         cdef list[MarginBalance] margins = []
         if account.is_margin_account:
@@ -3240,7 +3253,7 @@ cdef class SimulatedExchange:
 
         # Generate and handle event
         self.exec_client.generate_account_state(
-            balances=[balance],
+            balances=[new_balance],
             margins=margins,
             reported=True,
             ts_event=self._clock.timestamp_ns(),
@@ -3746,6 +3759,7 @@ cdef class SimulatedExchange:
             event_id=UUID4(),
             ts_event=ts_now,
             ts_init=ts_now,
+            is_quote_quantity=order.is_quote_quantity,
         )
         self.msgbus.send(endpoint="ExecEngine.process", msg=event)
 
@@ -3950,6 +3964,9 @@ cdef class OrderMatchingEngine:
         self._prev_bid_size_raw = 0
         self._prev_ask_price_raw = 0
         self._prev_ask_size_raw = 0
+        self._last_quote_bid_raw = 0
+        self._last_quote_ask_raw = 0
+        self._has_quote_context = False
         self._tob_initialized = False
 
         self._position_count = 0
@@ -3990,6 +4007,9 @@ cdef class OrderMatchingEngine:
         self._prev_bid_size_raw = 0
         self._prev_ask_price_raw = 0
         self._prev_ask_size_raw = 0
+        self._last_quote_bid_raw = 0
+        self._last_quote_ask_raw = 0
+        self._has_quote_context = False
         self._tob_initialized = False
 
         self._position_count = 0
@@ -4338,8 +4358,11 @@ cdef class OrderMatchingEngine:
             self._prev_ask_size_raw = depth._mem.asks[0].size.raw
             self._tob_initialized = True
 
-        self._book.apply_depth(depth)
+        self._last_quote_bid_raw = depth._mem.bids[0].price.raw
+        self._last_quote_ask_raw = depth._mem.asks[0].price.raw
+        self._has_quote_context = True
 
+        self._book.apply_depth(depth)
         self.iterate(depth.ts_init)
 
     cpdef void process_quote_tick(self, QuoteTick tick):
@@ -4385,6 +4408,16 @@ cdef class OrderMatchingEngine:
             )
 
         if self.book_type == BookType.L1_MBP:
+            # Stale update: skip book mutation and cache updates
+            if tick._mem.ts_event < orderbook_ts_last(&self._book._mem):
+                self._log.warning(
+                    f"Skipping stale quote: ts_event {tick.ts_event} < "
+                    f"book.ts_last {orderbook_ts_last(&self._book._mem)} "
+                    f"for {tick.instrument_id}",
+                )
+                self.iterate(tick.ts_init)
+                return
+
             if self._queue_position:
                 self._decrement_l1_queue_on_quote(
                     tick._mem.bid_price.raw,
@@ -4398,6 +4431,9 @@ cdef class OrderMatchingEngine:
                 self._prev_ask_size_raw = tick._mem.ask_size.raw
                 self._tob_initialized = True
             self._book.update_quote_tick(tick)
+            self._last_quote_bid_raw = tick._mem.bid_price.raw
+            self._last_quote_ask_raw = tick._mem.ask_price.raw
+            self._has_quote_context = True
 
         self.iterate(tick.ts_init)
 
@@ -4441,6 +4477,16 @@ cdef class OrderMatchingEngine:
             )
 
         if self.book_type == BookType.L1_MBP:
+            # Stale update: skip book mutation and trade execution
+            if tick._mem.ts_event < orderbook_ts_last(&self._book._mem):
+                self._log.warning(
+                    f"Skipping stale trade: ts_event {tick.ts_event} < "
+                    f"book.ts_last {orderbook_ts_last(&self._book._mem)} "
+                    f"for {tick.instrument_id}",
+                )
+                self.iterate(tick.ts_init)
+                return
+
             self._book.update_trade_tick(tick)
 
         cdef AggressorSide aggressor_side = AggressorSide.NO_AGGRESSOR
@@ -4466,18 +4512,18 @@ cdef class OrderMatchingEngine:
 
         aggressor_side = tick.aggressor_side
 
-        # Update the natural side based on trade
+        # Update the aggressor's side based on trade (no cross-contamination)
         if aggressor_side == AggressorSide.BUYER:
             if not self._core.is_ask_initialized or price_raw > self._core.ask_raw:
                 self._core.set_ask_raw(price_raw)
 
-            if not self._core.is_bid_initialized or price_raw < self._core.bid_raw:
+            if not self._core.is_bid_initialized:
                 self._core.set_bid_raw(price_raw)
         elif aggressor_side == AggressorSide.SELLER:
             if not self._core.is_bid_initialized or price_raw < self._core.bid_raw:
                 self._core.set_bid_raw(price_raw)
 
-            if not self._core.is_ask_initialized or price_raw > self._core.ask_raw:
+            if not self._core.is_ask_initialized:
                 self._core.set_ask_raw(price_raw)
         elif aggressor_side == AggressorSide.NO_AGGRESSOR:
             if not self._core.is_bid_initialized or price_raw <= self._core.bid_raw:
@@ -4519,13 +4565,25 @@ cdef class OrderMatchingEngine:
         self._last_trade_size = None
         self._trade_consumption = 0
 
-        if aggressor_side == AggressorSide.SELLER and price_raw < original_ask:
-            self._core.set_ask_raw(original_ask)
-        elif aggressor_side == AggressorSide.BUYER and price_raw > original_bid:
-            self._core.set_bid_raw(original_bid)
-        elif aggressor_side == AggressorSide.NO_AGGRESSOR:
-            self._core.set_bid_raw(original_bid)
-            self._core.set_ask_raw(original_ask)
+        # Restore the non-aggressor side after temporary trade price override.
+        # For L2/L3 books the book has independent depth so restore from originals.
+        # For L1_MBP restore from the last quote values (not originals, which are
+        # polluted by iterate's L1 book sync). Without quotes, skip the restore
+        # so the core tracks the latest trade price.
+        if self.book_type == BookType.L1_MBP:
+            if self._has_quote_context:
+                if aggressor_side == AggressorSide.SELLER:
+                    self._core.set_ask_raw(self._last_quote_ask_raw)
+                elif aggressor_side == AggressorSide.BUYER:
+                    self._core.set_bid_raw(self._last_quote_bid_raw)
+        else:
+            if aggressor_side == AggressorSide.SELLER and price_raw < original_ask:
+                self._core.set_ask_raw(original_ask)
+            elif aggressor_side == AggressorSide.BUYER and price_raw > original_bid:
+                self._core.set_bid_raw(original_bid)
+            elif aggressor_side == AggressorSide.NO_AGGRESSOR:
+                self._core.set_bid_raw(original_bid)
+                self._core.set_ask_raw(original_ask)
 
     cpdef void process_bar(self, Bar bar):
         """
@@ -4841,6 +4899,9 @@ cdef class OrderMatchingEngine:
             tick._mem.ask_size = ask_close_size._mem
 
         self._book.update_quote_tick(tick)
+        self._last_quote_bid_raw = tick._mem.bid_price.raw
+        self._last_quote_ask_raw = tick._mem.ask_price.raw
+        self._has_quote_context = True
         self.iterate(tick.ts_init)
 
     # -- TRADING COMMANDS -----------------------------------------------------------------------------
@@ -7966,6 +8027,7 @@ cdef class OrderMatchingEngine:
             event_id=UUID4(),
             ts_event=ts_now,
             ts_init=ts_now,
+            is_quote_quantity=order.is_quote_quantity,
         )
         self.msgbus.send(endpoint="ExecEngine.process", msg=event)
 

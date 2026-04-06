@@ -19,7 +19,9 @@ mod common;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use nautilus_betfair::{data::BetfairDataClient, provider::NavigationFilter};
+use nautilus_betfair::{
+    config::BetfairDataConfig, data::BetfairDataClient, provider::NavigationFilter,
+};
 use nautilus_common::{
     clients::DataClient,
     live::runner::set_data_event_sender,
@@ -56,6 +58,7 @@ fn create_test_data_client(
         http_client,
         test_credential(),
         plain_stream_config(stream_port),
+        BetfairDataConfig::default(),
         NavigationFilter::default(),
         currency,
         None,
@@ -131,12 +134,8 @@ async fn test_data_client_subscribe_sends_market_subscription() {
     let server = tokio::spawn(async move {
         let (mut reader, write_half) = accept_and_auth(&listener).await;
 
-        // Skip auth line, capture marketSubscription
+        // Capture the marketSubscription sent after the initial auth handshake
         let mut line = String::new();
-        tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut line)
-            .await
-            .unwrap();
-        line.clear();
         tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut line)
             .await
             .unwrap();
@@ -184,6 +183,89 @@ async fn test_data_client_subscribe_sends_market_subscription() {
 
     client.disconnect().await.unwrap();
     let _ = server.await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_data_client_deduplicates_same_market_subscription() {
+    let (addr, _state) = start_mock_http().await;
+    let (stream_port, listener) = start_mock_stream().await;
+    let (mut client, _rx) = create_test_data_client(addr, stream_port);
+
+    let server = tokio::spawn(async move {
+        let (mut reader, write_half) = accept_and_auth(&listener).await;
+
+        let mut first_line = String::new();
+        tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut first_line)
+            .await
+            .unwrap();
+
+        let mut second_line = String::new();
+        let second_result = tokio::time::timeout(
+            Duration::from_millis(500),
+            tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut second_line),
+        )
+        .await;
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        drop(write_half);
+
+        (
+            first_line.trim().to_string(),
+            matches!(second_result, Ok(Ok(bytes)) if bytes > 0),
+        )
+    });
+
+    client.connect().await.unwrap();
+
+    let first_instrument_id = nautilus_betfair::common::parse::make_instrument_id(
+        "1.180294978",
+        6146434,
+        rust_decimal::Decimal::ZERO,
+    );
+    let second_instrument_id = nautilus_betfair::common::parse::make_instrument_id(
+        "1.180294978",
+        40273293,
+        rust_decimal::Decimal::ZERO,
+    );
+
+    let first_cmd = SubscribeBookDeltas::new(
+        first_instrument_id,
+        BookType::L2_MBP,
+        None,
+        Some(Venue::from("BETFAIR")),
+        UUID4::new(),
+        nautilus_core::UnixNanos::default(),
+        None,
+        false,
+        None,
+        None,
+    );
+    let second_cmd = SubscribeBookDeltas::new(
+        second_instrument_id,
+        BookType::L2_MBP,
+        None,
+        Some(Venue::from("BETFAIR")),
+        UUID4::new(),
+        nautilus_core::UnixNanos::default(),
+        None,
+        false,
+        None,
+        None,
+    );
+
+    client.subscribe_book_deltas(&first_cmd).unwrap();
+    client.subscribe_book_deltas(&second_cmd).unwrap();
+
+    let (first_msg, saw_second_message) = server.await.unwrap();
+    let json: Value = serde_json::from_str(&first_msg).unwrap();
+    assert_eq!(json["op"], "marketSubscription");
+    assert!(
+        !saw_second_message,
+        "Expected only one subscription for the same market"
+    );
+
+    client.disconnect().await.unwrap();
 }
 
 #[rstest]
@@ -272,5 +354,182 @@ async fn test_mcm_handler_emits_trades() {
     assert!(found_trade, "Expected Trade event from MCM with trd field");
 
     client.disconnect().await.unwrap();
+    let _ = server.await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_data_client_handles_heartbeat_gracefully() {
+    let (addr, _state) = start_mock_http().await;
+    let (stream_port, listener) = start_mock_stream().await;
+    let (mut client, mut rx) = create_test_data_client(addr, stream_port);
+
+    let heartbeat_fixture = load_fixture("stream/mcm_HEARTBEAT.json");
+    let server = tokio::spawn(async move {
+        let (_reader, mut write_half) = accept_and_auth(&listener).await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        tokio::io::AsyncWriteExt::write_all(
+            &mut write_half,
+            format!("{}\r\n", heartbeat_fixture.trim()).as_bytes(),
+        )
+        .await
+        .unwrap();
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        drop(write_half);
+    });
+
+    client.connect().await.unwrap();
+    while rx.try_recv().is_ok() {}
+
+    // Heartbeats should not produce data events
+    let result = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+    assert!(
+        result.is_err(),
+        "Expected no data events after heartbeat, found: {result:?}"
+    );
+
+    client.disconnect().await.unwrap();
+    let _ = server.await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_data_client_emits_instrument_status_on_market_definition() {
+    let (addr, _state) = start_mock_http().await;
+    let (stream_port, listener) = start_mock_stream().await;
+    let (mut client, mut rx) = create_test_data_client(addr, stream_port);
+
+    let md_fixture = load_fixture("stream/mcm_UPDATE_md.json");
+    let server = tokio::spawn(async move {
+        let (_reader, mut write_half) = accept_and_auth(&listener).await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // First send populates the instruments map from the market definition
+        let msg = format!("{}\r\n", md_fixture.trim());
+        tokio::io::AsyncWriteExt::write_all(&mut write_half, msg.as_bytes())
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Second send finds instruments in the map and emits InstrumentStatus
+        tokio::io::AsyncWriteExt::write_all(&mut write_half, msg.as_bytes())
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        drop(write_half);
+    });
+
+    client.connect().await.unwrap();
+    while rx.try_recv().is_ok() {}
+
+    let mut found_status = false;
+    for _ in 0..20 {
+        match tokio::time::timeout(Duration::from_secs(3), rx.recv()).await {
+            Ok(Some(DataEvent::InstrumentStatus(_))) => {
+                found_status = true;
+                break;
+            }
+            Ok(Some(_)) => {}
+            _ => break,
+        }
+    }
+
+    assert!(
+        found_status,
+        "Expected InstrumentStatus event from market definition with status"
+    );
+
+    client.disconnect().await.unwrap();
+    let _ = server.await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_data_client_handles_sub_image_snapshot() {
+    let (addr, _state) = start_mock_http().await;
+    let (stream_port, listener) = start_mock_stream().await;
+    let (mut client, mut rx) = create_test_data_client(addr, stream_port);
+
+    let sub_image_fixture = load_fixture("stream/mcm_SUB_IMAGE.json");
+    let server = tokio::spawn(async move {
+        let (_reader, mut write_half) = accept_and_auth(&listener).await;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        tokio::io::AsyncWriteExt::write_all(
+            &mut write_half,
+            format!("{}\r\n", sub_image_fixture.trim()).as_bytes(),
+        )
+        .await
+        .unwrap();
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        drop(write_half);
+    });
+
+    client.connect().await.unwrap();
+    while rx.try_recv().is_ok() {}
+
+    let mut found_deltas = false;
+    let mut found_instrument = false;
+    for _ in 0..30 {
+        match tokio::time::timeout(Duration::from_secs(3), rx.recv()).await {
+            Ok(Some(DataEvent::Data(Data::Deltas(_)))) => {
+                found_deltas = true;
+
+                if found_instrument {
+                    break;
+                }
+            }
+            Ok(Some(DataEvent::Instrument(_))) => {
+                found_instrument = true;
+
+                if found_deltas {
+                    break;
+                }
+            }
+            Ok(Some(_)) => {}
+            _ => break,
+        }
+    }
+
+    assert!(
+        found_deltas,
+        "Expected Deltas events from SUB_IMAGE snapshot"
+    );
+    assert!(
+        found_instrument,
+        "Expected Instrument events from SUB_IMAGE market definition"
+    );
+
+    client.disconnect().await.unwrap();
+    let _ = server.await;
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_data_client_reset_clears_state() {
+    let (addr, _state) = start_mock_http().await;
+    let (stream_port, listener) = start_mock_stream().await;
+    let (mut client, _rx) = create_test_data_client(addr, stream_port);
+
+    let server = tokio::spawn(async move {
+        let (_reader, write_half) = accept_and_auth(&listener).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        drop(write_half);
+    });
+
+    client.connect().await.unwrap();
+    assert!(client.is_connected());
+
+    client.reset().unwrap();
+    assert!(client.is_disconnected());
+
     let _ = server.await;
 }

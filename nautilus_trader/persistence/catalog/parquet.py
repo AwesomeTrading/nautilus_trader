@@ -47,7 +47,6 @@ from nautilus_trader.core.datetime import maybe_dt_to_unix_nanos
 from nautilus_trader.core.datetime import time_object_to_dt
 from nautilus_trader.core.datetime import unix_nanos_to_iso8601
 from nautilus_trader.core.inspect import is_nautilus_class
-from nautilus_trader.core.message import Event
 from nautilus_trader.core.nautilus_pyo3 import DataBackendSession
 from nautilus_trader.core.nautilus_pyo3 import NautilusDataType
 from nautilus_trader.model.data import Bar
@@ -79,6 +78,14 @@ NautilusRustDataType = Union[  # noqa: UP007 (mypy does not like pipe operators)
     nautilus_pyo3.TradeTick,
     nautilus_pyo3.Bar,
 ]
+
+
+# Rust custom data types that have been registered via ensure_custom_data_registered
+# and can be queried through the DataFusion/Rust backend using add_custom_file.
+# Types listed here must have compatible Arrow schemas between their Python and Rust
+# encoders, and must be written with the Rust encoder for the Rust read path to work.
+# Custom data is returned as Python lists (not FFI capsules) from the Rust backend.
+_RUST_CUSTOM_DATA_TYPES: set[str] = {"BinanceBar"}
 
 
 class FeatherFile(NamedTuple):
@@ -241,10 +248,12 @@ class ParquetDataCatalog(BaseDataCatalog):
 
     def write_data(
         self,
-        data: list[Data | Event] | list[NautilusRustDataType],
+        data: list,
         start: int | None = None,
         end: int | None = None,
-        skip_disjoint_check: bool = False,
+        data_cls: type | None = None,
+        identifier: str | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Write the given `data` to the catalog.
@@ -252,6 +261,9 @@ class ParquetDataCatalog(BaseDataCatalog):
         The function categorizes the data based on their class name and, when applicable, their
         associated instrument ID. It then delegates the actual writing process to the
         `write_chunk` method.
+
+        When `data` is empty but `start`, `end`, and `data_cls` are provided, extends existing
+        parquet file names to record the gap (parquet-specific behavior).
 
         Parameters
         ----------
@@ -261,8 +273,12 @@ class ParquetDataCatalog(BaseDataCatalog):
             The start timestamp for the data chunk.
         end : int, optional
             The end timestamp for the data chunk.
-        skip_disjoint_check : bool, default False
-            If True, skip the disjoint intervals check.
+        data_cls : type, optional
+            Data class for the empty-data case (e.g. when recording a gap).
+        identifier : str, optional
+            Identifier (e.g. instrument_id or bar_type string) for the empty-data case.
+        **kwargs : Any
+            Additional implementation-specific keyword arguments (e.g. skip_disjoint_check).
 
         Warnings
         --------
@@ -275,6 +291,8 @@ class ParquetDataCatalog(BaseDataCatalog):
          - Instrument-specific data should have either an `instrument_id` attribute or be an instance of `Instrument`.
          - The `Bar` class is treated as a special case, being grouped based on its `bar_type` attribute.
          - The input data list must be non-empty, and all data items must be of the appropriate class type.
+         - Pass ``skip_disjoint_check=True`` in ``**kwargs`` to skip the disjoint-intervals check when writing
+           (e.g. when consolidating or re-writing chunks where you manage intervals explicitly).
 
         Raises
         ------
@@ -282,6 +300,16 @@ class ParquetDataCatalog(BaseDataCatalog):
             If data of the same type is not monotonically increasing (or non-decreasing) based on `ts_init`.
 
         """
+        skip_disjoint_check: bool = kwargs.pop("skip_disjoint_check", False)
+
+        if len(data) == 0 and start is not None and end is not None and data_cls is not None:
+            self.extend_file_name(
+                data_cls=data_cls,
+                identifier=identifier,
+                start=start,
+                end=end,
+            )
+            return
 
         def identifier_function(obj: Any) -> tuple[str, str | None]:
             if isinstance(obj, CustomData):
@@ -1610,8 +1638,8 @@ class ParquetDataCatalog(BaseDataCatalog):
                 Bar,
                 MarkPriceUpdate,
             )
-            and files is None
-        ):  # Rust backend doesn't support custom files yet
+            or self._is_rust_custom_data(data_cls)
+        ) and files is None:
             data = self._query_rust(
                 data_cls=data_cls,
                 identifiers=identifiers,
@@ -1632,8 +1660,7 @@ class ParquetDataCatalog(BaseDataCatalog):
                 **kwargs,
             )
 
-        if not is_nautilus_class(data_cls):
-            # Special handling for generic data
+        if not is_nautilus_class(data_cls) and data and isinstance(data[0], Data):
             metadata = kwargs.get("metadata")
 
             if callable(metadata):
@@ -1671,10 +1698,16 @@ class ParquetDataCatalog(BaseDataCatalog):
         )
         result = session.to_query_result()
 
-        # Gather data
+        # Gather data (chunks are either PyCapsule for built-in types
+        # or list for custom data types returned as pyo3 CustomData)
         data = []
         for chunk in result:
-            data.extend(capsule_to_list(chunk))
+            if isinstance(chunk, list):
+                for item in chunk:
+                    inner = item.data if hasattr(item, "data") else item
+                    data.append(data_cls.from_dict(inner.to_dict()))  # type: ignore[attr-defined]
+            else:
+                data.extend(capsule_to_list(chunk))
 
         if data_cls == OrderBookDeltas:
             # Batch process deltas into `OrderBookDeltas`, will warn
@@ -1749,7 +1782,16 @@ class ParquetDataCatalog(BaseDataCatalog):
             If the data class is not supported by the Rust backend.
 
         """
-        data_type: NautilusDataType = ParquetDataCatalog._nautilus_data_cls_to_data_type(data_cls)
+        data_type: NautilusDataType | None = ParquetDataCatalog._nautilus_data_cls_to_data_type(
+            data_cls,
+        )
+        custom_type_name: str | None = data_cls.__name__ if data_type is None else None
+
+        if data_type is None and custom_type_name is None:
+            raise RuntimeError(
+                f"unsupported `data_cls` for Rust parquet, was {data_cls.__name__}",
+            )
+
         file_prefix = class_to_filename(data_cls)
 
         if session is None:
@@ -1771,6 +1813,7 @@ class ParquetDataCatalog(BaseDataCatalog):
                     start=start,
                     end=end,
                     where=where,
+                    custom_type_name=custom_type_name,
                 )
         else:
             # Use directory-based registration for efficiency. DataFusion handles
@@ -1791,6 +1834,7 @@ class ParquetDataCatalog(BaseDataCatalog):
                     start=start,
                     end=end,
                     where=where,
+                    custom_type_name=custom_type_name,
                 )
 
         return session
@@ -1799,11 +1843,12 @@ class ParquetDataCatalog(BaseDataCatalog):
         self,
         session: DataBackendSession,
         file: str,
-        data_type: NautilusDataType,
+        data_type: NautilusDataType | None,
         file_prefix: str,
         start: TimestampLike | None = None,
         end: TimestampLike | None = None,
         where: str | None = None,
+        custom_type_name: str | None = None,
     ) -> None:
         # Extract identifier from file path and filename to create meaningful table names
         identifier = file.split("/")[-2]
@@ -1819,17 +1864,22 @@ class ParquetDataCatalog(BaseDataCatalog):
         )
 
         file_uri = self._build_file_uri(file)
-        session.add_file(data_type, table, file_uri, query)
+
+        if custom_type_name is not None:
+            session.add_custom_file(custom_type_name, table, file_uri, query)
+        else:
+            session.add_file(data_type, table, file_uri, query)  # type: ignore[arg-type]
 
     def _register_directory_table(
         self,
         session: DataBackendSession,
         directory: str,
-        data_type: NautilusDataType,
+        data_type: NautilusDataType | None,
         file_prefix: str,
         start: TimestampLike | None = None,
         end: TimestampLike | None = None,
         where: str | None = None,
+        custom_type_name: str | None = None,
     ) -> None:
         # Extract identifier from directory path
         identifier = directory.split("/")[-1]
@@ -1847,7 +1897,11 @@ class ParquetDataCatalog(BaseDataCatalog):
         file_uri = self._build_file_uri(directory)
         if not file_uri.endswith("/"):
             file_uri = file_uri + "/"
-        session.add_file(data_type, table, file_uri, query)
+
+        if custom_type_name is not None:
+            session.add_custom_file(custom_type_name, table, file_uri, query)
+        else:
+            session.add_file(data_type, table, file_uri, query)  # type: ignore[arg-type]
 
     def _build_file_uri(self, file: str) -> str:
         """
@@ -1932,7 +1986,7 @@ class ParquetDataCatalog(BaseDataCatalog):
             )
 
     @staticmethod
-    def _nautilus_data_cls_to_data_type(data_cls: type) -> NautilusDataType:
+    def _nautilus_data_cls_to_data_type(data_cls: type) -> NautilusDataType | None:
         if data_cls in (OrderBookDelta, OrderBookDeltas):
             return NautilusDataType.OrderBookDelta
         elif data_cls == OrderBookDepth10:
@@ -1946,7 +2000,14 @@ class ParquetDataCatalog(BaseDataCatalog):
         elif data_cls == MarkPriceUpdate:
             return NautilusDataType.MarkPriceUpdate
         else:
-            raise RuntimeError(f"unsupported `data_cls` for Rust parquet, was {data_cls.__name__}")
+            return None
+
+    @staticmethod
+    def _is_rust_custom_data(data_cls: type) -> bool:
+        """
+        Check if data_cls is a Rust custom data type with Arrow support.
+        """
+        return hasattr(data_cls, "__name__") and data_cls.__name__ in _RUST_CUSTOM_DATA_TYPES
 
     def _build_query(
         self,
@@ -2492,6 +2553,7 @@ class ParquetDataCatalog(BaseDataCatalog):
             use_ts_event_for_ts_init=use_ts_event_for_ts_init,
             convert_bar_type_to_external=True,
         )
+
         if table is None or len(table) == 0:
             return
 
@@ -2578,6 +2640,7 @@ class ParquetDataCatalog(BaseDataCatalog):
         is_sorted = pc.all(
             pc.greater_equal(ts_col.slice(1), ts_col.slice(0, len(ts_col) - 1)),
         ).as_py()
+
         if not is_sorted:
             sort_indices = pc.sort_indices(
                 table,
@@ -2652,8 +2715,10 @@ class ParquetDataCatalog(BaseDataCatalog):
                 "QuoteTick": QuoteTick,
                 "TradeTick": TradeTick,
                 "Bar": Bar,
-            }.get(data_cls.__name__, data_cls.__name__)
-            data = cython_cls.from_pyo3_list(data)
+            }.get(data_cls.__name__)
+
+            if cython_cls is not None:
+                data = cython_cls.from_pyo3_list(data)
 
         return data
 

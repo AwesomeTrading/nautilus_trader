@@ -14,11 +14,6 @@
 
 //! WebSocket message types for Bybit public and private channels.
 
-use nautilus_model::{
-    data::{Data, FundingRateUpdate, IndexPriceUpdate, MarkPriceUpdate, OrderBookDeltas},
-    events::{AccountState, OrderCancelRejected, OrderModifyRejected, OrderRejected},
-    reports::{FillReport, OrderStatusReport, PositionStatusReport},
-};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,8 +22,9 @@ use ustr::Ustr;
 use crate::{
     common::{
         enums::{
-            BybitCancelType, BybitCreateType, BybitExecType, BybitOrderSide, BybitOrderStatus,
-            BybitOrderType, BybitProductType, BybitStopOrderType, BybitTimeInForce, BybitTpSlMode,
+            BybitCancelType, BybitCreateType, BybitExecType, BybitMarketUnit, BybitOrderSide,
+            BybitOrderStatus, BybitOrderType, BybitPositionSide, BybitPositionStatus,
+            BybitProductType, BybitSmpType, BybitStopOrderType, BybitTimeInForce, BybitTpSlMode,
             BybitTriggerDirection, BybitTriggerType, BybitWsOrderRequestOp,
         },
         parse::{
@@ -44,6 +40,8 @@ use crate::{
 pub struct BybitSubscription {
     pub op: BybitWsOperation,
     pub args: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub req_id: Option<String>,
 }
 
 /// Bybit WebSocket authentication message.
@@ -53,15 +51,49 @@ pub struct BybitAuthRequest {
     pub args: Vec<serde_json::Value>,
 }
 
-/// High level message emitted by the Bybit WebSocket client.
+/// Wire-level frame deserialized from a Bybit WebSocket message.
+///
+/// Represents the raw protocol layer before the handler converts data
+/// variants into the public [`BybitWsMessage`] API.
 #[derive(Debug, Clone)]
-pub enum BybitWsMessage {
-    /// Generic response (subscribe/auth acknowledgement).
-    Response(BybitWsResponse),
+pub enum BybitWsFrame {
     /// Authentication acknowledgement.
     Auth(BybitWsAuthResponse),
     /// Subscription acknowledgement.
     Subscription(BybitWsSubscriptionMsg),
+    /// Order operation response (create/amend/cancel) from trade WebSocket.
+    OrderResponse(BybitWsOrderResponse),
+    /// Error response from the venue.
+    ErrorResponse(BybitWsResponse),
+    /// Orderbook snapshot or delta.
+    Orderbook(BybitWsOrderbookDepthMsg),
+    /// Trade updates.
+    Trade(BybitWsTradeMsg),
+    /// Kline updates.
+    Kline(BybitWsKlineMsg),
+    /// Linear/inverse ticker update.
+    TickerLinear(BybitWsTickerLinearMsg),
+    /// Option ticker update.
+    TickerOption(BybitWsTickerOptionMsg),
+    /// Order updates from private channel.
+    AccountOrder(BybitWsAccountOrderMsg),
+    /// Execution/fill updates from private channel.
+    AccountExecution(BybitWsAccountExecutionMsg),
+    /// Wallet/balance updates from private channel.
+    AccountWallet(BybitWsAccountWalletMsg),
+    /// Position updates from private channel.
+    AccountPosition(BybitWsAccountPositionMsg),
+    /// Payload that does not match any known frame type.
+    Unknown(Value),
+    /// Notification that the underlying connection reconnected.
+    Reconnected,
+}
+
+/// High-level message emitted by the Bybit WebSocket client.
+#[derive(Debug, Clone)]
+pub enum BybitWsMessage {
+    /// Authentication acknowledgement.
+    Auth(BybitWsAuthResponse),
     /// Order operation response (create/amend/cancel) from trade WebSocket.
     OrderResponse(BybitWsOrderResponse),
     /// Orderbook snapshot or delta.
@@ -84,56 +116,18 @@ pub enum BybitWsMessage {
     AccountPosition(BybitWsAccountPositionMsg),
     /// Error received from the venue or client lifecycle.
     Error(BybitWebSocketError),
-    /// Raw message payload that does not yet have a typed representation.
-    Raw(Value),
     /// Notification that the underlying connection reconnected.
     Reconnected,
-    /// Explicit pong event (text-based heartbeat acknowledgement).
-    Pong,
-}
-
-/// Nautilus domain message emitted after parsing Bybit WebSocket events.
-///
-/// This enum contains fully-parsed Nautilus domain objects ready for consumption
-/// by the Python layer without additional processing.
-#[derive(Debug, Clone)]
-pub enum NautilusWsMessage {
-    /// Market data (trades, quotes, bars).
-    Data(Vec<Data>),
-    /// Order book deltas.
-    Deltas(OrderBookDeltas),
-    /// Mark price updates from ticker stream.
-    MarkPrices(Vec<MarkPriceUpdate>),
-    /// Index price updates from ticker stream.
-    IndexPrices(Vec<IndexPriceUpdate>),
-    /// Funding rate updates from ticker stream.
-    FundingRates(Vec<FundingRateUpdate>),
-    /// Order status reports from account stream or operation responses.
-    OrderStatusReports(Vec<OrderStatusReport>),
-    /// Fill reports from executions.
-    FillReports(Vec<FillReport>),
-    /// Position status report.
-    PositionStatusReport(PositionStatusReport),
-    /// Account state from wallet updates.
-    AccountState(AccountState),
-    /// Order rejected event (from failed order submission).
-    OrderRejected(OrderRejected),
-    /// Order cancel rejected event (from failed cancel operation).
-    OrderCancelRejected(OrderCancelRejected),
-    /// Order modify rejected event (from failed amend operation).
-    OrderModifyRejected(OrderModifyRejected),
-    /// Error from venue or client.
-    Error(BybitWebSocketError),
-    /// WebSocket reconnected notification.
-    Reconnected,
-    /// Authentication successful notification.
-    Authenticated,
 }
 
 /// Represents an error event surfaced by the WebSocket client.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.bybit")
+)]
 pub struct BybitWebSocketError {
     /// Error/return code reported by Bybit.
     pub code: i64,
@@ -261,7 +255,7 @@ pub struct BybitWsPlaceOrderParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_leverage: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub market_unit: Option<String>,
+    pub market_unit: Option<BybitMarketUnit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -279,7 +273,7 @@ pub struct BybitWsPlaceOrderParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trigger_direction: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tpsl_mode: Option<String>,
+    pub tpsl_mode: Option<BybitTpSlMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -300,6 +294,10 @@ pub struct BybitWsPlaceOrderParams {
     pub sl_limit_price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tp_limit_price: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_iv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mmp: Option<bool>,
 }
 
 /// Parameters for amending an order via WebSocket.
@@ -326,6 +324,8 @@ pub struct BybitWsAmendOrderParams {
     pub tp_trigger_by: Option<BybitTriggerType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sl_trigger_by: Option<BybitTriggerType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_iv: Option<String>,
 }
 
 /// Parameters for canceling an order via WebSocket.
@@ -369,7 +369,7 @@ pub struct BybitWsBatchPlaceItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_leverage: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub market_unit: Option<String>,
+    pub market_unit: Option<BybitMarketUnit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -387,7 +387,7 @@ pub struct BybitWsBatchPlaceItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trigger_direction: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tpsl_mode: Option<String>,
+    pub tpsl_mode: Option<BybitTpSlMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub take_profit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -408,6 +408,10 @@ pub struct BybitWsBatchPlaceItem {
     pub sl_limit_price: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tp_limit_price: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_iv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mmp: Option<bool>,
 }
 
 /// Arguments for batch place order operation via WebSocket.
@@ -623,6 +627,8 @@ pub struct BybitWsTickerLinear {
     pub ask1_price: Option<String>,
     #[serde(default)]
     pub ask1_size: Option<String>,
+    #[serde(default)]
+    pub funding_interval_hour: Option<String>,
 }
 
 /// Envelope for linear ticker updates.
@@ -768,7 +774,7 @@ pub struct BybitWsAccountOrder {
     pub sl_limit_price: String,
     pub close_on_trigger: bool,
     pub place_type: Ustr,
-    pub smp_type: Ustr,
+    pub smp_type: BybitSmpType,
     pub smp_group: i32,
     pub smp_order_id: Ustr,
     pub fee_currency: Ustr,
@@ -899,7 +905,7 @@ pub struct BybitWsAccountWalletMsg {
 pub struct BybitWsAccountPosition {
     pub category: BybitProductType,
     pub symbol: Ustr,
-    pub side: Ustr,
+    pub side: BybitPositionSide,
     pub size: String,
     pub position_idx: i32,
     pub trade_mode: i32,
@@ -922,7 +928,7 @@ pub struct BybitWsAccountPosition {
     pub position_mm_by_mp: String,
     pub liq_price: String,
     pub bust_price: String,
-    pub tpsl_mode: Ustr,
+    pub tpsl_mode: BybitTpSlMode,
     pub take_profit: String,
     pub stop_loss: String,
     pub trailing_stop: String,
@@ -930,7 +936,7 @@ pub struct BybitWsAccountPosition {
     pub session_avg_price: String,
     pub cur_realised_pnl: String,
     pub cum_realised_pnl: String,
-    pub position_status: Ustr,
+    pub position_status: BybitPositionStatus,
     pub adl_rank_indicator: i32,
     pub created_time: String,
     pub updated_time: String,
@@ -956,6 +962,103 @@ mod tests {
 
     use super::*;
     use crate::common::testing::load_test_json;
+
+    #[rstest]
+    fn serialize_place_params_includes_order_iv_when_set() {
+        let params = BybitWsPlaceOrderParams {
+            category: BybitProductType::Option,
+            symbol: Ustr::from("BTC-30JUN25-100000-C"),
+            side: BybitOrderSide::Buy,
+            order_type: BybitOrderType::Limit,
+            qty: "0.1".to_string(),
+            is_leverage: None,
+            market_unit: None,
+            price: Some("500".to_string()),
+            time_in_force: Some(BybitTimeInForce::Gtc),
+            order_link_id: Some("test-1".to_string()),
+            reduce_only: None,
+            close_on_trigger: None,
+            trigger_price: None,
+            trigger_by: None,
+            trigger_direction: None,
+            tpsl_mode: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            sl_trigger_price: None,
+            tp_trigger_price: None,
+            sl_order_type: None,
+            tp_order_type: None,
+            sl_limit_price: None,
+            tp_limit_price: None,
+            order_iv: Some("0.80".to_string()),
+            mmp: Some(true),
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        assert!(json.contains("\"orderIv\":\"0.80\""));
+        assert!(json.contains("\"mmp\":true"));
+    }
+
+    #[rstest]
+    fn serialize_place_params_omits_order_iv_when_none() {
+        let params = BybitWsPlaceOrderParams {
+            category: BybitProductType::Linear,
+            symbol: Ustr::from("BTCUSDT"),
+            side: BybitOrderSide::Buy,
+            order_type: BybitOrderType::Limit,
+            qty: "0.01".to_string(),
+            is_leverage: None,
+            market_unit: None,
+            price: Some("50000".to_string()),
+            time_in_force: Some(BybitTimeInForce::Gtc),
+            order_link_id: None,
+            reduce_only: None,
+            close_on_trigger: None,
+            trigger_price: None,
+            trigger_by: None,
+            trigger_direction: None,
+            tpsl_mode: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            sl_trigger_price: None,
+            tp_trigger_price: None,
+            sl_order_type: None,
+            tp_order_type: None,
+            sl_limit_price: None,
+            tp_limit_price: None,
+            order_iv: None,
+            mmp: None,
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        assert!(!json.contains("orderIv"));
+        assert!(!json.contains("mmp"));
+    }
+
+    #[rstest]
+    fn serialize_amend_params_includes_order_iv_when_set() {
+        let params = BybitWsAmendOrderParams {
+            category: BybitProductType::Option,
+            symbol: Ustr::from("BTC-30JUN25-100000-C"),
+            order_id: None,
+            order_link_id: Some("test-1".to_string()),
+            qty: None,
+            price: None,
+            trigger_price: None,
+            take_profit: None,
+            stop_loss: None,
+            tp_trigger_by: None,
+            sl_trigger_by: None,
+            order_iv: Some("0.90".to_string()),
+        };
+
+        let json = serde_json::to_string(&params).unwrap();
+        assert!(json.contains("\"orderIv\":\"0.90\""));
+    }
 
     #[rstest]
     fn deserialize_account_order_frame_uses_enums() {

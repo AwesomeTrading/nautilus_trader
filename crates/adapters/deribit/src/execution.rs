@@ -39,7 +39,7 @@ use nautilus_core::{
 use nautilus_live::{ExecutionClientCore, ExecutionEventEmitter};
 use nautilus_model::{
     accounts::AccountAny,
-    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce, TriggerType},
+    enums::{AccountType, OmsType, OrderSide, OrderType, TimeInForce},
     events::OrderEventAny,
     identifiers::{AccountId, ClientId, Venue},
     orders::{Order, OrderAny},
@@ -49,7 +49,10 @@ use nautilus_model::{
 use tokio::task::JoinHandle;
 
 use crate::{
-    common::consts::{DERIBIT_VENUE, DERIBIT_WS_HEARTBEAT_SECS},
+    common::{
+        consts::{DERIBIT_VENUE, DERIBIT_WS_HEARTBEAT_SECS},
+        enums::resolve_trigger_type,
+    },
     config::DeribitExecClientConfig,
     http::{client::DeribitHttpClient, models::DeribitCurrency, query::GetOrderStateParams},
     websocket::{
@@ -108,7 +111,7 @@ impl DeribitExecutionClient {
             config.base_url_ws.clone(),
             config.api_key.clone(),
             config.api_secret.clone(),
-            Some(DERIBIT_WS_HEARTBEAT_SECS),
+            DERIBIT_WS_HEARTBEAT_SECS,
             config.use_testnet,
         )
         .context("failed to create WebSocket client for execution")?;
@@ -161,18 +164,17 @@ impl DeribitExecutionClient {
         }
     }
 
-    /// Builds Deribit order parameters from a Nautilus order.
-    fn build_order_params(order: &dyn Order) -> DeribitOrderParams {
+    // Rejects unsupported order types and time-in-force values
+    fn build_order_params(order: &dyn Order) -> anyhow::Result<DeribitOrderParams> {
         let order_type = match order.order_type() {
             OrderType::Limit => "limit",
             OrderType::Market => "market",
             OrderType::StopLimit => "stop_limit",
             OrderType::StopMarket => "stop_market",
+            OrderType::LimitIfTouched => "take_limit",
+            OrderType::MarketIfTouched => "take_market",
             other => {
-                log::warn!(
-                    "Unsupported order type {other:?} for Deribit, falling back to limit order"
-                );
-                "limit"
+                anyhow::bail!("Unsupported order type {other:?} for Deribit");
             }
         }
         .to_string();
@@ -192,10 +194,7 @@ impl DeribitExecutionClient {
                     "good_til_day"
                 }
                 other => {
-                    log::warn!(
-                        "Unsupported time_in_force {other:?} for Deribit, falling back to GTC"
-                    );
-                    "good_til_cancelled"
+                    anyhow::bail!("Unsupported time_in_force {other:?} for Deribit");
                 }
             }
             .to_string(),
@@ -205,18 +204,9 @@ impl DeribitExecutionClient {
         // Deribit's `good_til_day` expires at end of trading session (8 UTC).
         let valid_until = None;
 
-        // Map trigger type for stop orders
-        let trigger = order.trigger_type().and_then(|tt| {
-            match tt {
-                TriggerType::LastPrice => Some("last_price".to_string()),
-                TriggerType::MarkPrice => Some("mark_price".to_string()),
-                TriggerType::IndexPrice => Some("index_price".to_string()),
-                TriggerType::Default => Some("last_price".to_string()), // Deribit default
-                _ => None,
-            }
-        });
+        let trigger = resolve_trigger_type(order.trigger_type());
 
-        DeribitOrderParams {
+        Ok(DeribitOrderParams {
             instrument_name: order.instrument_id().symbol.to_string(),
             amount: order.quantity().as_decimal(),
             order_type,
@@ -242,19 +232,33 @@ impl DeribitExecutionClient {
             trigger,
             max_show: None,
             valid_until,
-        }
+        })
     }
 
     /// Submits a single order to Deribit.
     ///
     /// This is the core submission logic shared by `submit_order` and `submit_order_list`.
-    fn submit_single_order(&self, order: &OrderAny, task_name: &'static str) -> anyhow::Result<()> {
+    fn submit_single_order(&self, order: &OrderAny, task_name: &'static str) {
         if order.is_closed() {
             log::warn!("Cannot submit closed order {}", order.client_order_id());
-            return Ok(());
+            return;
         }
 
-        let params = Self::build_order_params(order);
+        let params = match Self::build_order_params(order) {
+            Ok(params) => params,
+            Err(e) => {
+                let ts_event = self.clock.get_time_ns();
+                self.emitter.emit_order_rejected_event(
+                    order.strategy_id(),
+                    order.instrument_id(),
+                    order.client_order_id(),
+                    &format!("{e}"),
+                    ts_event,
+                    false,
+                );
+                return;
+            }
+        };
         let client_order_id = order.client_order_id();
         let trader_id = order.trader_id();
         let strategy_id = order.strategy_id();
@@ -295,8 +299,6 @@ impl DeribitExecutionClient {
 
             Ok(())
         });
-
-        Ok(())
     }
 
     /// Spawns a stream handler to dispatch WebSocket messages to the execution engine.
@@ -422,8 +424,8 @@ impl ExecutionClient for DeribitExecutionClient {
                 }
 
                 log::info!("Fetched {} {product_type:?} instruments", instruments.len());
-                self.ws_client.cache_instruments(instruments.clone());
-                self.http_client.cache_instruments(instruments);
+                self.ws_client.cache_instruments(&instruments);
+                self.http_client.cache_instruments(&instruments);
             }
             self.core.set_instruments_initialized();
         }
@@ -543,7 +545,7 @@ impl ExecutionClient for DeribitExecutionClient {
             return Ok(None);
         }
 
-        // If client_order_id is provided, search through open orders
+        // If client_order_id is provided, search open then closed orders
         if let Some(client_order_id) = &cmd.client_order_id {
             let reports = self
                 .http_client
@@ -552,7 +554,7 @@ impl ExecutionClient for DeribitExecutionClient {
                     cmd.instrument_id,
                     None,
                     None,
-                    true, // open_only for efficiency
+                    false, // search all orders, not just open
                 )
                 .await?;
 
@@ -593,7 +595,7 @@ impl ExecutionClient for DeribitExecutionClient {
 
         // Filter by venue_order_id if provided
         if let Some(venue_order_id) = &cmd.venue_order_id {
-            reports.retain(|r| r.venue_order_id.to_string() == venue_order_id.to_string());
+            reports.retain(|r| r.venue_order_id == *venue_order_id);
         }
 
         Ok(reports)
@@ -726,7 +728,8 @@ impl ExecutionClient for DeribitExecutionClient {
             .order(&cmd.client_order_id)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Order not found: {}", cmd.client_order_id))?;
-        self.submit_single_order(&order, "submit_order")
+        self.submit_single_order(&order, "submit_order");
+        Ok(())
     }
 
     fn submit_order_list(&self, cmd: &SubmitOrderList) -> anyhow::Result<()> {
@@ -747,7 +750,7 @@ impl ExecutionClient for DeribitExecutionClient {
         // Deribit doesn't have native batch order submission
         // Loop through and submit each order individually using shared helper
         for order in &orders {
-            self.submit_single_order(order, "submit_order_list_item")?;
+            self.submit_single_order(order, "submit_order_list_item");
         }
 
         Ok(())
@@ -1123,6 +1126,7 @@ fn dispatch_ws_message(message: NautilusWsMessage, emitter: &ExecutionEventEmitt
         | NautilusWsMessage::Instrument(_)
         | NautilusWsMessage::InstrumentStatus(_)
         | NautilusWsMessage::FundingRates(_)
+        | NautilusWsMessage::OptionGreeks(_)
         | NautilusWsMessage::Raw(_) => {
             // Data messages are handled by the data client, not execution
             log::trace!("Ignoring data message in execution client");

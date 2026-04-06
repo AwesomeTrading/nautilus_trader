@@ -24,7 +24,7 @@ use super::{
     CryptoOption, betting::BettingInstrument, binary_option::BinaryOption, cfd::Cfd,
     commodity::Commodity, futures_spread::FuturesSpread, index_instrument::IndexInstrument,
     option_spread::OptionSpread, perpetual_contract::PerpetualContract,
-    synthetic::SyntheticInstrument,
+    synthetic::SyntheticInstrument, tokenized_asset::TokenizedAsset,
 };
 use crate::{
     enums::{AssetClass, OptionKind},
@@ -40,7 +40,7 @@ impl Default for SyntheticInstrument {
     fn default() -> Self {
         let btc_binance = InstrumentId::from("BTC.BINANCE");
         let ltc_binance = InstrumentId::from("LTC.BINANCE");
-        let formula = "(BTC.BINANCE + LTC.BINANCE) / 2.0".to_string();
+        let formula = "(BTC.BINANCE + LTC.BINANCE) / 2.0";
         Self::new(
             Symbol::new("BTC-LTC"),
             2,
@@ -884,6 +884,37 @@ pub fn binary_option() -> BinaryOption {
         None,
         None,
         None,
+        None, // info
+        UnixNanos::default(),
+        UnixNanos::default(),
+    )
+}
+
+#[fixture]
+pub fn tokenized_asset_aaplx() -> TokenizedAsset {
+    TokenizedAsset::new(
+        InstrumentId::from("AAPLx/USD.KRAKEN"),
+        Symbol::from("AAPLxUSD"),
+        AssetClass::Equity,
+        Currency::get_or_create_crypto("AAPLx"),
+        Currency::from("USD"),
+        None,
+        2,
+        4,
+        Price::from("0.01"),
+        Quantity::from("0.0001"),
+        None,
+        None,
+        None,
+        Some(Quantity::from("0.0001")),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(dec!(-0.0002)),
+        Some(dec!(0.001)),
         None, // info
         UnixNanos::default(),
         UnixNanos::default(),

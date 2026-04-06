@@ -421,7 +421,7 @@ fn test_net_position_when_no_positions_returns_zero(
 
 #[rstest]
 fn test_net_exposures_when_no_positions_returns_none(portfolio: Portfolio, venue: Venue) {
-    let result = portfolio.net_exposures(&venue);
+    let result = portfolio.net_exposures(&venue, None);
     assert!(result.is_none());
 }
 
@@ -460,7 +460,7 @@ fn test_is_completely_flat_when_no_positions_returns_true(portfolio: Portfolio) 
 
 #[rstest]
 fn test_open_value_when_no_account_returns_none(portfolio: Portfolio, venue: Venue) {
-    let result = portfolio.net_exposures(&venue);
+    let result = portfolio.net_exposures(&venue, None);
     assert!(result.is_none());
 }
 
@@ -725,6 +725,63 @@ fn test_order_accept_updates_margin_init(
 }
 
 #[rstest]
+fn test_initialize_orders_cash_account_with_base_currency() {
+    let instrument = InstrumentAny::CurrencyPair(default_fx_ccy(
+        Symbol::from("AUD/USD"),
+        Some(Venue::from("SIM")),
+    ));
+
+    let mut cache = Cache::new(None, None);
+    cache.add_instrument(instrument.clone()).unwrap();
+
+    let cache = Rc::new(RefCell::new(cache));
+    let clock = Rc::new(RefCell::new(TestClock::new()));
+    let mut portfolio = Portfolio::new(cache.clone(), clock, None);
+
+    // Cash account with base_currency set (like Polymarket with USDC)
+    let account_state = AccountState::new(
+        AccountId::from("SIM-001"),
+        AccountType::Cash,
+        vec![AccountBalance::new(
+            Money::new(1000.0, Currency::USD()),
+            Money::new(0.0, Currency::USD()),
+            Money::new(1000.0, Currency::USD()),
+        )],
+        vec![],
+        true,
+        UUID4::new(),
+        0.into(),
+        0.into(),
+        Some(Currency::USD()),
+    );
+    portfolio.update_account(&account_state);
+
+    // Create and accept an open order
+    let mut order = OrderTestBuilder::new(OrderType::Limit)
+        .instrument_id(instrument.id())
+        .side(OrderSide::Buy)
+        .quantity(Quantity::from("100"))
+        .price(Price::new(0.50, 2))
+        .build();
+
+    cache
+        .borrow_mut()
+        .add_order(order.clone(), None, None, true)
+        .unwrap();
+
+    let submitted = submit_order(&order);
+    order.apply(OrderEventAny::Submitted(submitted)).unwrap();
+    cache.borrow_mut().update_order(&order).unwrap();
+
+    let accepted = accept_order(&order);
+    order.apply(OrderEventAny::Accepted(accepted)).unwrap();
+    cache.borrow_mut().update_order(&order).unwrap();
+
+    // This previously panicked with "RefCell already mutably borrowed"
+    portfolio.initialize_orders();
+}
+
+#[rstest]
 fn test_update_positions(mut portfolio: Portfolio, instrument_audusd: InstrumentAny) {
     let account_state = get_cash_account(None);
     portfolio.update_account(&account_state);
@@ -790,12 +847,12 @@ fn test_update_positions(mut portfolio: Portfolio, instrument_audusd: Instrument
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position1, OmsType::Hedging)
+        .add_position(&position1, OmsType::Hedging)
         .unwrap();
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position2, OmsType::Hedging)
+        .add_position(&position2, OmsType::Hedging)
         .unwrap();
     portfolio.cache().borrow_mut().add_quote(last).unwrap();
     portfolio.update_quote_tick(&last);
@@ -832,7 +889,7 @@ fn test_opening_one_long_position_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position.clone(), OmsType::Hedging)
+        .add_position(&position, OmsType::Hedging)
         .unwrap();
 
     let position_opened = get_open_position(&position);
@@ -840,7 +897,7 @@ fn test_opening_one_long_position_updates_portfolio(
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::test_default())
+            .net_exposures(&Venue::test_default(), None)
             .unwrap()
             .get(&Currency::USD())
             .unwrap()
@@ -864,7 +921,7 @@ fn test_opening_one_long_position_updates_portfolio(
     );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_audusd.id())
+            .net_exposure(&instrument_audusd.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(10510.0)
@@ -916,7 +973,7 @@ fn test_opening_one_long_position_updates_portfolio_with_bar(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position.clone(), OmsType::Hedging)
+        .add_position(&position, OmsType::Hedging)
         .unwrap();
 
     let position_opened = get_open_position(&position);
@@ -924,7 +981,7 @@ fn test_opening_one_long_position_updates_portfolio_with_bar(
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::test_default())
+            .net_exposures(&Venue::test_default(), None)
             .unwrap()
             .get(&Currency::USD())
             .unwrap()
@@ -948,7 +1005,7 @@ fn test_opening_one_long_position_updates_portfolio_with_bar(
     );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_audusd.id())
+            .net_exposure(&instrument_audusd.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(10510.0)
@@ -1021,7 +1078,7 @@ fn test_opening_one_short_position_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position.clone(), OmsType::Hedging)
+        .add_position(&position, OmsType::Hedging)
         .unwrap();
 
     let position_opened = get_open_position(&position);
@@ -1029,7 +1086,7 @@ fn test_opening_one_short_position_updates_portfolio(
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::test_default())
+            .net_exposures(&Venue::test_default(), None)
             .unwrap()
             .get(&Currency::USD())
             .unwrap()
@@ -1054,7 +1111,7 @@ fn test_opening_one_short_position_updates_portfolio(
     );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_audusd.id())
+            .net_exposure(&instrument_audusd.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(31020.0)
@@ -1142,7 +1199,7 @@ fn test_opening_positions_with_multi_asset_account(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position.clone(), OmsType::Hedging)
+        .add_position(&position, OmsType::Hedging)
         .unwrap();
 
     let position_opened = get_open_position(&position);
@@ -1150,7 +1207,7 @@ fn test_opening_positions_with_multi_asset_account(
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::from("BITMEX"))
+            .net_exposures(&Venue::from("BITMEX"), None)
             .unwrap()
             .get(&Currency::ETH())
             .unwrap()
@@ -1174,7 +1231,7 @@ fn test_opening_positions_with_multi_asset_account(
     // );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_ethusdt.id())
+            .net_exposure(&instrument_ethusdt.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(26.59574468)
@@ -1229,7 +1286,7 @@ fn test_market_value_when_insufficient_data_for_xrate_returns_none(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position, OmsType::Hedging)
+        .add_position(&position, OmsType::Hedging)
         .unwrap();
     portfolio
         .cache()
@@ -1246,7 +1303,7 @@ fn test_market_value_when_insufficient_data_for_xrate_returns_none(
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::from("BITMEX"))
+            .net_exposures(&Venue::from("BITMEX"), None)
             .unwrap()
             .get(&Currency::ETH())
             .unwrap()
@@ -1367,19 +1424,19 @@ fn test_opening_several_positions_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position1, OmsType::Hedging)
+        .add_position(&position1, OmsType::Hedging)
         .unwrap();
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position2, OmsType::Hedging)
+        .add_position(&position2, OmsType::Hedging)
         .unwrap();
     portfolio.update_position(&PositionEvent::PositionOpened(position_opened1));
     portfolio.update_position(&PositionEvent::PositionOpened(position_opened2));
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::test_default())
+            .net_exposures(&Venue::test_default(), None)
             .unwrap()
             .get(&Currency::USD())
             .unwrap()
@@ -1411,14 +1468,14 @@ fn test_opening_several_positions_updates_portfolio(
     );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_audusd.id())
+            .net_exposure(&instrument_audusd.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(100000.0)
     );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_gbpusd.id())
+            .net_exposure(&instrument_gbpusd.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(100000.0)
@@ -1512,7 +1569,7 @@ fn test_modifying_position_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position1.clone(), OmsType::Hedging)
+        .add_position(&position1, OmsType::Hedging)
         .unwrap();
     let position_opened1 = get_open_position(&position1);
     portfolio.update_position(&PositionEvent::PositionOpened(position_opened1));
@@ -1552,7 +1609,7 @@ fn test_modifying_position_updates_portfolio(
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::test_default())
+            .net_exposures(&Venue::test_default(), None)
             .unwrap()
             .get(&Currency::USD())
             .unwrap()
@@ -1584,7 +1641,7 @@ fn test_modifying_position_updates_portfolio(
     );
     assert_eq!(
         portfolio
-            .net_exposure(&instrument_audusd.id())
+            .net_exposure(&instrument_audusd.id(), None)
             .unwrap()
             .as_decimal(),
         dec!(100000.0)
@@ -1619,7 +1676,7 @@ fn test_modifying_position_updates_portfolio(
         portfolio.realized_pnls(&Venue::from("BINANCE")),
         AHashMap::new()
     );
-    assert_eq!(portfolio.net_exposures(&Venue::from("BINANCE")), None);
+    assert_eq!(portfolio.net_exposures(&Venue::from("BINANCE"), None), None);
 }
 
 #[rstest]
@@ -1681,7 +1738,7 @@ fn test_closing_position_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position.clone(), OmsType::Hedging)
+        .add_position(&position, OmsType::Hedging)
         .unwrap();
 
     // Add quote tick for market data (needed for PnL calculations)
@@ -1747,7 +1804,7 @@ fn test_closing_position_updates_portfolio(
     portfolio.update_position(&PositionEvent::PositionClosed(position_closed));
 
     // Check portfolio state after position closure
-    let net_exposures = portfolio.net_exposures(&Venue::test_default());
+    let net_exposures = portfolio.net_exposures(&Venue::test_default(), None);
     assert!(net_exposures.is_none() || net_exposures.unwrap().is_empty()); // No net exposures
     let unrealized_pnls_venue = portfolio.unrealized_pnls(&Venue::test_default());
     // Unrealized PnL should be zero for closed positions
@@ -1777,7 +1834,7 @@ fn test_closing_position_updates_portfolio(
         AHashMap::new()
     ); // No maintenance margins
 
-    let net_exposure = portfolio.net_exposure(&instrument_audusd.id());
+    let net_exposure = portfolio.net_exposure(&instrument_audusd.id(), None);
     assert!(net_exposure.is_none() || net_exposure.unwrap().as_decimal() == dec!(0.0)); // Zero net exposure
 
     let unrealized_pnl = portfolio.unrealized_pnl(&instrument_audusd.id());
@@ -1947,17 +2004,17 @@ fn test_several_positions_with_different_instruments_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position1.clone(), OmsType::Hedging)
+        .add_position(&position1, OmsType::Hedging)
         .unwrap();
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position2.clone(), OmsType::Hedging)
+        .add_position(&position2, OmsType::Hedging)
         .unwrap();
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position3.clone(), OmsType::Hedging)
+        .add_position(&position3, OmsType::Hedging)
         .unwrap();
 
     let position_opened1 = get_open_position(&position1);
@@ -1973,13 +2030,13 @@ fn test_several_positions_with_different_instruments_updates_portfolio(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position3.clone(), OmsType::Hedging)
+        .add_position(&position3, OmsType::Hedging)
         .unwrap();
     portfolio.update_position(&PositionEvent::PositionClosed(position_closed3));
 
     assert_eq!(
         portfolio
-            .net_exposures(&Venue::test_default())
+            .net_exposures(&Venue::test_default(), None)
             .unwrap()
             .get(&Currency::USD())
             .unwrap()
@@ -2058,7 +2115,7 @@ fn test_realized_pnl_with_missing_exchange_rate_returns_zero_instead_of_panic(
     );
 
     let position = Position::new(&instrument_audusd, filled);
-    cache.add_position(position, OmsType::Netting).unwrap();
+    cache.add_position(&position, OmsType::Netting).unwrap();
     drop(cache);
 
     let result = portfolio.realized_pnl(&instrument_audusd.id());
@@ -2120,7 +2177,7 @@ fn test_portfolio_realized_pnl_with_position_snapshots_netting_oms(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position1.clone(), OmsType::Netting)
+        .add_position(&position1, OmsType::Netting)
         .unwrap();
 
     // Close the position
@@ -2203,7 +2260,7 @@ fn test_portfolio_realized_pnl_with_position_snapshots_netting_oms(
     portfolio
         .cache()
         .borrow_mut()
-        .add_position(position2, OmsType::Netting)
+        .add_position(&position2, OmsType::Netting)
         .unwrap();
 
     // Calculate realized PnL - should include snapshot PnL
@@ -2217,4 +2274,218 @@ fn test_portfolio_realized_pnl_with_position_snapshots_netting_oms(
     assert_eq!(pnl.currency, Currency::USD());
     // The exact value depends on the 3-case rule implementation
     // For active position with snapshots, it should use the last snapshot PnL
+}
+
+fn make_fill_for_account(
+    instrument: &InstrumentAny,
+    account_id: AccountId,
+    side: OrderSide,
+    quantity: Quantity,
+    price: Price,
+    position_id: PositionId,
+) -> OrderFilled {
+    OrderFilled::new(
+        TraderId::test_default(),
+        StrategyId::test_default(),
+        instrument.id(),
+        ClientOrderId::new(UUID4::new().to_string()),
+        VenueOrderId::new(UUID4::new().to_string()),
+        account_id,
+        TradeId::new(UUID4::new().to_string()),
+        side,
+        OrderType::Market,
+        quantity,
+        price,
+        instrument.settlement_currency(),
+        LiquiditySide::Taker,
+        UUID4::new(),
+        UnixNanos::default(),
+        UnixNanos::default(),
+        false,
+        Some(position_id),
+        None,
+    )
+}
+
+#[rstest]
+fn test_net_exposures_filters_by_account_id(
+    mut portfolio: Portfolio,
+    instrument_audusd: InstrumentAny,
+) {
+    let account_a = AccountId::new("SIM-001");
+    let account_b = AccountId::new("SIM-002");
+
+    let state_a = get_cash_account(Some("SIM-001"));
+    let state_b = get_cash_account(Some("SIM-002"));
+    portfolio.update_account(&state_a);
+    portfolio.update_account(&state_b);
+
+    let last = get_quote_tick(&instrument_audusd, 0.8, 0.801, 1.0, 1.0);
+    portfolio.cache().borrow_mut().add_quote(last).unwrap();
+    portfolio.update_quote_tick(&last);
+
+    // Account A: long 100_000 AUD/USD
+    let fill_a = make_fill_for_account(
+        &instrument_audusd,
+        account_a,
+        OrderSide::Buy,
+        Quantity::from("100000"),
+        Price::new(0.8, instrument_audusd.price_precision()),
+        PositionId::new("P-A"),
+    );
+    let pos_a = Position::new(&instrument_audusd, fill_a);
+    portfolio
+        .cache()
+        .borrow_mut()
+        .add_position(&pos_a, OmsType::Hedging)
+        .unwrap();
+    let opened_a = get_open_position(&pos_a);
+    portfolio.update_position(&PositionEvent::PositionOpened(opened_a));
+
+    // Account B: long 50_000 AUD/USD
+    let fill_b = make_fill_for_account(
+        &instrument_audusd,
+        account_b,
+        OrderSide::Buy,
+        Quantity::from("50000"),
+        Price::new(0.8, instrument_audusd.price_precision()),
+        PositionId::new("P-B"),
+    );
+    let pos_b = Position::new(&instrument_audusd, fill_b);
+    portfolio
+        .cache()
+        .borrow_mut()
+        .add_position(&pos_b, OmsType::Hedging)
+        .unwrap();
+    let opened_b = get_open_position(&pos_b);
+    portfolio.update_position(&PositionEvent::PositionOpened(opened_b));
+
+    let venue = Venue::test_default();
+
+    // No filter: both accounts aggregated
+    let all = portfolio.net_exposures(&venue, None);
+    assert!(all.is_some());
+    let all_usd = all.unwrap().get(&Currency::USD()).unwrap().as_f64();
+
+    // Filter account A only
+    let a_only = portfolio.net_exposures(&venue, Some(&account_a));
+    assert!(a_only.is_some());
+    let a_usd = a_only.unwrap().get(&Currency::USD()).unwrap().as_f64();
+
+    // Filter account B only
+    let b_only = portfolio.net_exposures(&venue, Some(&account_b));
+    assert!(b_only.is_some());
+    let b_usd = b_only.unwrap().get(&Currency::USD()).unwrap().as_f64();
+
+    // Account A exposure > Account B exposure (100k vs 50k)
+    assert!(a_usd > b_usd);
+    // Combined should equal the sum
+    assert!((all_usd - (a_usd + b_usd)).abs() < 1.0);
+}
+
+#[rstest]
+fn test_net_exposure_filters_by_account_id(
+    mut portfolio: Portfolio,
+    instrument_audusd: InstrumentAny,
+) {
+    let account_a = AccountId::new("SIM-001");
+    let account_b = AccountId::new("SIM-002");
+
+    let state_a = get_cash_account(Some("SIM-001"));
+    let state_b = get_cash_account(Some("SIM-002"));
+    portfolio.update_account(&state_a);
+    portfolio.update_account(&state_b);
+
+    let last = get_quote_tick(&instrument_audusd, 0.8, 0.801, 1.0, 1.0);
+    portfolio.cache().borrow_mut().add_quote(last).unwrap();
+    portfolio.update_quote_tick(&last);
+
+    // Account A: long 100_000
+    let fill_a = make_fill_for_account(
+        &instrument_audusd,
+        account_a,
+        OrderSide::Buy,
+        Quantity::from("100000"),
+        Price::new(0.8, instrument_audusd.price_precision()),
+        PositionId::new("P-A2"),
+    );
+    let pos_a = Position::new(&instrument_audusd, fill_a);
+    portfolio
+        .cache()
+        .borrow_mut()
+        .add_position(&pos_a, OmsType::Hedging)
+        .unwrap();
+    let opened_a = get_open_position(&pos_a);
+    portfolio.update_position(&PositionEvent::PositionOpened(opened_a));
+
+    // Account B: long 50_000
+    let fill_b = make_fill_for_account(
+        &instrument_audusd,
+        account_b,
+        OrderSide::Buy,
+        Quantity::from("50000"),
+        Price::new(0.8, instrument_audusd.price_precision()),
+        PositionId::new("P-B2"),
+    );
+    let pos_b = Position::new(&instrument_audusd, fill_b);
+    portfolio
+        .cache()
+        .borrow_mut()
+        .add_position(&pos_b, OmsType::Hedging)
+        .unwrap();
+    let opened_b = get_open_position(&pos_b);
+    portfolio.update_position(&PositionEvent::PositionOpened(opened_b));
+
+    let instrument_id = instrument_audusd.id();
+
+    // No filter: both accounts
+    let all = portfolio.net_exposure(&instrument_id, None).unwrap();
+
+    // Filter account A
+    let a_only = portfolio
+        .net_exposure(&instrument_id, Some(&account_a))
+        .unwrap();
+
+    // Filter account B
+    let b_only = portfolio
+        .net_exposure(&instrument_id, Some(&account_b))
+        .unwrap();
+
+    assert!(a_only.as_f64() > b_only.as_f64());
+    assert!((all.as_f64() - (a_only.as_f64() + b_only.as_f64())).abs() < 1.0);
+}
+
+#[rstest]
+fn test_net_exposures_with_nonexistent_account_returns_empty(
+    mut portfolio: Portfolio,
+    instrument_audusd: InstrumentAny,
+) {
+    let state = get_cash_account(Some("SIM-001"));
+    portfolio.update_account(&state);
+
+    let last = get_quote_tick(&instrument_audusd, 0.8, 0.801, 1.0, 1.0);
+    portfolio.cache().borrow_mut().add_quote(last).unwrap();
+    portfolio.update_quote_tick(&last);
+
+    let fill = make_fill_for_account(
+        &instrument_audusd,
+        AccountId::new("SIM-001"),
+        OrderSide::Buy,
+        Quantity::from("100000"),
+        Price::new(0.8, instrument_audusd.price_precision()),
+        PositionId::new("P-1"),
+    );
+    let pos = Position::new(&instrument_audusd, fill);
+    portfolio
+        .cache()
+        .borrow_mut()
+        .add_position(&pos, OmsType::Hedging)
+        .unwrap();
+    let opened = get_open_position(&pos);
+    portfolio.update_position(&PositionEvent::PositionOpened(opened));
+
+    // Query with an account that doesn't exist returns None
+    let bogus = AccountId::new("SIM-999");
+    let result = portfolio.net_exposures(&Venue::test_default(), Some(&bogus));
+    assert!(result.is_none());
 }

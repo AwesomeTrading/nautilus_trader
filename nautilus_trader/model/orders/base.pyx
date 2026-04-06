@@ -1063,6 +1063,7 @@ cdef class Order:
             if self._fsm.state == OrderStatus.PENDING_UPDATE:
                 self._fsm.trigger(self._previous_status)
             self._updated(event)
+            self.is_quote_quantity = event.is_quote_quantity
         elif isinstance(event, OrderTriggered):
             Condition.is_true(
                 (

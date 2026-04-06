@@ -13,7 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! Python bindings for the Rust `FeatherWriter` as `StreamingFeatherWriterV2`.
+//! Python bindings for the Rust `FeatherWriter` as `StreamingFeatherWriter`.
 
 use std::{
     cell::RefCell,
@@ -34,6 +34,7 @@ use nautilus_model::{
     },
     python::instruments::pyobject_to_instrument_any,
 };
+use object_store::ObjectStoreExt;
 use pyo3::{exceptions::PyIOError, prelude::*};
 
 use crate::{
@@ -45,15 +46,21 @@ use crate::{
 ///
 /// This provides a streaming writer of Nautilus objects into feather files with rotation
 /// capabilities, matching the interface of Python's `StreamingFeatherWriter`.
-#[pyclass(module = "nautilus_trader.core.nautilus_pyo3.persistence", unsendable)]
-pub struct StreamingFeatherWriterV2 {
+#[pyclass(
+    name = "StreamingFeatherWriter",
+    module = "nautilus_trader.core.nautilus_pyo3.persistence",
+    unsendable
+)]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.persistence")]
+pub struct PyStreamingFeatherWriter {
     writer: Rc<RefCell<FeatherWriter>>,
     handler: Option<ShareableMessageHandler>,
 }
 
 #[pymethods]
-impl StreamingFeatherWriterV2 {
-    /// Creates a new `StreamingFeatherWriterV2` instance.
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
+impl PyStreamingFeatherWriter {
+    /// Creates a new `StreamingFeatherWriter` instance.
     ///
     /// # Parameters
     ///
@@ -85,12 +92,12 @@ impl StreamingFeatherWriterV2 {
         flush_interval_ms=None,
         replace=false
     ))]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     pub fn new(
         path: String,
         cache: PyCache,
         clock: PyClock,
-        fs_protocol: Option<String>,
+        fs_protocol: Option<&str>,
         fs_storage_options: Option<HashMap<String, String>>,
         include_types: Option<Vec<String>>,
         rotation_mode: u8,
@@ -103,7 +110,7 @@ impl StreamingFeatherWriterV2 {
     ) -> PyResult<Self> {
         // Create object store from path
         // Use fs_protocol to construct the full path if it's a cloud protocol
-        let full_path = if let Some(protocol) = &fs_protocol {
+        let full_path = if let Some(protocol) = fs_protocol {
             if protocol != "file" && !path.contains("://") {
                 format!("{protocol}://{path}")
             } else {
@@ -229,7 +236,7 @@ impl StreamingFeatherWriterV2 {
     /// Unsubscribes from the message bus.
     pub fn unsubscribe(&mut self) -> PyResult<()> {
         if let Some(handler) = self.handler.take() {
-            FeatherWriter::unsubscribe_from_message_bus(handler);
+            FeatherWriter::unsubscribe_from_message_bus(&handler);
         }
         Ok(())
     }
@@ -241,6 +248,7 @@ impl StreamingFeatherWriterV2 {
     /// - `data`: The data object to write (must be a Nautilus data type from pyo3).
     ///
     /// FundingRateUpdate is intentionally not supported and will return an error.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn write(&self, py: Python, data: Py<PyAny>) -> PyResult<()> {
         // Try to convert from common pyo3 data types
         if let Ok(quote) = data.extract::<QuoteTick>(py) {

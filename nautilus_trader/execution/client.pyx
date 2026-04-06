@@ -64,6 +64,7 @@ from nautilus_trader.model.objects cimport Currency
 from nautilus_trader.model.objects cimport Money
 from nautilus_trader.model.objects cimport Price
 from nautilus_trader.model.objects cimport Quantity
+from nautilus_trader.model.orders.base cimport Order
 
 
 cdef class ExecutionClient(Component):
@@ -594,6 +595,7 @@ cdef class ExecutionClient(Component):
         Price trigger_price,
         uint64_t ts_event,
         bint venue_order_id_modified=False,
+        object is_quote_quantity=None,
     ):
         """
         Generate an `OrderUpdated` event and send it to the `ExecutionEngine`.
@@ -618,6 +620,9 @@ cdef class ExecutionClient(Component):
             UNIX timestamp (nanoseconds) when the order update event occurred.
         venue_order_id_modified : bool
             If the ID was modified for this event.
+        is_quote_quantity : bool, optional
+            Override for the quote quantity flag. If ``None``, preserves
+            the existing value from the cached order.
 
         """
         Condition.not_none(client_order_id, "client_order_id")
@@ -630,6 +635,16 @@ cdef class ExecutionClient(Component):
                 Condition.equal(existing, venue_order_id, "existing", "order.venue_order_id")
             else:
                 self._log.warning(f"{venue_order_id} does not match existing {repr(existing)}")
+
+        # Resolve is_quote_quantity: explicit override or preserve from cache
+        cdef bint resolved_is_quote_quantity = False
+
+        if is_quote_quantity is not None:
+            resolved_is_quote_quantity = is_quote_quantity
+        else:
+            existing_order = self._cache.order(client_order_id)
+            if existing_order is not None:
+                resolved_is_quote_quantity = existing_order.is_quote_quantity
 
         # Generate event
         cdef OrderUpdated updated = OrderUpdated(
@@ -645,6 +660,7 @@ cdef class ExecutionClient(Component):
             event_id=UUID4(),
             ts_event=ts_event,
             ts_init=self._clock.timestamp_ns(),
+            is_quote_quantity=resolved_is_quote_quantity,
         )
 
         self._send_order_event(updated)

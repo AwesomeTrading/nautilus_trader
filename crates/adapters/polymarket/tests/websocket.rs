@@ -56,6 +56,7 @@ const TEST_ASSET_ID_3: &str =
 struct TestServerState {
     connection_count: Arc<tokio::sync::Mutex<usize>>,
     subscribed_assets: Arc<tokio::sync::Mutex<Vec<String>>>,
+    received_market_payloads: Arc<tokio::sync::Mutex<Vec<Value>>>,
     received_user_auth: Arc<tokio::sync::Mutex<Option<Value>>>,
     drop_next_connection: Arc<AtomicBool>,
     ping_count: Arc<AtomicUsize>,
@@ -66,6 +67,7 @@ impl Default for TestServerState {
         Self {
             connection_count: Arc::new(tokio::sync::Mutex::new(0)),
             subscribed_assets: Arc::new(tokio::sync::Mutex::new(Vec::new())),
+            received_market_payloads: Arc::new(tokio::sync::Mutex::new(Vec::new())),
             received_user_auth: Arc::new(tokio::sync::Mutex::new(None)),
             drop_next_connection: Arc::new(AtomicBool::new(false)),
             ping_count: Arc::new(AtomicUsize::new(0)),
@@ -84,12 +86,7 @@ fn load_json(filename: &str) -> Value {
 }
 
 fn test_credential() -> Credential {
-    Credential::new(
-        "test_api_key".to_string(),
-        TEST_API_SECRET_B64,
-        "test_pass".to_string(),
-    )
-    .unwrap()
+    Credential::new("test_api_key", TEST_API_SECRET_B64, "test_pass".to_string()).unwrap()
 }
 
 async fn handle_market_upgrade(
@@ -136,12 +133,31 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<TestServerState>, is_us
                             break;
                         }
                     }
-                } else if payload.get("type").and_then(Value::as_str) == Some("market") {
+                } else if payload.get("type").and_then(Value::as_str) == Some("market")
+                    || payload.get("operation").and_then(Value::as_str).is_some()
+                {
+                    state
+                        .received_market_payloads
+                        .lock()
+                        .await
+                        .push(payload.clone());
+
                     if let Some(ids) = payload.get("assets_ids").and_then(Value::as_array) {
                         let mut assets = state.subscribed_assets.lock().await;
-                        for id in ids {
-                            if let Some(s) = id.as_str() {
-                                assets.push(s.to_string());
+                        match payload.get("operation").and_then(Value::as_str) {
+                            Some("unsubscribe") => {
+                                for id in ids {
+                                    if let Some(s) = id.as_str() {
+                                        assets.retain(|asset| asset != s);
+                                    }
+                                }
+                            }
+                            _ => {
+                                for id in ids {
+                                    if let Some(s) = id.as_str() {
+                                        assets.push(s.to_string());
+                                    }
+                                }
                             }
                         }
                     }
@@ -222,11 +238,28 @@ async fn wait_for_connection_count(state: &TestServerState, expected: usize, tim
     .await;
 }
 
+async fn wait_for_market_payload_count(
+    state: &TestServerState,
+    expected: usize,
+    timeout: Duration,
+) {
+    wait_until_async(
+        || {
+            let state = state.clone();
+            async move { state.received_market_payloads.lock().await.len() >= expected }
+        },
+        timeout,
+    )
+    .await;
+}
+
 #[rstest]
 #[tokio::test]
 async fn test_client_not_active_before_connect() {
-    let client =
-        PolymarketWebSocketClient::new_market(Some("ws://127.0.0.1:9999/ws/market".to_string()));
+    let client = PolymarketWebSocketClient::new_market(
+        Some("ws://127.0.0.1:9999/ws/market".to_string()),
+        true,
+    );
     assert!(!client.is_active());
 }
 
@@ -237,7 +270,7 @@ async fn test_market_client_connects_and_disconnects() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
 
     wait_for_connection_count(&state, 1, Duration::from_secs(5)).await;
@@ -254,7 +287,7 @@ async fn test_is_active_lifecycle() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
 
     assert!(!client.is_active(), "should not be active before connect");
 
@@ -283,7 +316,7 @@ async fn test_double_connect_is_idempotent() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("first connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -299,7 +332,7 @@ async fn test_double_connect_is_idempotent() {
 #[tokio::test]
 async fn test_url_accessor_returns_configured_url() {
     let url = "ws://127.0.0.1:9999/ws/market";
-    let client = PolymarketWebSocketClient::new_market(Some(url.to_string()));
+    let client = PolymarketWebSocketClient::new_market(Some(url.to_string()), true);
     assert_eq!(client.url(), url);
 }
 
@@ -310,7 +343,7 @@ async fn test_subscribe_market_sends_assets_ids() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -331,6 +364,71 @@ async fn test_subscribe_market_sends_assets_ids() {
     let assets = state.subscribed_assets.lock().await;
     assert!(assets.contains(&TEST_ASSET_ID.to_string()));
     assert!(assets.contains(&TEST_ASSET_ID_2.to_string()));
+
+    client.disconnect().await.expect("disconnect failed");
+}
+
+#[rstest]
+#[tokio::test]
+async fn test_subscribe_unsubscribe_subscribe_uses_initial_then_incremental_market_messages() {
+    let state = Arc::new(TestServerState::default());
+    let addr = start_ws_server(state.clone()).await;
+    let ws_url = format!("ws://{addr}/ws/market");
+
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
+    client.connect().await.expect("connect failed");
+    wait_until_active(&client, 2.0).await;
+
+    client
+        .subscribe_market(vec![TEST_ASSET_ID.to_string()])
+        .await
+        .expect("initial subscribe failed");
+
+    client
+        .unsubscribe_market(vec![TEST_ASSET_ID.to_string()])
+        .await
+        .expect("unsubscribe failed");
+
+    client
+        .subscribe_market(vec![TEST_ASSET_ID_2.to_string()])
+        .await
+        .expect("incremental subscribe failed");
+
+    wait_for_market_payload_count(&state, 3, Duration::from_secs(2)).await;
+
+    let payloads = state.received_market_payloads.lock().await.clone();
+    assert_eq!(
+        payloads.len(),
+        3,
+        "expected initial subscribe, unsubscribe, and incremental subscribe payloads"
+    );
+
+    assert_eq!(
+        payloads[0],
+        json!({
+            "assets_ids": [TEST_ASSET_ID],
+            "type": "market",
+            "custom_feature_enabled": true,
+        }),
+        "first market subscribe should use MarketInitialSubscribeRequest"
+    );
+    assert_eq!(
+        payloads[1],
+        json!({
+            "assets_ids": [TEST_ASSET_ID],
+            "operation": "unsubscribe",
+        }),
+        "unsubscribe should use MarketUnsubscribeRequest"
+    );
+    assert_eq!(
+        payloads[2],
+        json!({
+            "assets_ids": [TEST_ASSET_ID_2],
+            "operation": "subscribe",
+            "custom_feature_enabled": true,
+        }),
+        "second market subscribe should use MarketSubscribeRequest"
+    );
 
     client.disconnect().await.expect("disconnect failed");
 }
@@ -368,20 +466,25 @@ async fn test_subscribe_user_sends_auth_payload() {
         auth.get("passphrase").is_some(),
         "auth must contain 'passphrase'"
     );
-    assert!(
-        auth.get("timestamp").is_some(),
-        "auth must contain 'timestamp'"
-    );
     assert_eq!(
         auth.get("apiKey").unwrap().as_str().unwrap(),
         "test_api_key"
+    );
+    // WebSocket auth sends the raw API secret, not an HMAC signature
+    assert_eq!(
+        auth.get("secret").unwrap().as_str().unwrap(),
+        TEST_API_SECRET_B64
     );
     assert_eq!(
         auth.get("passphrase").unwrap().as_str().unwrap(),
         "test_pass"
     );
-    // nonce is always empty string
-    assert_eq!(auth.get("nonce").unwrap().as_str().unwrap(), "");
+    // No timestamp or nonce fields in WebSocket auth
+    assert!(
+        auth.get("timestamp").is_none(),
+        "auth must NOT contain 'timestamp'"
+    );
+    assert!(auth.get("nonce").is_none(), "auth must NOT contain 'nonce'");
 
     client.disconnect().await.expect("disconnect failed");
 }
@@ -393,7 +496,7 @@ async fn test_next_message_receives_market_book() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -450,7 +553,7 @@ async fn test_subscription_count_is_zero_before_subscribe() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -466,7 +569,7 @@ async fn test_subscription_count_increments_after_subscribe() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -496,7 +599,7 @@ async fn test_subscription_count_decrements_after_unsubscribe() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -540,7 +643,7 @@ async fn test_subscription_count_multiple_subscribe_calls() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -577,7 +680,7 @@ async fn test_subscription_count_unsubscribe_all() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -621,7 +724,7 @@ async fn test_unsubscribe_market_removes_assets_from_reconnect_set() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -684,7 +787,7 @@ async fn test_reconnect_resubscribes_all_market_assets() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 
@@ -836,7 +939,7 @@ async fn test_market_client_is_never_authenticated() {
     let addr = start_ws_server(state.clone()).await;
     let ws_url = format!("ws://{addr}/ws/market");
 
-    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url));
+    let mut client = PolymarketWebSocketClient::new_market(Some(ws_url), true);
     client.connect().await.expect("connect failed");
     wait_until_active(&client, 2.0).await;
 

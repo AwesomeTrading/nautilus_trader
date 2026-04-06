@@ -52,6 +52,10 @@ use crate::{
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.model", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct OrderBook {
     /// The instrument ID for the order book.
     pub instrument_id: InstrumentId,
@@ -608,7 +612,7 @@ impl OrderBook {
         &self,
         depth: Option<usize>,
         own_book: Option<&OwnOrderBook>,
-        status: Option<AHashSet<OrderStatus>>,
+        status: Option<&AHashSet<OrderStatus>>,
         accepted_buffer_ns: Option<u64>,
         now: Option<u64>,
     ) -> IndexMap<Decimal, Decimal> {
@@ -636,7 +640,7 @@ impl OrderBook {
         &self,
         depth: Option<usize>,
         own_book: Option<&OwnOrderBook>,
-        status: Option<AHashSet<OrderStatus>>,
+        status: Option<&AHashSet<OrderStatus>>,
         accepted_buffer_ns: Option<u64>,
         now: Option<u64>,
     ) -> IndexMap<Decimal, Decimal> {
@@ -667,7 +671,7 @@ impl OrderBook {
         &self,
         own_book: Option<&OwnOrderBook>,
         depth: Option<usize>,
-        status: Option<AHashSet<OrderStatus>>,
+        status: Option<&AHashSet<OrderStatus>>,
         accepted_buffer_ns: Option<u64>,
         now: Option<u64>,
     ) -> Self {
@@ -690,7 +694,7 @@ impl OrderBook {
         &self,
         own_book: Option<&OwnOrderBook>,
         depth: Option<usize>,
-        status: Option<AHashSet<OrderStatus>>,
+        status: Option<&AHashSet<OrderStatus>>,
         accepted_buffer_ns: Option<u64>,
         now: Option<u64>,
     ) -> Result<Self, BookViewError> {
@@ -703,8 +707,7 @@ impl OrderBook {
             ));
         }
 
-        let bids_map =
-            self.bids_filtered_as_map(depth, own_book, status.clone(), accepted_buffer_ns, now);
+        let bids_map = self.bids_filtered_as_map(depth, own_book, status, accepted_buffer_ns, now);
         let asks_map = self.asks_filtered_as_map(depth, own_book, status, accepted_buffer_ns, now);
 
         let mut filtered_book = Self::new(self.instrument_id, self.book_type);
@@ -760,7 +763,7 @@ impl OrderBook {
         group_size: Decimal,
         depth: Option<usize>,
         own_book: Option<&OwnOrderBook>,
-        status: Option<AHashSet<OrderStatus>>,
+        status: Option<&AHashSet<OrderStatus>>,
         accepted_buffer_ns: Option<u64>,
         now: Option<u64>,
     ) -> IndexMap<Decimal, Decimal> {
@@ -786,7 +789,7 @@ impl OrderBook {
         group_size: Decimal,
         depth: Option<usize>,
         own_book: Option<&OwnOrderBook>,
-        status: Option<AHashSet<OrderStatus>>,
+        status: Option<&AHashSet<OrderStatus>>,
         accepted_buffer_ns: Option<u64>,
         now: Option<u64>,
     ) -> IndexMap<Decimal, Decimal> {
@@ -1025,6 +1028,16 @@ impl OrderBook {
             return Err(InvalidBookOperation::Update(self.book_type));
         }
 
+        if quote.ts_event < self.ts_last {
+            log::warn!(
+                "Skipping stale quote: ts_event {} < ts_last {} (instrument_id={})",
+                quote.ts_event,
+                self.ts_last,
+                self.instrument_id
+            );
+            return Ok(());
+        }
+
         // Crossed quotes (bid > ask) can occur temporarily in volatile markets
         if cfg!(debug_assertions) && quote.bid_price > quote.ask_price {
             log::warn!(
@@ -1065,6 +1078,16 @@ impl OrderBook {
     pub fn update_trade_tick(&mut self, trade: &TradeTick) -> Result<(), InvalidBookOperation> {
         if self.book_type != BookType::L1_MBP {
             return Err(InvalidBookOperation::Update(self.book_type));
+        }
+
+        if trade.ts_event < self.ts_last {
+            log::warn!(
+                "Skipping stale trade: ts_event {} < ts_last {} (instrument_id={})",
+                trade.ts_event,
+                self.ts_last,
+                self.instrument_id
+            );
+            return Ok(());
         }
 
         // Prices can be zero or negative for certain instruments (options, spreads)

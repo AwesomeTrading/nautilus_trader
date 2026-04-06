@@ -26,7 +26,13 @@ use pyo3::{conversion::IntoPyObjectExt, prelude::*, types::PyDict};
 use crate::broadcast::canceller::{CancelBroadcaster, CancelBroadcasterConfig};
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl CancelBroadcaster {
+    /// Broadcasts cancel requests to multiple HTTP clients for redundancy.
+    ///
+    /// This broadcaster fans out cancel requests to multiple pre-warmed HTTP clients
+    /// in parallel, short-circuits when the first successful acknowledgement is received,
+    /// and handles expected rejection patterns with appropriate log levels.
     #[new]
     #[pyo3(signature = (
         pool_size,
@@ -34,13 +40,13 @@ impl CancelBroadcaster {
         api_secret=None,
         base_url=None,
         testnet=false,
-        timeout_secs=None,
-        max_retries=None,
-        retry_delay_ms=None,
-        retry_delay_max_ms=None,
-        recv_window_ms=None,
-        max_requests_per_second=None,
-        max_requests_per_minute=None,
+        timeout_secs=60,
+        max_retries=3,
+        retry_delay_ms=1_000,
+        retry_delay_max_ms=5_000,
+        recv_window_ms=10_000,
+        max_requests_per_second=10,
+        max_requests_per_minute=120,
         health_check_interval_secs=30,
         health_check_timeout_secs=5,
         expected_reject_patterns=None,
@@ -54,13 +60,13 @@ impl CancelBroadcaster {
         api_secret: Option<String>,
         base_url: Option<String>,
         testnet: bool,
-        timeout_secs: Option<u64>,
-        max_retries: Option<u32>,
-        retry_delay_ms: Option<u64>,
-        retry_delay_max_ms: Option<u64>,
-        recv_window_ms: Option<u64>,
-        max_requests_per_second: Option<u32>,
-        max_requests_per_minute: Option<u32>,
+        timeout_secs: u64,
+        max_retries: u32,
+        retry_delay_ms: u64,
+        retry_delay_max_ms: u64,
+        recv_window_ms: u64,
+        max_requests_per_second: u32,
+        max_requests_per_minute: u32,
         health_check_interval_secs: u64,
         health_check_timeout_secs: u64,
         expected_reject_patterns: Option<Vec<String>>,
@@ -92,13 +98,19 @@ impl CancelBroadcaster {
         Self::new(config).map_err(to_pyvalue_err)
     }
 
+    /// Caches an instrument in all HTTP clients in the pool.
     #[pyo3(name = "cache_instrument")]
     fn py_cache_instrument(&self, py: Python, instrument: Py<PyAny>) -> PyResult<()> {
         let inst_any = pyobject_to_instrument_any(py, instrument)?;
-        self.cache_instrument(inst_any);
+        self.cache_instrument(&inst_any);
         Ok(())
     }
 
+    /// Starts the broadcaster and health check loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the broadcaster is already running.
     #[pyo3(name = "start")]
     fn py_start<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let broadcaster = self.clone_for_async();
@@ -107,6 +119,7 @@ impl CancelBroadcaster {
         })
     }
 
+    /// Stops the broadcaster and health check loop.
     #[pyo3(name = "stop")]
     fn py_stop<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let broadcaster = self.clone_for_async();
@@ -116,6 +129,13 @@ impl CancelBroadcaster {
         })
     }
 
+    /// Broadcasts a single cancel request to all healthy clients in parallel.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Some(report))` if successfully cancelled with a report.
+    /// - `Ok(None)` if the order was already cancelled (idempotent success).
+    /// - `Err` if all requests failed.
     #[pyo3(name = "broadcast_cancel")]
     fn py_broadcast_cancel<'py>(
         &self,
@@ -138,6 +158,7 @@ impl CancelBroadcaster {
         })
     }
 
+    /// Broadcasts a batch cancel request to all healthy clients in parallel.
     #[pyo3(name = "broadcast_batch_cancel")]
     fn py_broadcast_batch_cancel<'py>(
         &self,
@@ -167,6 +188,7 @@ impl CancelBroadcaster {
         })
     }
 
+    /// Broadcasts a cancel all request to all healthy clients in parallel.
     #[pyo3(name = "broadcast_cancel_all")]
     fn py_broadcast_cancel_all<'py>(
         &self,
@@ -195,6 +217,7 @@ impl CancelBroadcaster {
         })
     }
 
+    /// Gets broadcaster metrics.
     #[pyo3(name = "get_metrics")]
     fn py_get_metrics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let metrics = self.get_metrics();
@@ -209,6 +232,7 @@ impl CancelBroadcaster {
         Ok(dict.into())
     }
 
+    /// Gets per-client statistics.
     #[pyo3(name = "get_client_stats")]
     fn py_get_client_stats(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let stats = self.get_client_stats();

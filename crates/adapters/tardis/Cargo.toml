@@ -40,6 +40,7 @@ python = [
   "pyo3",
   "pyo3-async-runtimes",
   "replay",
+  "pyo3-stub-gen",
 ]
 replay = []
 high-precision = ["nautilus-model/high-precision"]
@@ -51,8 +52,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 nautilus-common = { workspace = true, features = ["live"] }
 nautilus-core = { workspace = true }
-nautilus-cryptography = { workspace = true }
 nautilus-model = { workspace = true, features = ["python"] }
+nautilus-network = { workspace = true }
 nautilus-serialization = { workspace = true, features = ["arrow"] }
 nautilus-system = { workspace = true }
 
@@ -61,15 +62,14 @@ anyhow = { workspace = true }
 arrow = { workspace = true }
 async-stream = { workspace = true }
 async-trait = { workspace = true }
+bon = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
 derive_builder = { workspace = true }
 flate2 = { workspace = true }
 futures-util = { workspace = true }
-heck = { workspace = true }
 log = { workspace = true }
 parquet = { workspace = true }
-reqwest = { workspace = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
 ryu = { workspace = true }
@@ -87,8 +87,10 @@ zeroize = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
+axum = { workspace = true }
 dotenvy = { workspace = true }
 nautilus-live = { workspace = true }
 nautilus-persistence = { workspace = true }

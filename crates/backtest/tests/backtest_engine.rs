@@ -16,14 +16,18 @@
 use std::{
     cell::Cell,
     fmt::Debug,
-    ops::{Deref, DerefMut},
     sync::atomic::{AtomicU32, Ordering},
 };
 
 use ahash::AHashMap;
 use nautilus_backtest::{config::BacktestEngineConfig, engine::BacktestEngine};
 use nautilus_common::{
-    actor::{DataActor, DataActorCore},
+    actor::{
+        DataActor, DataActorCore, data_actor::DataActorConfig, registry::try_get_actor_unchecked,
+    },
+    component::Component,
+    enums::ComponentState,
+    msgbus, nautilus_actor,
     timer::TimeEvent,
 };
 use nautilus_core::UnixNanos;
@@ -38,11 +42,17 @@ use nautilus_model::{
         AccountType, AggregationSource, BarAggregation, BookType, OmsType, OrderSide, PriceType,
     },
     events::OrderFilled,
-    identifiers::{InstrumentId, StrategyId, Venue},
+    identifiers::{ActorId, ExecAlgorithmId, InstrumentId, StrategyId, Venue},
     instruments::{CryptoPerpetual, Instrument, InstrumentAny, stubs::crypto_perpetual_ethusdt},
+    orders::OrderAny,
+    position::Position,
     types::{Money, Price, Quantity},
 };
-use nautilus_trading::{Strategy, StrategyConfig, StrategyCore};
+use nautilus_system::trader::Trader;
+use nautilus_trading::{
+    ExecutionAlgorithm as ExecutionAlgorithmTrait, ExecutionAlgorithmConfig,
+    ExecutionAlgorithmCore, Strategy, StrategyConfig, StrategyCore, nautilus_strategy,
+};
 use rstest::*;
 struct EmptyStrategy {
     core: StrategyCore,
@@ -61,18 +71,7 @@ impl EmptyStrategy {
     }
 }
 
-impl Deref for EmptyStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for EmptyStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(EmptyStrategy);
 
 impl Debug for EmptyStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -82,13 +81,65 @@ impl Debug for EmptyStrategy {
 
 impl DataActor for EmptyStrategy {}
 
-impl Strategy for EmptyStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
+struct EmptyActor {
+    core: DataActorCore,
+}
+
+impl EmptyActor {
+    fn new() -> Self {
+        let config = DataActorConfig {
+            actor_id: Some(ActorId::from("EMPTY-ACTOR-001")),
+            ..Default::default()
+        };
+        Self {
+            core: DataActorCore::new(config),
+        }
+    }
+}
+
+nautilus_actor!(EmptyActor);
+
+impl Debug for EmptyActor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(stringify!(EmptyActor)).finish()
+    }
+}
+
+impl DataActor for EmptyActor {}
+
+struct EmptyExecAlgorithm {
+    core: ExecutionAlgorithmCore,
+}
+
+impl EmptyExecAlgorithm {
+    fn new() -> Self {
+        let config = ExecutionAlgorithmConfig {
+            exec_algorithm_id: Some(ExecAlgorithmId::from("EMPTY-EXEC-001")),
+            ..Default::default()
+        };
+        Self {
+            core: ExecutionAlgorithmCore::new(config),
+        }
+    }
+}
+
+nautilus_actor!(EmptyExecAlgorithm);
+
+impl Debug for EmptyExecAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(stringify!(EmptyExecAlgorithm)).finish()
+    }
+}
+
+impl DataActor for EmptyExecAlgorithm {}
+
+impl ExecutionAlgorithmTrait for EmptyExecAlgorithm {
+    fn core_mut(&mut self) -> &mut ExecutionAlgorithmCore {
+        &mut self.core
     }
 
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
+    fn on_order(&mut self, _order: OrderAny) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -140,18 +191,7 @@ impl EmaCross {
     }
 }
 
-impl Deref for EmaCross {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for EmaCross {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(EmaCross);
 
 impl Debug for EmaCross {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -190,14 +230,208 @@ impl DataActor for EmaCross {
     }
 }
 
-impl Strategy for EmaCross {
-    fn core(&self) -> &StrategyCore {
-        &self.core
+struct SnapshotNettingFlip {
+    core: StrategyCore,
+    instrument_id: InstrumentId,
+    trade_size: Quantity,
+    tick_count: usize,
+}
+
+impl SnapshotNettingFlip {
+    fn new(instrument_id: InstrumentId, trade_size: Quantity) -> Self {
+        let config = StrategyConfig {
+            strategy_id: Some(StrategyId::from("SNAPSHOT-FLIP-001")),
+            order_id_tag: Some("001".to_string()),
+            ..Default::default()
+        };
+        Self {
+            core: StrategyCore::new(config),
+            instrument_id,
+            trade_size,
+            tick_count: 0,
+        }
     }
 
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
+    fn submit_market(&mut self, side: OrderSide) -> anyhow::Result<()> {
+        let order = self.core.order_factory().market(
+            self.instrument_id,
+            side,
+            self.trade_size,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        self.submit_order(order, None, None)
     }
+}
+
+nautilus_strategy!(SnapshotNettingFlip);
+
+impl Debug for SnapshotNettingFlip {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct(stringify!(SnapshotNettingFlip)).finish()
+    }
+}
+
+impl DataActor for SnapshotNettingFlip {
+    fn on_start(&mut self) -> anyhow::Result<()> {
+        self.subscribe_quotes(self.instrument_id, None, None);
+        Ok(())
+    }
+
+    fn on_quote(&mut self, _quote: &QuoteTick) -> anyhow::Result<()> {
+        self.tick_count += 1;
+
+        match self.tick_count {
+            2 => self.submit_market(OrderSide::Buy)?,
+            4 => self.submit_market(OrderSide::Sell)?,
+            6 => self.submit_market(OrderSide::Sell)?,
+            8 => self.submit_market(OrderSide::Buy)?,
+            _ => {}
+        }
+
+        Ok(())
+    }
+}
+
+#[rstest]
+fn test_add_actor_registers_actor_with_trader() {
+    let mut engine = BacktestEngine::new(BacktestEngineConfig::default()).unwrap();
+    let actor = EmptyActor::new();
+    let actor_id = actor.actor_id();
+
+    engine.add_actor(actor).unwrap();
+
+    assert_eq!(engine.kernel().trader.borrow().actor_count(), 1);
+    assert!(
+        engine
+            .kernel()
+            .trader
+            .borrow()
+            .actor_ids()
+            .contains(&actor_id)
+    );
+}
+
+#[rstest]
+fn test_add_exec_algorithm_registers_exec_algorithm_with_trader_and_endpoint() {
+    let mut engine = BacktestEngine::new(BacktestEngineConfig::default()).unwrap();
+    let exec_algorithm = EmptyExecAlgorithm::new();
+    let exec_algorithm_id = ExecAlgorithmId::from(exec_algorithm.actor_id().inner().as_str());
+    let endpoint = format!("{exec_algorithm_id}.execute");
+
+    engine.add_exec_algorithm(exec_algorithm).unwrap();
+
+    assert_eq!(engine.kernel().trader.borrow().exec_algorithm_count(), 1);
+    assert!(
+        engine
+            .kernel()
+            .trader
+            .borrow()
+            .exec_algorithm_ids()
+            .contains(&exec_algorithm_id)
+    );
+    assert!(msgbus::has_endpoint(&endpoint));
+}
+
+#[rstest]
+fn test_add_exec_algorithm_while_running_returns_error() {
+    let mut engine = BacktestEngine::new(BacktestEngineConfig::default()).unwrap();
+
+    engine
+        .kernel_mut()
+        .trader
+        .borrow_mut()
+        .initialize()
+        .unwrap();
+    engine.kernel_mut().trader.borrow_mut().start().unwrap();
+
+    let result = engine.add_exec_algorithm(EmptyExecAlgorithm::new());
+    assert!(result.is_err());
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "Cannot add execution algorithms to running trader"
+    );
+    assert_eq!(engine.kernel().trader.borrow().exec_algorithm_count(), 0);
+}
+
+#[rstest]
+fn test_add_actor_while_running_registers_actor_with_trader() {
+    let mut engine = BacktestEngine::new(BacktestEngineConfig::default()).unwrap();
+    let actor = EmptyActor::new();
+    let actor_id = actor.actor_id();
+
+    engine
+        .kernel_mut()
+        .trader
+        .borrow_mut()
+        .initialize()
+        .unwrap();
+    engine.kernel_mut().trader.borrow_mut().start().unwrap();
+
+    engine.add_actor(actor).unwrap();
+
+    assert_eq!(engine.kernel().trader.borrow().actor_count(), 1);
+    assert!(
+        engine
+            .kernel()
+            .trader
+            .borrow()
+            .actor_ids()
+            .contains(&actor_id)
+    );
+}
+
+#[rstest]
+fn test_add_strategy_while_running_registers_strategy_and_market_exit_control() {
+    let mut engine = BacktestEngine::new(BacktestEngineConfig::default()).unwrap();
+    let strategy = EmptyStrategy::new();
+    let strategy_id = StrategyId::from(strategy.actor_id().inner().as_str());
+    let strategy_registry_id = strategy_id.inner();
+
+    engine
+        .kernel_mut()
+        .trader
+        .borrow_mut()
+        .initialize()
+        .unwrap();
+    engine.kernel_mut().trader.borrow_mut().start().unwrap();
+
+    engine.add_strategy(strategy).unwrap();
+
+    assert_eq!(engine.kernel().trader.borrow().strategy_count(), 1);
+    assert!(
+        engine
+            .kernel()
+            .trader
+            .borrow()
+            .strategy_ids()
+            .contains(&strategy_id)
+    );
+    assert_eq!(
+        try_get_actor_unchecked::<EmptyStrategy>(&strategy_registry_id)
+            .unwrap()
+            .state(),
+        ComponentState::Ready
+    );
+
+    engine
+        .kernel()
+        .trader
+        .borrow()
+        .start_strategy(&strategy_id)
+        .unwrap();
+    Trader::market_exit_strategy(&engine.kernel().trader, &strategy_id).unwrap();
+
+    assert!(
+        try_get_actor_unchecked::<EmptyStrategy>(&strategy_registry_id)
+            .unwrap()
+            .is_exiting()
+    );
 }
 
 fn create_engine() -> BacktestEngine {
@@ -213,9 +447,12 @@ fn create_engine() -> BacktestEngine {
             None,
             None,
             AHashMap::new(),
+            None,
             vec![],
             FillModelAny::default(),
             FeeModelAny::default(),
+            None,
+            None,
             None,
             None,
             None,
@@ -266,7 +503,7 @@ fn quote_with_size(instrument_id: InstrumentId, bid: &str, ask: &str, size: &str
 fn test_run_with_empty_data(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     engine
-        .add_instrument(InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt))
+        .add_instrument(&InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt))
         .unwrap();
 
     let result = engine.run(None, None, None, false);
@@ -282,7 +519,7 @@ fn test_run_processes_quote_ticks(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let quotes = vec![
         quote(instrument_id, "1000.00", "1000.10", 1_000_000_000),
@@ -299,11 +536,99 @@ fn test_run_processes_quote_ticks(crypto_perpetual_ethusdt: CryptoPerpetual) {
 }
 
 #[rstest]
+fn test_get_result_includes_snapshot_position_history(crypto_perpetual_ethusdt: CryptoPerpetual) {
+    fn sum_realized(positions: &[&Position]) -> f64 {
+        positions
+            .iter()
+            .filter_map(|p| p.realized_pnl.as_ref().map(|m| m.as_f64()))
+            .sum()
+    }
+
+    fn sum_realized_from_snapshot_bytes(snapshot_bytes: &[u8]) -> f64 {
+        serde_json::de::Deserializer::from_slice(snapshot_bytes)
+            .into_iter::<Position>()
+            .filter_map(Result::ok)
+            .filter_map(|p| p.realized_pnl.map(|m| m.as_f64()))
+            .sum()
+    }
+
+    let mut engine = create_engine();
+    let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
+    let instrument_id = instrument.id();
+    engine.add_instrument(&instrument).unwrap();
+
+    let strategy = SnapshotNettingFlip::new(instrument_id, Quantity::from("1.000"));
+    engine.add_strategy(strategy).unwrap();
+
+    let quotes = vec![
+        quote(instrument_id, "1000.00", "1001.00", 1_000_000_000),
+        quote(instrument_id, "1000.00", "1001.00", 2_000_000_000),
+        quote(instrument_id, "1000.00", "1001.00", 3_000_000_000),
+        quote(instrument_id, "998.00", "999.00", 4_000_000_000),
+        quote(instrument_id, "998.00", "999.00", 5_000_000_000),
+        quote(instrument_id, "997.00", "998.00", 6_000_000_000),
+        quote(instrument_id, "997.00", "998.00", 7_000_000_000),
+        quote(instrument_id, "999.00", "1000.00", 8_000_000_000),
+        quote(instrument_id, "999.00", "1000.00", 9_000_000_000),
+    ];
+    engine.add_data(quotes, None, true, true);
+    engine.run(None, None, None, false).unwrap();
+
+    let cache_rc = engine.kernel().cache();
+    let cache = cache_rc.borrow();
+    let positions = cache.positions(None, None, None, None, None);
+
+    let cache_realized = sum_realized(&positions);
+    let cache_realized_count = positions
+        .iter()
+        .filter(|p| p.realized_pnl.is_some())
+        .count() as f64;
+
+    let snapshots_realized: f64 = positions
+        .iter()
+        .filter_map(|p| cache.position_snapshot_bytes(&p.id))
+        .map(|bytes| sum_realized_from_snapshot_bytes(&bytes))
+        .sum();
+    let snapshots_realized_count: f64 = positions
+        .iter()
+        .filter_map(|p| cache.position_snapshot_bytes(&p.id))
+        .map(|bytes| {
+            serde_json::de::Deserializer::from_slice(&bytes)
+                .into_iter::<Position>()
+                .filter_map(Result::ok)
+                .filter(|p| p.realized_pnl.is_some())
+                .count() as f64
+        })
+        .sum();
+
+    assert!(
+        snapshots_realized.abs() > 0.0,
+        "expected non-zero snapshot realized history"
+    );
+
+    let expected_total = cache_realized + snapshots_realized;
+    let expected_expectancy = expected_total / (cache_realized_count + snapshots_realized_count);
+    drop(cache);
+
+    let bt_result = engine.get_result();
+    let expectancy = bt_result
+        .stats_pnls
+        .values()
+        .find_map(|pnls| pnls.get("Expectancy").copied())
+        .expect("Expectancy stat must exist");
+
+    assert!(
+        (expectancy - expected_expectancy).abs() < 1e-9,
+        "expected Expectancy={expected_expectancy} to include snapshot history {snapshots_realized}, found {expectancy}"
+    );
+}
+
+#[rstest]
 fn test_run_with_strategy(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     engine.add_strategy(EmptyStrategy::new()).unwrap();
 
@@ -327,7 +652,7 @@ fn test_run_with_start_end_bounds(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let base: u64 = 1_000_000_000_000_000_000; // 1e18 ns
     let quotes = vec![
@@ -356,7 +681,7 @@ fn test_reset_preserves_data(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let quotes = vec![
         quote(instrument_id, "1000.00", "1000.10", 1_000_000_000),
@@ -383,7 +708,7 @@ fn test_clear_data(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let quotes = vec![quote(instrument_id, "1000.00", "1000.10", 1_000_000_000)];
     engine.add_data(quotes, None, true, true);
@@ -399,7 +724,7 @@ fn test_ema_cross_strategy_generates_orders(crypto_perpetual_ethusdt: CryptoPerp
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     engine
         .add_strategy(EmaCross::new(
@@ -471,7 +796,7 @@ fn test_streaming_mode_processes_data_in_batches(crypto_perpetual_ethusdt: Crypt
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
     engine.add_strategy(EmptyStrategy::new()).unwrap();
 
     // Batch 1: first 3 quotes
@@ -504,7 +829,7 @@ fn test_multiple_add_data_batches_merged(crypto_perpetual_ethusdt: CryptoPerpetu
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     // Add data in two separate batches (the P1 fix scenario)
     let batch1 = vec![
@@ -543,9 +868,12 @@ fn test_multi_venue_data_routing(crypto_perpetual_ethusdt: CryptoPerpetual) {
             None,
             None,
             AHashMap::new(),
+            None,
             vec![],
             FillModelAny::default(),
             FeeModelAny::default(),
+            None,
+            None,
             None,
             None,
             None,
@@ -577,9 +905,12 @@ fn test_multi_venue_data_routing(crypto_perpetual_ethusdt: CryptoPerpetual) {
             None,
             None,
             AHashMap::new(),
+            None,
             vec![],
             FillModelAny::default(),
             FeeModelAny::default(),
+            None,
+            None,
             None,
             None,
             None,
@@ -602,11 +933,11 @@ fn test_multi_venue_data_routing(crypto_perpetual_ethusdt: CryptoPerpetual) {
 
     let eth = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let eth_id = eth.id();
-    engine.add_instrument(eth).unwrap();
+    engine.add_instrument(&eth).unwrap();
 
     let btc = InstrumentAny::CryptoPerpetual(nautilus_model::instruments::stubs::xbtusd_bitmex());
     let btc_id = btc.id();
-    engine.add_instrument(btc).unwrap();
+    engine.add_instrument(&btc).unwrap();
 
     // Interleave quotes from both venues (respecting instrument precision)
     // ETHUSDT-PERP.BINANCE: price_prec=2, size_prec=3
@@ -633,7 +964,7 @@ fn test_strategy_receives_only_subscribed_quotes(crypto_perpetual_ethusdt: Crypt
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     // Use EMA cross with fast periods so it triggers quickly
     engine
@@ -684,7 +1015,7 @@ fn test_reset_run_produces_same_results(crypto_perpetual_ethusdt: CryptoPerpetua
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let quotes = vec![
         quote(instrument_id, "1000.00", "1000.10", 1_000_000_000),
@@ -714,7 +1045,7 @@ fn test_start_boundary_skips_earlier_data(crypto_perpetual_ethusdt: CryptoPerpet
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let quotes = vec![
         quote(instrument_id, "1000.00", "1000.10", 1_000_000_000),
@@ -742,7 +1073,7 @@ fn test_end_boundary_stops_before_later_data(crypto_perpetual_ethusdt: CryptoPer
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let quotes = vec![
         quote(instrument_id, "1000.00", "1000.10", 1_000_000_000),
@@ -770,7 +1101,7 @@ fn test_ema_cross_with_batched_data(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     engine
         .add_strategy(EmaCross::new(instrument_id, Quantity::from("0.100"), 3, 5))
@@ -837,18 +1168,7 @@ impl CascadingStopStrategy {
     }
 }
 
-impl Deref for CascadingStopStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for CascadingStopStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(CascadingStopStrategy);
 
 impl Debug for CascadingStopStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -910,22 +1230,12 @@ impl DataActor for CascadingStopStrategy {
     }
 }
 
-impl Strategy for CascadingStopStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
-    }
-}
-
 #[rstest]
 fn test_cascading_stop_loss_on_fill_settled_same_tick(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let strategy = CascadingStopStrategy::new(instrument_id, Quantity::from("1.000"));
     engine.add_strategy(strategy).unwrap();
@@ -975,18 +1285,7 @@ impl DualTimerStrategy {
     }
 }
 
-impl Deref for DualTimerStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for DualTimerStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(DualTimerStrategy);
 
 impl Debug for DualTimerStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1029,22 +1328,12 @@ impl DataActor for DualTimerStrategy {
     }
 }
 
-impl Strategy for DualTimerStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
-    }
-}
-
 #[rstest]
 fn test_all_same_timestamp_timer_commands_settled(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     // Timer fires at 30s, between data points at 0s and 60s
     let timer_ts: u64 = 30_000_000_000;
@@ -1088,18 +1377,7 @@ impl BarSubscriberStrategy {
     }
 }
 
-impl Deref for BarSubscriberStrategy {
-    type Target = DataActorCore;
-    fn deref(&self) -> &Self::Target {
-        &self.core
-    }
-}
-
-impl DerefMut for BarSubscriberStrategy {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.core
-    }
-}
+nautilus_strategy!(BarSubscriberStrategy);
 
 impl Debug for BarSubscriberStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -1115,22 +1393,12 @@ impl DataActor for BarSubscriberStrategy {
     }
 }
 
-impl Strategy for BarSubscriberStrategy {
-    fn core(&self) -> &StrategyCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut StrategyCore {
-        &mut self.core
-    }
-}
-
 #[rstest]
 fn test_streaming_no_dummy_bars_past_batch_data(crypto_perpetual_ethusdt: CryptoPerpetual) {
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let bar_type = BarType::new(
         instrument_id,
@@ -1187,7 +1455,7 @@ fn test_streaming_end_flushes_tail_timers(crypto_perpetual_ethusdt: CryptoPerpet
     let mut engine = create_engine();
     let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
     let instrument_id = instrument.id();
-    engine.add_instrument(instrument).unwrap();
+    engine.add_instrument(&instrument).unwrap();
 
     let bar_type = BarType::new(
         instrument_id,
@@ -1229,4 +1497,233 @@ fn test_streaming_end_flushes_tail_timers(crypto_perpetual_ethusdt: CryptoPerpet
         bars_after_end <= 4,
         "Expected at most 4 bars after end() flush to 20s, found {bars_after_end}",
     );
+}
+
+#[rstest]
+fn test_engine_properties() {
+    let config = BacktestEngineConfig::default();
+    let engine = BacktestEngine::new(config).unwrap();
+
+    assert_eq!(engine.trader_id().to_string(), "TRADER-001");
+    assert!(!engine.instance_id().to_string().is_empty());
+    assert_eq!(engine.iteration(), 0);
+}
+
+#[rstest]
+fn test_list_venues_empty() {
+    let engine = BacktestEngine::new(BacktestEngineConfig::default()).unwrap();
+    assert!(engine.list_venues().is_empty());
+}
+
+#[rstest]
+fn test_list_venues_single() {
+    let engine = create_engine();
+    let venues = engine.list_venues();
+
+    assert_eq!(venues.len(), 1);
+    assert_eq!(venues[0], Venue::from("BINANCE"));
+}
+
+#[rstest]
+fn test_list_venues_multiple() {
+    let config = BacktestEngineConfig::default();
+    let mut engine = BacktestEngine::new(config).unwrap();
+
+    engine
+        .add_venue(
+            Venue::from("BINANCE"),
+            OmsType::Netting,
+            AccountType::Margin,
+            BookType::L1_MBP,
+            vec![Money::from("1_000_000 USDT")],
+            None,
+            None,
+            AHashMap::new(),
+            None,
+            vec![],
+            FillModelAny::default(),
+            FeeModelAny::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+    engine
+        .add_venue(
+            Venue::from("BITMEX"),
+            OmsType::Netting,
+            AccountType::Margin,
+            BookType::L1_MBP,
+            vec![Money::from("1_000_000 USD")],
+            None,
+            None,
+            AHashMap::new(),
+            None,
+            vec![],
+            FillModelAny::default(),
+            FeeModelAny::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+    let mut venues = engine.list_venues();
+    venues.sort_by_key(|v| v.to_string());
+    assert_eq!(venues.len(), 2);
+    assert_eq!(venues[0], Venue::from("BINANCE"));
+    assert_eq!(venues[1], Venue::from("BITMEX"));
+}
+
+#[rstest]
+fn test_iteration_advances_with_data(crypto_perpetual_ethusdt: CryptoPerpetual) {
+    let mut engine = create_engine();
+    let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
+    let instrument_id = instrument.id();
+    engine.add_instrument(&instrument).unwrap();
+
+    assert_eq!(engine.iteration(), 0);
+
+    let quotes = vec![
+        quote(instrument_id, "1000.00", "1000.10", 1_000_000_000),
+        quote(instrument_id, "1000.50", "1000.60", 2_000_000_000),
+        quote(instrument_id, "1001.00", "1001.10", 3_000_000_000),
+    ];
+    engine.add_data(quotes, None, true, true);
+    engine.run(None, None, None, false).unwrap();
+
+    assert_eq!(engine.iteration(), 3);
+}
+
+#[rstest]
+fn test_add_venue_with_queue_position(crypto_perpetual_ethusdt: CryptoPerpetual) {
+    let config = BacktestEngineConfig::default();
+    let mut engine = BacktestEngine::new(config).unwrap();
+
+    let result = engine.add_venue(
+        Venue::from("BINANCE"),
+        OmsType::Netting,
+        AccountType::Margin,
+        BookType::L1_MBP,
+        vec![Money::from("1_000_000 USDT")],
+        None,
+        None,
+        AHashMap::new(),
+        None,
+        vec![],
+        FillModelAny::default(),
+        FeeModelAny::default(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(true), // queue_position
+        None,
+        None,
+    );
+    assert!(result.is_ok());
+
+    let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
+    let instrument_id = instrument.id();
+    engine.add_instrument(&instrument).unwrap();
+
+    let quotes = vec![quote(instrument_id, "1000.00", "1000.10", 1_000_000_000)];
+    engine.add_data(quotes, None, true, true);
+    engine.run(None, None, None, false).unwrap();
+    assert_eq!(engine.get_result().iterations, 1);
+}
+
+#[rstest]
+fn test_add_venue_with_oto_full_trigger(crypto_perpetual_ethusdt: CryptoPerpetual) {
+    let config = BacktestEngineConfig::default();
+    let mut engine = BacktestEngine::new(config).unwrap();
+
+    let result = engine.add_venue(
+        Venue::from("BINANCE"),
+        OmsType::Netting,
+        AccountType::Margin,
+        BookType::L1_MBP,
+        vec![Money::from("1_000_000 USDT")],
+        None,
+        None,
+        AHashMap::new(),
+        None,
+        vec![],
+        FillModelAny::default(),
+        FeeModelAny::default(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(true), // oto_full_trigger
+        None,
+    );
+    assert!(result.is_ok());
+
+    let instrument = InstrumentAny::CryptoPerpetual(crypto_perpetual_ethusdt);
+    let instrument_id = instrument.id();
+    engine.add_instrument(&instrument).unwrap();
+
+    let quotes = vec![quote(instrument_id, "1000.00", "1000.10", 1_000_000_000)];
+    engine.add_data(quotes, None, true, true);
+    engine.run(None, None, None, false).unwrap();
+    assert_eq!(engine.get_result().iterations, 1);
 }

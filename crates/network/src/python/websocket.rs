@@ -14,7 +14,10 @@
 // -------------------------------------------------------------------------------------------------
 
 use std::{
-    sync::{Arc, atomic::Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    },
     time::Duration,
 };
 
@@ -37,13 +40,37 @@ use crate::{
 
 create_exception!(network, WebSocketClientError, PyException);
 
+#[allow(clippy::needless_pass_by_value)]
 fn to_websocket_pyerr(e: tokio_tungstenite::tungstenite::Error) -> PyErr {
     PyErr::new::<WebSocketClientError, _>(e.to_string())
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl WebSocketConfig {
-    /// Create a new WebSocket configuration.
+    /// Configuration for WebSocket client connections.
+    ///
+    /// This struct contains only static configuration settings. Runtime callbacks
+    /// (message handler, ping handler) are passed separately to `connect()`.
+    ///
+    /// # Connection Modes
+    ///
+    /// ## Handler Mode
+    ///
+    /// - Use with `crate.websocket.WebSocketClient.connect`.
+    /// - Pass a message handler to `connect()` to receive messages via callback.
+    /// - Client spawns internal task to read messages and call handler.
+    /// - Supports automatic reconnection with exponential backoff.
+    /// - Reconnection config fields (`reconnect_*`) are active.
+    /// - Best for long-lived connections, Python bindings, callback-based APIs.
+    ///
+    /// ## Stream Mode
+    ///
+    /// - Use with `crate.websocket.WebSocketClient.connect_stream`.
+    /// - Returns a `MessageReader` stream for the caller to read from.
+    /// - **Does NOT support automatic reconnection** (reader owned by caller).
+    /// - Reconnection config fields are ignored.
+    /// - On disconnect, client transitions to CLOSED state and caller must manually reconnect.
     #[new]
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
@@ -89,21 +116,22 @@ impl WebSocketConfig {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl WebSocketClient {
-    /// Create a websocket client.
+    /// Creates a websocket client in **handler mode** with automatic reconnection.
     ///
-    /// The handler and ping_handler callbacks are scheduled on the provided event loop
-    /// using `call_soon_threadsafe` to ensure they execute on the correct thread.
-    /// This is critical for thread safety since WebSocket messages arrive on
-    /// a Tokio worker thread, but Python callbacks (like those entering the
-    /// kernel via MessageBus) must run on the asyncio event loop thread.
+    /// The handler is called for each incoming message on an internal task.
+    /// Automatic reconnection is **enabled** with exponential backoff. On disconnection,
+    /// the client automatically attempts to reconnect and replaces the internal reader
+    /// (the handler continues working seamlessly).
     ///
-    /// # Safety
+    /// Use handler mode for simplified connection management, automatic reconnection, Python
+    /// bindings, or callback-based message handling.
     ///
-    /// - Throws an Exception if it is unable to make websocket connection.
+    /// See `WebSocketConfig` documentation for comparison with stream mode.
     #[staticmethod]
     #[pyo3(name = "connect", signature = (loop_, config, handler, ping_handler = None, post_reconnection = None, keyed_quotas = Vec::new(), default_quota = None))]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     fn py_connect(
         loop_: Py<PyAny>,
         config: WebSocketConfig,
@@ -176,18 +204,15 @@ impl WebSocketClient {
         })
     }
 
-    /// Closes the client heart beat and reader task.
+    /// Set disconnect mode to true.
     ///
-    /// The connection is not completely closed the till all references
-    /// to the client are gone and the client is dropped.
-    ///
-    /// # Safety
-    ///
-    /// - The client should not be used after closing it.
-    /// - Any auto-reconnect job should be aborted before closing the client.
+    /// Controller task will periodically check the disconnect mode
+    /// and shutdown the client if it is alive
     #[pyo3(name = "disconnect")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_disconnect<'py>(slf: PyRef<'_, Self>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let connection_mode = slf.connection_mode.clone();
+        let state_notify = slf.state_notify.clone();
         let mode = ConnectionMode::from_atomic(&connection_mode);
         log::debug!("Close from mode {mode}");
 
@@ -201,6 +226,7 @@ impl WebSocketClient {
                 }
                 _ => {
                     connection_mode.store(ConnectionMode::Disconnect.as_u8(), Ordering::SeqCst);
+                    state_notify.notify_one();
 
                     let timeout = tokio::time::timeout(Duration::from_secs(5), async {
                         while !ConnectionMode::from_atomic(&connection_mode).is_closed() {
@@ -220,31 +246,42 @@ impl WebSocketClient {
         })
     }
 
-    /// Check if the client is still alive.
+    /// Check if the client connection is active.
     ///
-    /// Even if the connection is disconnected the client will still be alive
-    /// and trying to reconnect.
-    ///
-    /// This is particularly useful for checking why a `send` failed. It could
-    /// be because the connection disconnected and the client is still alive
-    /// and reconnecting. In such cases the send can be retried after some
-    /// delay.
+    /// Returns `true` if the client is connected and has not been signalled to disconnect.
+    /// The client will automatically retry connection based on its configuration.
     #[pyo3(name = "is_active")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_is_active(slf: PyRef<'_, Self>) -> bool {
         !slf.controller_task.is_finished()
     }
 
+    /// Check if the client is reconnecting.
+    ///
+    /// Returns `true` if the client lost connection and is attempting to reestablish it.
+    /// The client will automatically retry connection based on its configuration.
     #[pyo3(name = "is_reconnecting")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_is_reconnecting(slf: PyRef<'_, Self>) -> bool {
         slf.is_reconnecting()
     }
 
+    /// Check if the client is disconnecting.
+    ///
+    /// Returns `true` if the client is in disconnect mode.
     #[pyo3(name = "is_disconnecting")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_is_disconnecting(slf: PyRef<'_, Self>) -> bool {
         slf.is_disconnecting()
     }
 
+    /// Check if the client is closed.
+    ///
+    /// Returns `true` if the client has been explicitly disconnected or reached
+    /// maximum reconnection attempts. In this state, the client cannot be reused
+    /// and a new client must be created for further connections.
     #[pyo3(name = "is_closed")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_is_closed(slf: PyRef<'_, Self>) -> bool {
         slf.is_closed()
     }
@@ -256,6 +293,7 @@ impl WebSocketClient {
     /// - Raises `PyRuntimeError` if not able to send data.
     #[pyo3(name = "send")]
     #[pyo3(signature = (data, keys=None))]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_send<'py>(
         slf: PyRef<'_, Self>,
         data: Vec<u8>,
@@ -276,7 +314,17 @@ impl WebSocketClient {
                     msg,
                 )));
             }
-            rate_limiter.await_keys_ready(keys.as_deref()).await;
+
+            tokio::select! {
+                () = rate_limiter.await_keys_ready(keys.as_deref()) => {}
+                () = poll_until_closed(&mode) => {
+                    return Err(to_pyruntime_err(std::io::Error::new(
+                        std::io::ErrorKind::ConnectionAborted,
+                        "Connection closed while waiting for rate limit",
+                    )));
+                }
+            }
+
             log::trace!("Sending binary: {data:?}");
 
             let msg = Message::Binary(data.into());
@@ -286,21 +334,14 @@ impl WebSocketClient {
         })
     }
 
-    /// Send UTF-8 encoded bytes as text data to the server, respecting rate limits.
+    /// Sends the given text `data` to the server.
     ///
-    /// `data`: The byte data to be sent, which will be converted to a UTF-8 string.
-    /// `keys`: Optional list of rate limit keys. If provided, the function will wait for rate limits to be met for each key before sending the data.
-    ///
-    /// # Errors
-    /// - Raises `PyRuntimeError` if unable to send the data.
-    ///
-    /// # Example
-    ///
-    /// When a request is made the URL should be split into all relevant keys within it.
-    ///
-    /// For request /foo/bar, should pass keys ["foo/bar", "foo"] for rate limiting.
+    /// Returns `Ok(())` when the message is enqueued to the writer channel. This does NOT
+    /// guarantee delivery: if a disconnect occurs concurrently, the writer task may drop the
+    /// message. During reconnection, messages are buffered and replayed on the new connection.
     #[pyo3(name = "send_text")]
     #[pyo3(signature = (data, keys=None))]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_send_text<'py>(
         slf: PyRef<'_, Self>,
         data: Vec<u8>,
@@ -322,7 +363,17 @@ impl WebSocketClient {
                 );
                 return Err(to_pyruntime_err(e));
             }
-            rate_limiter.await_keys_ready(keys.as_deref()).await;
+
+            tokio::select! {
+                () = rate_limiter.await_keys_ready(keys.as_deref()) => {}
+                () = poll_until_closed(&mode) => {
+                    return Err(to_pyruntime_err(std::io::Error::new(
+                        std::io::ErrorKind::ConnectionAborted,
+                        "Connection closed while waiting for rate limit",
+                    )));
+                }
+            }
+
             log::trace!("Sending text: {data}");
 
             let msg = Message::Text(data);
@@ -332,12 +383,9 @@ impl WebSocketClient {
         })
     }
 
-    /// Send pong bytes data to the server.
-    ///
-    /// # Errors
-    ///
-    /// - Raises `PyRuntimeError` if not able to send data.
+    /// Sends a pong frame back to the server.
     #[pyo3(name = "send_pong")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_send_pong<'py>(
         slf: PyRef<'_, Self>,
         data: Vec<u8>,
@@ -362,6 +410,19 @@ impl WebSocketClient {
                 .send(WriterCommand::Send(msg))
                 .map_err(to_pyruntime_err)
         })
+    }
+}
+
+async fn poll_until_closed(mode: &Arc<AtomicU8>) {
+    loop {
+        if matches!(
+            ConnectionMode::from_atomic(mode),
+            ConnectionMode::Disconnect | ConnectionMode::Closed
+        ) {
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 

@@ -23,6 +23,7 @@ use nautilus_model::{
     data::{
         Bar, BarType, BookOrder, Data, FundingRateUpdate, IndexPriceUpdate, MarkPriceUpdate,
         OrderBookDelta, OrderBookDeltas, QuoteTick, TradeTick, bar::BarSpecification,
+        option_chain::OptionGreeks,
     },
     enums::{
         AggregationSource, AggressorSide, BarAggregation, BookAction, LiquiditySide, OrderSide,
@@ -48,18 +49,27 @@ use super::{
 };
 use crate::http::models::DeribitPosition;
 
-fn next_8_utc(from_ns: UnixNanos) -> UnixNanos {
+fn next_8_utc(from_ns: UnixNanos) -> anyhow::Result<UnixNanos> {
     let from_secs = from_ns.as_u64() / 1_000_000_000;
-    let dt = Utc.timestamp_opt(from_secs as i64, 0).unwrap();
+    let dt = Utc
+        .timestamp_opt(from_secs as i64, 0)
+        .single()
+        .context("failed to convert timestamp to UTC datetime")?;
     let next_8 = if dt.hour() < 8 {
-        dt.date_naive().and_hms_opt(8, 0, 0).unwrap().and_utc()
+        dt.date_naive()
+            .and_hms_opt(8, 0, 0)
+            .context("failed to construct 08:00 UTC time")?
+            .and_utc()
     } else {
         (dt.date_naive() + Duration::days(1))
             .and_hms_opt(8, 0, 0)
-            .unwrap()
+            .context("failed to construct next-day 08:00 UTC time")?
             .and_utc()
     };
-    UnixNanos::from(next_8.timestamp_nanos_opt().unwrap() as u64)
+    let nanos = next_8
+        .timestamp_nanos_opt()
+        .context("GTD expiry timestamp out of nanosecond range")?;
+    Ok(UnixNanos::from(nanos as u64))
 }
 
 /// Parses a Deribit trade message into a Nautilus `TradeTick`.
@@ -101,7 +111,7 @@ pub fn parse_trade_msg(
 
 /// Parses a vector of Deribit trade messages into Nautilus `Data` items.
 pub fn parse_trades_data(
-    trades: Vec<DeribitTradeMsg>,
+    trades: &[DeribitTradeMsg],
     instruments_cache: &AHashMap<Ustr, InstrumentAny>,
     ts_init: UnixNanos,
 ) -> Vec<Data> {
@@ -545,10 +555,37 @@ pub fn parse_ticker_to_funding_rate(
     Some(FundingRateUpdate::new(
         instrument_id,
         rate,
+        None, // Deribit exchanges funding every few seconds, instead of in set intervals like other exchanges
         None, // next_funding_ns not available in ticker
         ts_event,
         ts_init,
     ))
+}
+
+/// Parses a Deribit ticker message into a Nautilus `OptionGreeks`.
+///
+/// Returns `None` if the ticker message does not contain Greeks (non-option instrument).
+#[must_use]
+pub fn parse_ticker_to_option_greeks(
+    msg: &DeribitTickerMsg,
+    instrument: &InstrumentAny,
+    ts_init: UnixNanos,
+) -> Option<OptionGreeks> {
+    let deribit_greeks = msg.greeks.as_ref()?;
+    let instrument_id = instrument.id();
+    let ts_event = UnixNanos::new(msg.timestamp * NANOSECONDS_IN_MILLISECOND);
+
+    Some(OptionGreeks {
+        instrument_id,
+        greeks: deribit_greeks.to_greek_values(),
+        mark_iv: msg.mark_iv.and_then(|v| v.to_f64()),
+        bid_iv: msg.bid_iv.and_then(|v| v.to_f64()),
+        ask_iv: msg.ask_iv.and_then(|v| v.to_f64()),
+        underlying_price: msg.underlying_price.and_then(|v| v.to_f64()),
+        open_interest: Some(msg.open_interest.to_f64().unwrap_or(0.0)),
+        ts_event,
+        ts_init,
+    })
 }
 
 /// Parses a Deribit perpetual channel message into a Nautilus `FundingRateUpdate`.
@@ -567,6 +604,7 @@ pub fn parse_perpetual_to_funding_rate(
     FundingRateUpdate::new(
         instrument_id,
         msg.interest,
+        None, // Deribit exchanges funding every few seconds, instead of in set intervals like other exchanges
         None, // next_funding_ns not available in perpetual channel
         ts_event,
         ts_init,
@@ -685,7 +723,10 @@ pub fn parse_user_order_msg(
         "stop_market" => OrderType::StopMarket,
         "take_limit" => OrderType::LimitIfTouched,
         "take_market" => OrderType::MarketIfTouched,
-        _ => OrderType::Limit, // Default to Limit for unknown types
+        other => {
+            log::warn!("Unknown Deribit order_type '{other}', defaulting to Limit");
+            OrderType::Limit
+        }
     };
 
     // Deribit supports: good_til_cancelled, good_til_day, fill_or_kill, immediate_or_cancel
@@ -713,7 +754,10 @@ pub fn parse_user_order_msg(
         "rejected" => OrderStatus::Rejected,
         "cancelled" => OrderStatus::Canceled,
         "untriggered" => OrderStatus::Accepted, // Pending trigger
-        _ => OrderStatus::Accepted,
+        other => {
+            log::warn!("Unknown Deribit order_state '{other}', defaulting to Accepted");
+            OrderStatus::Accepted
+        }
     };
 
     let price_precision = instrument.price_precision();
@@ -758,7 +802,7 @@ pub fn parse_user_order_msg(
     }
 
     if time_in_force == TimeInForce::Gtd {
-        let expire_time = next_8_utc(ts_accepted);
+        let expire_time = next_8_utc(ts_accepted)?;
         report = report.with_expire_time(expire_time);
     }
 
@@ -1072,7 +1116,8 @@ pub fn parse_order_updated(
         Some(account_id),
         price,
         trigger_price,
-        None, // protection_price
+        None,  // protection_price
+        false, // is_quote_quantity
     )
 }
 
@@ -1115,7 +1160,10 @@ pub fn determine_order_event_type(
             // Rejections are handled separately via OrderRejected
             OrderEventType::None
         }
-        _ => OrderEventType::None,
+        other => {
+            log::warn!("Unknown Deribit order_state '{other}' in event routing, dropping");
+            OrderEventType::None
+        }
     }
 }
 
@@ -1581,6 +1629,7 @@ mod tests {
             funding_rate.ts_event,
             UnixNanos::new(1_765_541_474_086_000_000)
         );
+        assert!(funding_rate.interval.is_none());
         assert!(funding_rate.next_funding_ns.is_none()); // Not available in ticker
     }
 

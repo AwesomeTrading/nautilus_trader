@@ -13,7 +13,7 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-//! Core foundational types and utilities for [NautilusTrader](http://nautilustrader.io).
+//! Core foundational types and utilities for [NautilusTrader](https://nautilustrader.io).
 //!
 //! The `nautilus-core` crate is designed to be lightweight, efficient, and to provide zero-cost abstractions
 //! wherever possible. It supplies the essential building blocks used across the NautilusTrader
@@ -27,15 +27,13 @@
 //! - Cross-platform environment utilities.
 //! - Abstractions over common collections.
 //!
-//! # Platform
+//! # NautilusTrader
 //!
-//! [NautilusTrader](http://nautilustrader.io) is an open-source, high-performance, production-grade
-//! algorithmic trading platform, providing quantitative traders with the ability to backtest
-//! portfolios of automated trading strategies on historical data with an event-driven engine,
-//! and also deploy those same strategies live, with no code changes.
+//! [NautilusTrader](https://nautilustrader.io) is an open-source, production-grade, Rust-native
+//! engine for multi-asset, multi-venue trading systems.
 //!
-//! NautilusTrader's design, architecture, and implementation philosophy prioritizes software correctness and safety at the
-//! highest level, with the aim of supporting mission-critical, trading system backtesting and live deployment workloads.
+//! The system spans research, deterministic simulation, and live execution within a single
+//! event-driven architecture, providing research-to-live semantic parity.
 //!
 //! # Feature Flags
 //!
@@ -63,6 +61,7 @@ pub mod datetime;
 pub mod drop;
 pub mod env;
 pub mod formatting;
+pub mod hex;
 pub mod math;
 pub mod message;
 pub mod nanos;
@@ -90,6 +89,7 @@ compile_error!("Unsupported platform: Nautilus supports only Linux, macOS, and W
 #[cfg(feature = "python")]
 pub use crate::params::from_pydict;
 pub use crate::{
+    collections::{AtomicMap, AtomicSet},
     drop::CleanDrop,
     nanos::UnixNanos,
     params::Params,

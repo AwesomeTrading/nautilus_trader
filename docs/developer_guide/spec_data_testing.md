@@ -143,7 +143,7 @@ Test order book subscription modes and snapshot requests.
 | TC-D10  | Subscribe book deltas          | Stream `OrderBookDeltas` updates.                  | No book support.       |
 | TC-D11  | Subscribe book at interval     | Periodic `OrderBook` snapshots.                    | No book support.       |
 | TC-D12  | Subscribe book depth           | `OrderBookDepth10` snapshots.                      | No book depth.         |
-| TC-D13  | Request book snapshot          | One-time book snapshot request.                    | No book snapshot.      |
+| TC-D13  | Request book snapshot          | One‑time book snapshot request.                    | No book snapshot.      |
 | TC-D14  | Managed book from deltas       | Build local book from delta stream.                | No book support.       |
 | TC-D15  | Request historical book deltas | Historical book deltas request.                    | No historical deltas.  |
 
@@ -235,7 +235,7 @@ DataTesterConfig(
 | Field              | Value                                                                  |
 |--------------------|------------------------------------------------------------------------|
 | **Prerequisite**   | Adapter connected, instrument loaded.                                  |
-| **Action**         | DataTester requests a one-time order book snapshot.                    |
+| **Action**         | DataTester requests a one‑time order book snapshot.                    |
 | **Event sequence** | Book snapshot received via historical data callback.                   |
 | **Pass criteria**  | Snapshot contains bid/ask levels with valid prices and sizes.          |
 | **Skip when**      | Adapter does not support book snapshot requests.                       |
@@ -696,15 +696,79 @@ DataTesterConfig::new(client_id, vec![instrument_id])
 
 ---
 
-## Group 8: Lifecycle
+## Group 8: Option greeks
+
+Test option greeks and option chain subscriptions.
+
+| TC     | Name                        | Description                                    | Skip when              |
+|--------|-----------------------------|------------------------------------------------|------------------------|
+| TC-D62 | Subscribe option greeks     | `OptionGreeks` data for a single instrument.   | No greeks support.     |
+| TC-D63 | Subscribe option chain      | `OptionChainSlice` snapshots for a series.     | No chain support.      |
+
+### TC-D62: Subscribe option greeks
+
+| Field              | Value                                                                  |
+|--------------------|------------------------------------------------------------------------|
+| **Prerequisite**   | Adapter connected, option instrument loaded.                           |
+| **Action**         | DataTester subscribes to option greeks updates.                        |
+| **Event sequence** | `OptionGreeks` events received in `on_option_greeks`.                  |
+| **Pass criteria**  | Greeks received with valid delta, gamma, vega, theta values.           |
+| **Skip when**      | Adapter does not support option greeks subscriptions.                  |
+
+**Considerations:**
+
+- Greeks are only available for option instruments.
+- Values depend on the venue's pricing model and may update on every quote change.
+- Some venues (Bybit, Deribit) subscribe per instrument; OKX subscribes per instrument
+  family and filters to the requested instruments.
+- `rho` may be zero when the venue does not provide it (Bybit, OKX).
+- `underlying_price` and `open_interest` may be `None` depending on the venue channel.
+
+**Python config:**
+
+```python
+DataTesterConfig(
+    instrument_ids=[instrument_id],
+    subscribe_option_greeks=True,
+)
+```
+
+**Rust config:**
+
+```rust
+DataTesterConfig::new(client_id, vec![instrument_id])
+    .with_subscribe_option_greeks(true)
+```
+
+### TC-D63: Subscribe option chain
+
+| Field              | Value                                                                  |
+|--------------------|------------------------------------------------------------------------|
+| **Prerequisite**   | Adapter connected, option instruments loaded for the series.           |
+| **Action**         | DataTester subscribes to option chain snapshots for a series.          |
+| **Event sequence** | `OptionChainSlice` snapshots received in `on_option_chain`.            |
+| **Pass criteria**  | Chain snapshot contains greeks for instruments matching the series.     |
+| **Skip when**      | Adapter does not support option chain subscriptions.                   |
+
+**Considerations:**
+
+- Option chain subscriptions are managed by the DataEngine, which creates per-instrument
+  quote and greeks subscriptions internally.
+- ATM-relative strike ranges require a forward price bootstrap before subscriptions begin.
+- Not yet configurable via `DataTesterConfig`; requires manual actor setup with
+  `subscribe_option_chain` and an `OptionSeriesId`.
+
+---
+
+## Group 9: Lifecycle
 
 Test actor lifecycle behavior: unsubscribe handling and custom parameters.
 
 | TC     | Name                    | Description                                        | Skip when            |
 |--------|-------------------------|----------------------------------------------------|----------------------|
 | TC-D70 | Unsubscribe on stop     | Unsubscribe from data feeds on actor stop.         | No unsub support.    |
-| TC-D71 | Custom subscribe params | Adapter-specific subscription parameters.          | N/A.                 |
-| TC-D72 | Custom request params   | Adapter-specific request parameters.               | N/A.                 |
+| TC-D71 | Custom subscribe params | Adapter‑specific subscription parameters.          | N/A.                 |
+| TC-D72 | Custom request params   | Adapter‑specific request parameters.               | N/A.                 |
 
 ### TC-D70: Unsubscribe on stop
 
@@ -741,10 +805,10 @@ DataTesterConfig::new(client_id, vec![instrument_id])
 | Field              | Value                                                                  |
 |--------------------|------------------------------------------------------------------------|
 | **Prerequisite**   | Adapter connected, adapter accepts additional subscription parameters. |
-| **Action**         | Subscribe with `subscribe_params` dict containing adapter-specific parameters. |
+| **Action**         | Subscribe with `subscribe_params` dict containing adapter‑specific parameters. |
 | **Event sequence** | Subscription established with custom parameters applied.               |
-| **Pass criteria**  | Data flows with adapter-specific parameters in effect.                 |
-| **Skip when**      | N/A (adapter-specific).                                                |
+| **Pass criteria**  | Data flows with adapter‑specific parameters in effect.                 |
+| **Skip when**      | N/A (adapter‑specific).                                                |
 
 **Considerations:**
 
@@ -756,10 +820,10 @@ DataTesterConfig::new(client_id, vec![instrument_id])
 | Field              | Value                                                                  |
 |--------------------|------------------------------------------------------------------------|
 | **Prerequisite**   | Adapter connected, adapter accepts additional request parameters.      |
-| **Action**         | Request data with `request_params` dict containing adapter-specific parameters. |
+| **Action**         | Request data with `request_params` dict containing adapter‑specific parameters. |
 | **Event sequence** | Request fulfilled with custom parameters applied.                      |
-| **Pass criteria**  | Historical data received with adapter-specific parameters in effect.   |
-| **Skip when**      | N/A (adapter-specific).                                                |
+| **Pass criteria**  | Historical data received with adapter‑specific parameters in effect.   |
+| **Skip when**      | N/A (adapter‑specific).                                                |
 
 **Considerations:**
 
@@ -790,8 +854,9 @@ Note: Rust `DataTesterConfig::new` sets `manage_book=true`, while Python default
 | `subscribe_instrument`       | bool              | False           | 1              |
 | `subscribe_instrument_status`| bool              | False           | 7              |
 | `subscribe_instrument_close` | bool              | False           | 7              |
-| `subscribe_params`           | dict?             | None            | 8              |
-| `can_unsubscribe`            | bool              | True            | 8              |
+| `subscribe_option_greeks`    | bool              | False           | 8              |
+| `subscribe_params`           | dict?             | None            | 9              |
+| `can_unsubscribe`            | bool              | True            | 9              |
 | `request_instruments`        | bool              | False           | 1              |
 | `request_book_snapshot`      | bool              | False           | 2              |
 | `request_book_deltas`        | bool              | False           | 2              |
@@ -799,7 +864,7 @@ Note: Rust `DataTesterConfig::new` sets `manage_book=true`, while Python default
 | `request_trades`             | bool              | False           | 4              |
 | `request_bars`               | bool              | False           | 5              |
 | `request_funding_rates`      | bool              | False           | 6              |
-| `request_params`             | dict?             | None            | 8              |
+| `request_params`             | dict?             | None            | 9              |
 | `requests_start_delta`       | Timedelta?        | 1 hour          | 3, 4, 5        |
 | `book_type`                  | BookType          | L2_MBP          | 2              |
 | `book_depth`                 | PositiveInt?      | None            | 2              |

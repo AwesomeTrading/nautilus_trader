@@ -15,35 +15,28 @@
 
 //! Data models for Kraken Futures WebSocket v1 API messages.
 
-use nautilus_model::{
-    data::{
-        FundingRateUpdate, IndexPriceUpdate, MarkPriceUpdate, OrderBookDeltas, QuoteTick, TradeTick,
-    },
-    events::{OrderAccepted, OrderCanceled, OrderExpired, OrderUpdated},
-    reports::{FillReport, OrderStatusReport},
-};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strum::{AsRefStr, EnumString};
 use ustr::Ustr;
 
-use crate::common::enums::KrakenOrderSide;
+use crate::common::enums::{KrakenFillType, KrakenFuturesOrderType, KrakenOrderSide};
 
 /// Output message types from the Futures WebSocket handler.
 #[derive(Clone, Debug)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "Messages are ephemeral and immediately consumed"
+)]
 pub enum KrakenFuturesWsMessage {
-    BookDeltas(OrderBookDeltas),
-    Quote(QuoteTick),
-    Trade(TradeTick),
-    MarkPrice(MarkPriceUpdate),
-    IndexPrice(IndexPriceUpdate),
-    FundingRate(FundingRateUpdate),
-    OrderAccepted(OrderAccepted),
-    OrderCanceled(OrderCanceled),
-    OrderExpired(OrderExpired),
-    OrderUpdated(OrderUpdated),
-    OrderStatusReport(Box<OrderStatusReport>),
-    FillReport(Box<FillReport>),
+    Ticker(KrakenFuturesTickerData),
+    Trade(KrakenFuturesTradeData),
+    BookSnapshot(KrakenFuturesBookSnapshot),
+    BookDelta(KrakenFuturesBookDelta),
+    OpenOrdersCancel(KrakenFuturesOpenOrdersCancel),
+    OpenOrdersDelta(KrakenFuturesOpenOrdersDelta),
+    FillsDelta(KrakenFuturesFillsDelta),
+    Challenge(String),
     Reconnected,
 }
 
@@ -69,6 +62,7 @@ pub enum KrakenFuturesFeed {
 #[strum(serialize_all = "snake_case")]
 pub enum KrakenFuturesChannel {
     Book,
+    Deltas,
     Trades,
     Quotes,
     Mark,
@@ -293,7 +287,7 @@ pub struct KrakenFuturesBookSnapshot {
     pub product_id: Ustr,
     pub timestamp: i64,
     pub seq: i64,
-    #[serde(default)]
+    #[serde(default, rename = "tickSize")]
     pub tick_size: Option<f64>,
     pub bids: Vec<KrakenFuturesBookLevel>,
     pub asks: Vec<KrakenFuturesBookLevel>,
@@ -343,7 +337,7 @@ pub struct KrakenFuturesPrivateSubscribeRequest {
 }
 
 /// Open order from Kraken Futures WebSocket.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesOpenOrder {
     pub instrument: Ustr,
     pub time: i64,
@@ -356,7 +350,7 @@ pub struct KrakenFuturesOpenOrder {
     #[serde(default)]
     pub stop_price: Option<f64>,
     #[serde(rename = "type")]
-    pub order_type: String,
+    pub order_type: KrakenFuturesOrderType,
     pub order_id: String,
     #[serde(default)]
     pub cli_ord_id: Option<String>,
@@ -369,7 +363,7 @@ pub struct KrakenFuturesOpenOrder {
 }
 
 /// Open orders snapshot from Kraken Futures WebSocket.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesOpenOrdersSnapshot {
     pub feed: KrakenFuturesFeed,
     #[serde(default)]
@@ -379,7 +373,7 @@ pub struct KrakenFuturesOpenOrdersSnapshot {
 
 /// Open orders delta/update from Kraken Futures WebSocket.
 /// Used when full order details are provided (new orders, updates).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesOpenOrdersDelta {
     pub feed: KrakenFuturesFeed,
     pub order: KrakenFuturesOpenOrder,
@@ -390,7 +384,7 @@ pub struct KrakenFuturesOpenOrdersDelta {
 
 /// Open orders cancel notification from Kraken Futures WebSocket.
 /// Used when an order is canceled - contains only order identifiers.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesOpenOrdersCancel {
     pub feed: KrakenFuturesFeed,
     pub order_id: String,
@@ -401,7 +395,7 @@ pub struct KrakenFuturesOpenOrdersCancel {
 }
 
 /// Fill from Kraken Futures WebSocket.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesFill {
     #[serde(alias = "product_id")]
     pub instrument: Option<Ustr>,
@@ -412,7 +406,7 @@ pub struct KrakenFuturesFill {
     #[serde(default)]
     pub cli_ord_id: Option<String>,
     pub fill_id: String,
-    pub fill_type: String,
+    pub fill_type: KrakenFillType,
     /// true = buy, false = sell
     pub buy: bool,
     #[serde(default)]
@@ -422,7 +416,7 @@ pub struct KrakenFuturesFill {
 }
 
 /// Fills snapshot from Kraken Futures WebSocket.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesFillsSnapshot {
     pub feed: KrakenFuturesFeed,
     #[serde(default)]
@@ -432,7 +426,7 @@ pub struct KrakenFuturesFillsSnapshot {
 
 /// Fills delta/update from Kraken Futures WebSocket.
 /// Note: Kraken sends fills updates in array format (same as snapshot).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KrakenFuturesFillsDelta {
     pub feed: KrakenFuturesFeed,
     #[serde(default)]
@@ -564,7 +558,10 @@ mod tests {
         assert_eq!(snapshot.orders.len(), 1);
         assert_eq!(snapshot.orders[0].instrument, Ustr::from("PI_XBTUSD"));
         assert_eq!(snapshot.orders[0].qty, 1000.0);
-        assert_eq!(snapshot.orders[0].order_type, "stop");
+        assert_eq!(
+            snapshot.orders[0].order_type,
+            KrakenFuturesOrderType::StopLower
+        );
     }
 
     #[rstest]
@@ -603,7 +600,7 @@ mod tests {
             Some(Ustr::from("FI_XBTUSD_200925"))
         );
         assert!(snapshot.fills[0].buy);
-        assert_eq!(snapshot.fills[0].fill_type, "maker");
+        assert_eq!(snapshot.fills[0].fill_type, KrakenFillType::Maker);
     }
 
     #[rstest]

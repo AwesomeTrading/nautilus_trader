@@ -148,6 +148,10 @@ pub const MONEY_MIN: f64 = -9_223_372_036.0;
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct Money {
     /// Represents the raw fixed-point amount, with `currency.precision` defining the number of decimal places.
     pub raw: MoneyRaw,
@@ -1261,11 +1265,13 @@ mod property_tests {
         fn prop_money_decimal_conversion(money in money_strategy()) {
             let decimal = money.as_decimal();
 
+            // Scale must always match currency precision
+            prop_assert_eq!(decimal.scale(), u32::from(money.currency.precision));
+
             #[cfg(feature = "defi")]
             {
                 let decimal_f64: f64 = decimal.try_into().unwrap_or(0.0);
                 prop_assert!(decimal_f64.is_finite(), "Decimal should convert to finite f64");
-                prop_assert_eq!(decimal.scale(), u32::from(money.currency.precision));
             }
             #[cfg(not(feature = "defi"))]
             {

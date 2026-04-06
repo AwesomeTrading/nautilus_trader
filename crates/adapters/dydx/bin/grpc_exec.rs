@@ -202,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Connecting to HTTP API: {http_url}");
     let http_client = DydxHttpClient::new(
         Some(http_url.clone()),
-        Some(30),    // timeout_secs
+        30,          // timeout_secs
         None,        // proxy_url
         !is_mainnet, // is_testnet
         None,        // retry_config
@@ -210,7 +210,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .expect("Failed to create HTTP client");
 
     // Also create raw HTTP client for order queries
-    let raw_http_client = DydxRawHttpClient::new(Some(http_url), Some(30), None, !is_mainnet, None)
+    let raw_http_client = DydxRawHttpClient::new(Some(http_url), 30, None, !is_mainnet, None)
         .expect("Failed to create raw HTTP client");
 
     // Fetch instruments
@@ -401,27 +401,15 @@ async fn run_all_edge_case_tests(args: &[String]) -> Result<(), Box<dyn std::err
     let (account_number, sequence) = grpc_client.query_address(&wallet_address).await?;
     account.set_account_info(account_number, sequence);
 
-    let http_client = DydxHttpClient::new(
-        Some(http_url.to_string()),
-        Some(30),
-        None,
-        !is_mainnet,
-        None,
-    )?;
-    let raw_http = DydxRawHttpClient::new(
-        Some(http_url.to_string()),
-        Some(30),
-        None,
-        !is_mainnet,
-        None,
-    )?;
+    let http_client = DydxHttpClient::new(Some(http_url.to_string()), 30, None, !is_mainnet, None)?;
+    let raw_http = DydxRawHttpClient::new(Some(http_url.to_string()), 30, None, !is_mainnet, None)?;
 
     http_client.fetch_and_cache_instruments().await?;
     log::info!("Setup complete - wallet: {wallet_address}");
 
     run_all_edge_tests(
         &mut grpc_client,
-        &mut account,
+        &account,
         &wallet_address,
         &http_client,
         &raw_http,
@@ -432,7 +420,7 @@ async fn run_all_edge_case_tests(args: &[String]) -> Result<(), Box<dyn std::err
 
 async fn run_all_edge_tests(
     grpc: &mut DydxGrpcClient,
-    account: &mut Account,
+    account: &Account,
     address: &str,
     http: &DydxHttpClient,
     raw_http: &DydxRawHttpClient,
@@ -670,7 +658,7 @@ async fn test_duplicate_cancel(
 
 async fn test_rapid_sequence(
     grpc: &mut DydxGrpcClient,
-    account: &mut Account,
+    account: &Account,
     http: &DydxHttpClient,
     _raw_http: &DydxRawHttpClient,
     address: &str,
@@ -721,7 +709,7 @@ async fn test_rapid_sequence(
 
 async fn test_batch_cancel(
     grpc: &mut DydxGrpcClient,
-    account: &mut Account,
+    account: &Account,
     http: &DydxHttpClient,
     raw_http: &DydxRawHttpClient,
     address: &str,

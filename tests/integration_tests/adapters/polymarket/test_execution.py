@@ -34,7 +34,6 @@ from nautilus_trader.adapters.polymarket.common.enums import PolymarketTradeStat
 from nautilus_trader.adapters.polymarket.common.symbol import get_polymarket_instrument_id
 from nautilus_trader.adapters.polymarket.config import PolymarketExecClientConfig
 from nautilus_trader.adapters.polymarket.execution import PolymarketExecutionClient
-from nautilus_trader.adapters.polymarket.http.conversion import convert_tif_to_polymarket_order_type
 from nautilus_trader.adapters.polymarket.providers import PolymarketInstrumentProvider
 from nautilus_trader.common.component import LiveClock
 from nautilus_trader.common.component import MessageBus
@@ -1194,8 +1193,10 @@ class TestPolymarketExecutionClient:
         mock_create_market_order = mocker.patch.object(self.http_client, "create_market_order")
         mock_post_order = mocker.patch.object(self.http_client, "post_order")
 
-        # Mock successful responses
-        mock_create_market_order.return_value = {"signed_order": "mock_signed_market"}
+        # Mock signed order with takerAmount (20.00 shares = 20000000 in fixed-point)
+        mock_signed = MagicMock()
+        mock_signed.order = {"takerAmount": 20_000_000}
+        mock_create_market_order.return_value = mock_signed
         mock_post_order.return_value = {"success": True, "orderID": "test_market_order_id"}
 
         market_order = self.strategy.order_factory.market(
@@ -1203,7 +1204,7 @@ class TestPolymarketExecutionClient:
             order_side=OrderSide.BUY,
             quantity=Quantity.from_str("10"),
             quote_quantity=True,
-            time_in_force=TimeInForce.IOC,  # Test IOC -> FAK mapping
+            time_in_force=TimeInForce.FOK,
         )
         self.cache.add_order(market_order, None)
 
@@ -1228,12 +1229,70 @@ class TestPolymarketExecutionClient:
         assert call_args.amount == 10.0
         assert call_args.side == "BUY"
         assert call_args.price == 0  # Market order should have price 0 (calculated server-side)
-        assert call_args.order_type == convert_tif_to_polymarket_order_type(TimeInForce.IOC)
+        assert call_args.order_type == "FOK"  # Market orders always use FOK
 
         # Check that venue order ID was cached
         venue_order_id = VenueOrderId("test_market_order_id")
         cached_client_order_id = self.cache.client_order_id(venue_order_id)
         assert cached_client_order_id == market_order.client_order_id
+
+    @pytest.mark.asyncio
+    async def test_submit_market_buy_quote_to_base_conversion(self, mocker):
+        """
+        Market BUY with quote_quantity=True emits OrderUpdated converting the order from
+        quote (USDC) to base (shares) units.
+
+        Uses the same values as the Rust test
+        test_submit_market_order_buy_quote_to_base_conversion:
+        - Quote amount: 10 USDC
+        - takerAmount: 20_000_000 (= 20.00 shares at 0.50 crossing price)
+        - Expected base quantity: 20.00 (instrument size_precision=2)
+        - is_quote_quantity flips from True to False
+
+        """
+        mock_create_market_order = mocker.patch.object(self.http_client, "create_market_order")
+        mock_post_order = mocker.patch.object(self.http_client, "post_order")
+        send_spy = mocker.spy(self.exec_client, "_send_order_event")
+
+        # 20.00 shares * 10^6 fixed-point (matches 10 USDC / 0.50 crossing price)
+        mock_signed = MagicMock()
+        mock_signed.order = {"takerAmount": 20_000_000}
+        mock_create_market_order.return_value = mock_signed
+        mock_post_order.return_value = {"success": True, "orderID": "test_qty_order_id"}
+
+        order = self.strategy.order_factory.market(
+            instrument_id=ELECTION_INSTRUMENT.id,
+            order_side=OrderSide.BUY,
+            quantity=Quantity.from_str("10.00"),
+            quote_quantity=True,
+            time_in_force=TimeInForce.FOK,
+        )
+        self.cache.add_order(order, None)
+
+        submit_order = SubmitOrder(
+            trader_id=self.trader_id,
+            strategy_id=self.strategy.id,
+            position_id=None,
+            order=order,
+            command_id=UUID4(),
+            ts_init=0,
+        )
+
+        assert order.is_quote_quantity
+
+        await self.exec_client._submit_order(submit_order)
+
+        # Verify OrderUpdated was sent via _send_order_event
+        updated_calls = [
+            call
+            for call in send_spy.call_args_list
+            if type(call.args[0]).__name__ == "OrderUpdated"
+        ]
+        assert len(updated_calls) == 1, f"Expected 1 OrderUpdated, found {len(updated_calls)}"
+
+        updated_event = updated_calls[0].args[0]
+        assert updated_event.quantity == Quantity.from_str("20.00")
+        assert not updated_event.is_quote_quantity
 
     @pytest.mark.asyncio
     async def test_submit_market_order_with_fok(self, mocker):
@@ -1276,7 +1335,7 @@ class TestPolymarketExecutionClient:
         assert call_args.amount == 5.0
         assert call_args.side == "SELL"
         assert call_args.price == 0
-        assert call_args.order_type == convert_tif_to_polymarket_order_type(TimeInForce.FOK)
+        assert call_args.order_type == "FOK"  # Market orders always use FOK
 
     @pytest.mark.asyncio
     async def test_submit_limit_order_still_works(self, mocker):
@@ -3298,6 +3357,67 @@ class TestPolymarketCancelAndPostOnly:
         assert rejected_call.kwargs["client_order_id"] == order2.client_order_id
         assert "not included in API response" in rejected_call.kwargs["reason"]
 
+    @pytest.mark.asyncio
+    async def test_batch_submit_deferred_cancel_for_pending_cancel_order(self, mocker):
+        """
+        Test that _process_batch_response issues a deferred cancel when an order
+        transitioned to PENDING_CANCEL during the batch HTTP round-trip.
+        """
+        # Arrange
+        mock_create_order = mocker.patch.object(self.http_client, "create_order")
+        mock_post_orders = mocker.patch.object(self.http_client, "post_orders")
+        mock_cancel = mocker.patch.object(self.http_client, "cancel")
+
+        mock_create_order.return_value = {"signed_order": "mock_signed"}
+        mock_post_orders.return_value = [
+            {"success": True, "orderID": "0xbatch_deferred_cancel"},
+        ]
+        mock_cancel.return_value = {
+            "canceled": ["0xbatch_deferred_cancel"],
+            "not_canceled": {},
+        }
+
+        order = self.strategy.order_factory.limit(
+            instrument_id=ELECTION_INSTRUMENT.id,
+            order_side=OrderSide.BUY,
+            quantity=Quantity.from_str("5"),
+            price=Price.from_str("0.50"),
+        )
+        self.cache.add_order(order, None)
+
+        order_list = OrderList(
+            order_list_id=OrderListId("BATCH-CANCEL-001"),
+            orders=[order],
+        )
+
+        submit_order_list = SubmitOrderList(
+            trader_id=self.trader_id,
+            strategy_id=self.strategy.id,
+            order_list=order_list,
+            position_id=None,
+            command_id=UUID4(),
+            ts_init=0,
+        )
+
+        # Patch _post_signed_orders_batch to apply PendingCancel before
+        # the batch HTTP response is processed
+        original_post_batch = self.exec_client._post_signed_orders_batch
+
+        async def post_batch_with_cancel(orders_arg, *args, **kwargs):
+            for o in orders_arg:
+                pending_cancel = TestEventStubs.order_pending_cancel(o)
+                o.apply(pending_cancel)
+            await original_post_batch(orders_arg, *args, **kwargs)
+
+        self.exec_client._post_signed_orders_batch = post_batch_with_cancel
+
+        # Act
+        await self.exec_client._submit_order_list(submit_order_list)
+        await asyncio.sleep(0.1)
+
+        # Assert
+        mock_cancel.assert_called_once_with(order_id="0xbatch_deferred_cancel")
+
 
 class TestPolymarketGenerateCancelEvent:
     """
@@ -3433,3 +3553,142 @@ class TestPolymarketGenerateCancelEvent:
         cancel_rejected_spy.assert_called_once()
         call_kwargs = cancel_rejected_spy.call_args.kwargs
         assert call_kwargs["reason"] == "insufficient balance"
+
+    @pytest.mark.asyncio
+    async def test_deferred_cancel_triggered_when_order_pending_cancel(self, mocker):
+        """
+        Test that _post_signed_order issues a deferred cancel when the order
+        transitioned to PENDING_CANCEL during the HTTP round-trip.
+        """
+        # Arrange
+        mock_create_order = mocker.patch.object(self.http_client, "create_order")
+        mock_post_order = mocker.patch.object(self.http_client, "post_order")
+        mock_cancel = mocker.patch.object(self.http_client, "cancel")
+
+        mock_create_order.return_value = {"signed_order": "mock_signed"}
+        mock_post_order.return_value = {"success": True, "orderID": "0xdeferred_cancel_id"}
+        mock_cancel.return_value = {"canceled": ["0xdeferred_cancel_id"], "not_canceled": {}}
+
+        order = self.strategy.order_factory.limit(
+            instrument_id=ELECTION_INSTRUMENT.id,
+            order_side=OrderSide.BUY,
+            quantity=Quantity.from_str("5"),
+            price=Price.from_str("0.50"),
+        )
+        self.cache.add_order(order, None)
+
+        submit_order = SubmitOrder(
+            trader_id=self.trader_id,
+            strategy_id=self.strategy.id,
+            position_id=None,
+            order=order,
+            command_id=UUID4(),
+            ts_init=0,
+        )
+
+        # Patch _post_signed_order to apply PendingCancel between the
+        # generate_order_submitted (already done by _submit_limit_order)
+        # and the actual HTTP post, simulating a cancel arriving mid-flight.
+        original_post = self.exec_client._post_signed_order
+
+        async def post_with_cancel(order_obj, *args, **kwargs):
+            pending_cancel = TestEventStubs.order_pending_cancel(order_obj)
+            order_obj.apply(pending_cancel)
+            await original_post(order_obj, *args, **kwargs)
+
+        self.exec_client._post_signed_order = post_with_cancel
+
+        # Act
+        await self.exec_client._submit_order(submit_order)
+
+        # Allow the deferred cancel coroutine to execute
+        await asyncio.sleep(0.1)
+
+        # Assert
+        mock_cancel.assert_called_once_with(order_id="0xdeferred_cancel_id")
+
+    @pytest.mark.asyncio
+    async def test_deferred_cancel_handles_rejection(self, mocker):
+        """
+        Test that a deferred cancel properly handles a rejected cancel response.
+        """
+        # Arrange
+        mock_create_order = mocker.patch.object(self.http_client, "create_order")
+        mock_post_order = mocker.patch.object(self.http_client, "post_order")
+        mock_cancel = mocker.patch.object(self.http_client, "cancel")
+        cancel_event_spy = mocker.spy(self.exec_client, "_generate_cancel_event")
+
+        mock_create_order.return_value = {"signed_order": "mock_signed"}
+        mock_post_order.return_value = {"success": True, "orderID": "0xdeferred_reject_id"}
+        mock_cancel.return_value = {"not_canceled": "insufficient balance"}
+
+        order = self.strategy.order_factory.limit(
+            instrument_id=ELECTION_INSTRUMENT.id,
+            order_side=OrderSide.BUY,
+            quantity=Quantity.from_str("5"),
+            price=Price.from_str("0.50"),
+        )
+        self.cache.add_order(order, None)
+
+        submit_order = SubmitOrder(
+            trader_id=self.trader_id,
+            strategy_id=self.strategy.id,
+            position_id=None,
+            order=order,
+            command_id=UUID4(),
+            ts_init=0,
+        )
+
+        original_post = self.exec_client._post_signed_order
+
+        async def post_with_cancel(order_obj, *args, **kwargs):
+            pending_cancel = TestEventStubs.order_pending_cancel(order_obj)
+            order_obj.apply(pending_cancel)
+            await original_post(order_obj, *args, **kwargs)
+
+        self.exec_client._post_signed_order = post_with_cancel
+
+        # Act
+        await self.exec_client._submit_order(submit_order)
+        await asyncio.sleep(0.1)
+
+        # Assert
+        mock_cancel.assert_called_once_with(order_id="0xdeferred_reject_id")
+        cancel_event_spy.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cancel_order_returns_when_no_venue_order_id(self, mocker):
+        """
+        Test that cancel_order returns without sending to venue when venue_order_id is
+        not yet available.
+        """
+        # Arrange
+        mock_cancel = mocker.patch.object(self.http_client, "cancel")
+
+        order = self.strategy.order_factory.limit(
+            instrument_id=ELECTION_INSTRUMENT.id,
+            order_side=OrderSide.BUY,
+            quantity=Quantity.from_str("5"),
+            price=Price.from_str("0.50"),
+        )
+        submitted = TestEventStubs.order_submitted(order)
+        order.apply(submitted)
+        self.cache.add_order(order, None)
+
+        from nautilus_trader.execution.messages import CancelOrder
+
+        cancel = CancelOrder(
+            trader_id=self.trader_id,
+            strategy_id=self.strategy.id,
+            instrument_id=ELECTION_INSTRUMENT.id,
+            client_order_id=order.client_order_id,
+            venue_order_id=None,
+            command_id=UUID4(),
+            ts_init=0,
+        )
+
+        # Act
+        await self.exec_client._cancel_order(cancel)
+
+        # Assert - no HTTP cancel sent (cancel was deferred)
+        mock_cancel.assert_not_called()

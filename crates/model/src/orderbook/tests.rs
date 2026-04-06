@@ -1109,6 +1109,80 @@ fn test_book_update_trade_tick_advances_sequence() {
 }
 
 #[rstest]
+fn test_book_update_stale_trade_tick_does_not_mutate_l1() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L1_MBP);
+
+    let quote = QuoteTick::new(
+        instrument_id,
+        Price::from("10.000"),
+        Price::from("10.000"),
+        Quantity::from("1.00000000"),
+        Quantity::from("1.00000000"),
+        UnixNanos::from(2),
+        UnixNanos::from(2),
+    );
+    book.update_quote_tick(&quote).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+
+    // Stale trade with older ts_event should not mutate the book
+    let stale_trade = TradeTick::new(
+        instrument_id,
+        Price::from("11.000"),
+        Quantity::from("1.00000000"),
+        AggressorSide::Buyer,
+        TradeId::new("1"),
+        UnixNanos::from(1),
+        UnixNanos::from(1),
+    );
+    book.update_trade_tick(&stale_trade).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+}
+
+#[rstest]
+fn test_book_update_stale_quote_tick_does_not_mutate_l1() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L1_MBP);
+
+    let trade = TradeTick::new(
+        instrument_id,
+        Price::from("10.000"),
+        Quantity::from("1.00000000"),
+        AggressorSide::Buyer,
+        TradeId::new("1"),
+        UnixNanos::from(2),
+        UnixNanos::from(2),
+    );
+    book.update_trade_tick(&trade).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+
+    // Stale quote with older ts_event should not mutate the book
+    let stale_quote = QuoteTick::new(
+        instrument_id,
+        Price::from("11.000"),
+        Price::from("12.000"),
+        Quantity::from("1.00000000"),
+        Quantity::from("1.00000000"),
+        UnixNanos::from(1),
+        UnixNanos::from(1),
+    );
+    book.update_quote_tick(&stale_quote).unwrap();
+
+    assert_eq!(book.ts_last, UnixNanos::from(2));
+    assert_eq!(book.best_bid_price().unwrap(), Price::from("10.000"));
+    assert_eq!(book.best_ask_price().unwrap(), Price::from("10.000"));
+}
+
+#[rstest]
 fn test_book_pprint() {
     let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
     let mut book = OrderBook::new(instrument_id, BookType::L3_MBO);
@@ -2107,15 +2181,10 @@ fn test_book_filtered_with_status_filter() {
     status_filter.insert(OrderStatus::Accepted);
 
     // Get filtered maps with status filter
-    let bids_filtered = book.bids_filtered_as_map(
-        None,
-        Some(&own_book),
-        Some(status_filter.clone()),
-        None,
-        None,
-    );
+    let bids_filtered =
+        book.bids_filtered_as_map(None, Some(&own_book), Some(&status_filter), None, None);
     let asks_filtered =
-        book.asks_filtered_as_map(None, Some(&own_book), Some(status_filter), None, None);
+        book.asks_filtered_as_map(None, Some(&own_book), Some(&status_filter), None, None);
     // Check that only ACCEPTED own orders are subtracted
     assert_eq!(bids_filtered.get(&dec!(100.00)), Some(&dec!(70))); // 100 - 30 = 70
     assert_eq!(asks_filtered.get(&dec!(101.00)), Some(&dec!(70))); // 100 - 30 = 70
@@ -2345,7 +2414,7 @@ fn test_book_filtered_with_accepted_buffer() {
     let bids_filtered = book.bids_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter.clone()),
+        Some(&status_filter),
         Some(accepted_buffer),
         Some(now.into()),
     );
@@ -2353,7 +2422,7 @@ fn test_book_filtered_with_accepted_buffer() {
     let asks_filtered = book.asks_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter.clone()),
+        Some(&status_filter),
         Some(accepted_buffer),
         Some(now.into()),
     );
@@ -2369,7 +2438,7 @@ fn test_book_filtered_with_accepted_buffer() {
     let bids_short_buffer = book.bids_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter.clone()),
+        Some(&status_filter),
         Some(short_buffer),
         Some(now.into()),
     );
@@ -2377,7 +2446,7 @@ fn test_book_filtered_with_accepted_buffer() {
     let asks_short_buffer = book.asks_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter.clone()),
+        Some(&status_filter),
         Some(short_buffer),
         Some(now.into()),
     );
@@ -2393,7 +2462,7 @@ fn test_book_filtered_with_accepted_buffer() {
     let bids_long_buffer = book.bids_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter.clone()),
+        Some(&status_filter),
         Some(long_buffer),
         Some(now.into()),
     );
@@ -2401,7 +2470,7 @@ fn test_book_filtered_with_accepted_buffer() {
     let asks_long_buffer = book.asks_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter.clone()),
+        Some(&status_filter),
         Some(long_buffer),
         Some(now.into()),
     );
@@ -2490,7 +2559,7 @@ fn test_book_filtered_with_accepted_buffer_mixed_statuses() {
     let bids_filtered_submitted = book.bids_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter),
+        Some(&status_filter),
         Some(accepted_buffer),
         Some(now.into()),
     );
@@ -2507,7 +2576,7 @@ fn test_book_filtered_with_accepted_buffer_mixed_statuses() {
     let bids_filtered_both = book.bids_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter_both.clone()),
+        Some(&status_filter_both),
         Some(accepted_buffer),
         Some(now.into()),
     );
@@ -2522,7 +2591,7 @@ fn test_book_filtered_with_accepted_buffer_mixed_statuses() {
     let bids_filtered_long_buffer = book.bids_filtered_as_map(
         None,
         Some(&own_book),
-        Some(status_filter_both),
+        Some(&status_filter_both),
         Some(long_buffer),
         Some(now.into()),
     );
@@ -2793,7 +2862,7 @@ fn test_book_group_with_status_filter() {
         dec!(1.0),
         None,
         Some(&own_book),
-        Some(status_filter),
+        Some(&status_filter),
         None,
         None,
     );
@@ -4410,7 +4479,7 @@ fn test_status_filtering_bids_as_map() {
     // Filter for just SUBMITTED status
     let mut filter_submitted = AHashSet::new();
     filter_submitted.insert(OrderStatus::Submitted);
-    let submitted_orders = book.bids_as_map(Some(filter_submitted), None, None);
+    let submitted_orders = book.bids_as_map(Some(&filter_submitted), None, None);
     assert_eq!(submitted_orders.len(), 1); // One price level
     assert_eq!(submitted_orders.get(&dec!(100.00)).unwrap().len(), 1); // One order at 100.00
     assert_eq!(
@@ -4423,7 +4492,7 @@ fn test_status_filtering_bids_as_map() {
     let mut filter_accepted_canceled = AHashSet::new();
     filter_accepted_canceled.insert(OrderStatus::Accepted);
     filter_accepted_canceled.insert(OrderStatus::Canceled);
-    let accepted_canceled_orders = book.bids_as_map(Some(filter_accepted_canceled), None, None);
+    let accepted_canceled_orders = book.bids_as_map(Some(&filter_accepted_canceled), None, None);
     assert_eq!(accepted_canceled_orders.len(), 2); // Two price levels
     assert_eq!(
         accepted_canceled_orders.get(&dec!(100.00)).unwrap().len(),
@@ -4434,7 +4503,7 @@ fn test_status_filtering_bids_as_map() {
     // Filter for non-existent status
     let mut filter_filled = AHashSet::new();
     filter_filled.insert(OrderStatus::Filled);
-    let filled_orders = book.bids_as_map(Some(filter_filled), None, None);
+    let filled_orders = book.bids_as_map(Some(&filter_filled), None, None);
     assert_eq!(filled_orders.len(), 0); // No orders match
 }
 
@@ -4487,7 +4556,7 @@ fn test_status_filtering_asks_as_map() {
     // Filter for just SUBMITTED status
     let mut filter_submitted = AHashSet::new();
     filter_submitted.insert(OrderStatus::Submitted);
-    let submitted_orders = book.asks_as_map(Some(filter_submitted), None, None);
+    let submitted_orders = book.asks_as_map(Some(&filter_submitted), None, None);
     assert_eq!(submitted_orders.len(), 1); // One price level
     assert_eq!(submitted_orders.get(&dec!(101.00)).unwrap().len(), 1); // One order at 101.00
     assert_eq!(
@@ -4563,7 +4632,7 @@ fn test_status_filtering_bid_quantity() {
     // Filter for just SUBMITTED status
     let mut filter_submitted = AHashSet::new();
     filter_submitted.insert(OrderStatus::Submitted);
-    let submitted_quantities = book.bid_quantity(Some(filter_submitted), None, None, None, None);
+    let submitted_quantities = book.bid_quantity(Some(&filter_submitted), None, None, None, None);
     assert_eq!(submitted_quantities.len(), 1); // One price level
     assert_eq!(submitted_quantities.get(&dec!(100.00)), Some(&dec!(10))); // 10
     assert!(submitted_quantities.get(&dec!(99.50)).is_none()); // No SUBMITTED orders at 99.50
@@ -4573,7 +4642,7 @@ fn test_status_filtering_bid_quantity() {
     filter_accepted_canceled.insert(OrderStatus::Accepted);
     filter_accepted_canceled.insert(OrderStatus::Canceled);
     let accepted_canceled_quantities =
-        book.bid_quantity(Some(filter_accepted_canceled), None, None, None, None);
+        book.bid_quantity(Some(&filter_accepted_canceled), None, None, None, None);
     assert_eq!(accepted_canceled_quantities.len(), 2); // Two price levels
     assert_eq!(
         accepted_canceled_quantities.get(&dec!(100.00)),
@@ -4652,7 +4721,7 @@ fn test_status_filtering_ask_quantity() {
     // Filter for just SUBMITTED status
     let mut filter_submitted = AHashSet::new();
     filter_submitted.insert(OrderStatus::Submitted);
-    let submitted_quantities = book.ask_quantity(Some(filter_submitted), None, None, None, None);
+    let submitted_quantities = book.ask_quantity(Some(&filter_submitted), None, None, None, None);
     assert_eq!(submitted_quantities.len(), 1); // One price level
     assert_eq!(submitted_quantities.get(&dec!(101.00)), Some(&dec!(10))); // 10
     assert!(submitted_quantities.get(&dec!(102.00)).is_none()); // No SUBMITTED orders at 102.00
@@ -4661,7 +4730,7 @@ fn test_status_filtering_ask_quantity() {
     let mut filter_multiple = AHashSet::new();
     filter_multiple.insert(OrderStatus::Submitted);
     filter_multiple.insert(OrderStatus::Canceled);
-    let multiple_quantities = book.ask_quantity(Some(filter_multiple), None, None, None, None);
+    let multiple_quantities = book.ask_quantity(Some(&filter_multiple), None, None, None, None);
     assert_eq!(multiple_quantities.len(), 2); // Two price levels
     assert_eq!(multiple_quantities.get(&dec!(101.00)), Some(&dec!(10))); // 10 (Submitted only)
     assert_eq!(multiple_quantities.get(&dec!(102.00)), Some(&dec!(20))); // 20 (Canceled only)
@@ -4669,7 +4738,7 @@ fn test_status_filtering_ask_quantity() {
     // Check empty price levels are filtered out
     let mut filter_filled = AHashSet::new();
     filter_filled.insert(OrderStatus::Filled);
-    let filled_quantities = book.ask_quantity(Some(filter_filled), None, None, None, None);
+    let filled_quantities = book.ask_quantity(Some(&filter_filled), None, None, None, None);
     assert_eq!(filled_quantities.len(), 0); // No orders match
 }
 
@@ -5319,7 +5388,7 @@ fn test_own_book_group_with_status_and_buffer() {
 
     // Group with a buffer of 300 ns - only orders accepted before 700 ns should be included
     let grouped_bids = own_book.bid_quantity(
-        Some(status_filter.clone()),
+        Some(&status_filter),
         None,
         Some(dec!(1.0)),
         Some(300),
@@ -5332,7 +5401,7 @@ fn test_own_book_group_with_status_and_buffer() {
 
     // Test with a smaller buffer of 50 ns - all orders should be included
     let grouped_all = own_book.bid_quantity(
-        Some(status_filter),
+        Some(&status_filter),
         None,
         Some(dec!(1.0)),
         Some(50),
@@ -7413,4 +7482,177 @@ fn test_asks_range_up_to_single_exact_bottom() {
 
     assert_eq!(levels.len(), 1);
     assert_eq!(levels[0].0.value, Price::from("101.00"));
+}
+
+#[rstest]
+fn test_book_get_levels_for_price_buy_crosses_two_levels() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+    let ask1 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.001"),
+        Quantity::from("10.0"),
+        0,
+    );
+    let ask2 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.002"),
+        Quantity::from("20.0"),
+        0,
+    );
+    let ask3 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.003"),
+        Quantity::from("30.0"),
+        0,
+    );
+    book.add(ask1, 0, 1, 1.into());
+    book.add(ask2, 0, 2, 2.into());
+    book.add(ask3, 0, 3, 3.into());
+
+    let result = book.get_all_crossed_levels(OrderSide::Buy, Price::from("1.002"), 1);
+
+    assert_eq!(
+        result,
+        vec![
+            (Price::from("1.001"), Quantity::from("10.0")),
+            (Price::from("1.002"), Quantity::from("20.0")),
+        ]
+    );
+}
+
+#[rstest]
+fn test_book_get_levels_for_price_sell_crosses_two_levels() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+    let bid1 = BookOrder::new(
+        OrderSide::Buy,
+        Price::from("1.003"),
+        Quantity::from("10.0"),
+        0,
+    );
+    let bid2 = BookOrder::new(
+        OrderSide::Buy,
+        Price::from("1.002"),
+        Quantity::from("20.0"),
+        0,
+    );
+    let bid3 = BookOrder::new(
+        OrderSide::Buy,
+        Price::from("1.001"),
+        Quantity::from("30.0"),
+        0,
+    );
+    book.add(bid1, 0, 1, 1.into());
+    book.add(bid2, 0, 2, 2.into());
+    book.add(bid3, 0, 3, 3.into());
+
+    let result = book.get_all_crossed_levels(OrderSide::Sell, Price::from("1.002"), 1);
+
+    assert_eq!(
+        result,
+        vec![
+            (Price::from("1.003"), Quantity::from("10.0")),
+            (Price::from("1.002"), Quantity::from("20.0")),
+        ]
+    );
+}
+
+#[rstest]
+fn test_book_get_levels_for_price_no_levels_crossed() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+    let ask1 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.001"),
+        Quantity::from("10.0"),
+        0,
+    );
+    let ask2 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.002"),
+        Quantity::from("20.0"),
+        0,
+    );
+    book.add(ask1, 0, 1, 1.into());
+    book.add(ask2, 0, 2, 2.into());
+
+    let result = book.get_all_crossed_levels(OrderSide::Buy, Price::from("0.999"), 1);
+
+    assert!(result.is_empty());
+}
+
+#[rstest]
+fn test_book_get_levels_for_price_all_levels_crossed() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+    let ask1 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.001"),
+        Quantity::from("10.0"),
+        0,
+    );
+    let ask2 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.002"),
+        Quantity::from("20.0"),
+        0,
+    );
+    let ask3 = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("1.003"),
+        Quantity::from("30.0"),
+        0,
+    );
+    book.add(ask1, 0, 1, 1.into());
+    book.add(ask2, 0, 2, 2.into());
+    book.add(ask3, 0, 3, 3.into());
+
+    let result = book.get_all_crossed_levels(OrderSide::Buy, Price::from("2.000"), 1);
+
+    assert_eq!(
+        result,
+        vec![
+            (Price::from("1.001"), Quantity::from("10.0")),
+            (Price::from("1.002"), Quantity::from("20.0")),
+            (Price::from("1.003"), Quantity::from("30.0")),
+        ]
+    );
+}
+
+#[rstest]
+fn test_book_get_levels_for_price_empty_book() {
+    let instrument_id = InstrumentId::from("ETHUSDT-PERP.BINANCE");
+    let book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+    let result = book.get_all_crossed_levels(OrderSide::Buy, Price::from("1.000"), 1);
+
+    assert!(result.is_empty());
+}
+
+#[rstest]
+fn test_book_integrity_locked_market_is_valid() {
+    let instrument_id = InstrumentId::from("AAPL.XNAS");
+    let mut book = OrderBook::new(instrument_id, BookType::L2_MBP);
+
+    let bid = BookOrder::new(
+        OrderSide::Buy,
+        Price::from("100.00"),
+        Quantity::from(100),
+        1,
+    );
+    let ask = BookOrder::new(
+        OrderSide::Sell,
+        Price::from("100.00"),
+        Quantity::from(100),
+        2,
+    );
+    book.add(bid, 0, 1, 1.into());
+    book.add(ask, 0, 2, 2.into());
+
+    assert_eq!(book_check_integrity(&book), Ok(()));
 }

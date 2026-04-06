@@ -16,6 +16,7 @@
 use std::{borrow::Cow, fmt::Display, str::FromStr, sync::Arc};
 
 use alloy_primitives::{Address, keccak256};
+use nautilus_core::hex;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumString};
 
@@ -183,31 +184,12 @@ impl Dex {
         burn_event: &str,
         collect_event: &str,
     ) -> Self {
-        let pool_created_event_hash = keccak256(pool_created_event.as_bytes());
-        let encoded_pool_created_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(pool_created_event_hash)
-        );
-        let swap_event_hash: alloy_primitives::FixedBytes<32> = keccak256(swap_event.as_bytes());
-        let encoded_swap_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(swap_event_hash)
-        );
-        let mint_event_hash = keccak256(mint_event.as_bytes());
-        let encoded_mint_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(mint_event_hash)
-        );
-        let burn_event_hash = keccak256(burn_event.as_bytes());
-        let encoded_burn_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(burn_event_hash)
-        );
-        let collect_event_hash = keccak256(collect_event.as_bytes());
-        let encoded_collect_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(collect_event_hash)
-        );
+        let encoded_pool_created_event =
+            hex::encode_prefixed(keccak256(pool_created_event.as_bytes()));
+        let encoded_swap_event = hex::encode_prefixed(keccak256(swap_event.as_bytes()));
+        let encoded_mint_event = hex::encode_prefixed(keccak256(mint_event.as_bytes()));
+        let encoded_burn_event = hex::encode_prefixed(keccak256(burn_event.as_bytes()));
+        let encoded_collect_event = hex::encode_prefixed(keccak256(collect_event.as_bytes()));
         let factory_address = match validate_address(factory) {
             Ok(address) => address,
             Err(e) => panic!(
@@ -238,22 +220,12 @@ impl Dex {
 
     /// Sets the pool initialization event signature by hashing and encoding the provided event string.
     pub fn set_initialize_event(&mut self, event: &str) {
-        let initialize_event_hash = keccak256(event.as_bytes());
-        let encoded_initialized_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(initialize_event_hash)
-        );
-        self.initialize_event = Some(encoded_initialized_event.into());
+        self.initialize_event = Some(hex::encode_prefixed(keccak256(event.as_bytes())).into());
     }
 
     /// Sets the flash loan event signature by hashing and encoding the provided event string.
     pub fn set_flash_event(&mut self, event: &str) {
-        let flash_event_hash = keccak256(event.as_bytes());
-        let encoded_flash_event = format!(
-            "0x{encoded_hash}",
-            encoded_hash = hex::encode(flash_event_hash)
-        );
-        self.flash_created_event = Some(encoded_flash_event.into());
+        self.flash_created_event = Some(hex::encode_prefixed(keccak256(event.as_bytes())).into());
     }
 }
 

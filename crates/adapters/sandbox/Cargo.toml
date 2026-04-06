@@ -36,6 +36,7 @@ python = [
   "nautilus-execution/python",
   "nautilus-model/python",
   "pyo3",
+  "pyo3-stub-gen",
 ]
 high-precision = ["nautilus-model/high-precision"]
 example-databento = [
@@ -54,10 +55,12 @@ nautilus-core = { workspace = true }
 nautilus-execution = { workspace = true }
 nautilus-model = { workspace = true }
 nautilus-system = { workspace = true }
+nautilus-trading = { workspace = true }
 
 ahash = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+bon = { workspace = true }
 derive_builder = { workspace = true }
 log = { workspace = true }
 rust_decimal = { workspace = true }
@@ -70,6 +73,7 @@ nautilus-live = { workspace = true, optional = true }
 
 dotenvy = { workspace = true, optional = true }
 pyo3 = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
 nautilus-testkit = { workspace = true }

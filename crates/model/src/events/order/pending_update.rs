@@ -44,6 +44,10 @@ use crate::{
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.model", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct OrderPendingUpdate {
     /// The trader ID associated with the event.
     pub trader_id: TraderId,
@@ -143,7 +147,7 @@ impl OrderEvent for OrderPendingUpdate {
         self.event_id
     }
 
-    fn kind(&self) -> &str {
+    fn type_name(&self) -> &'static str {
         stringify!(OrderPendingUpdate)
     }
 
@@ -321,5 +325,13 @@ mod test {
             display,
             "OrderPendingUpdate(instrument_id=BTCUSDT.COINBASE, client_order_id=O-19700101-000000-001-001-1, venue_order_id=001, account_id=SIM-001, ts_event=0)"
         );
+    }
+
+    #[rstest]
+    fn test_order_pending_update_serialization() {
+        let original = OrderPendingUpdate::default();
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: OrderPendingUpdate = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
     }
 }

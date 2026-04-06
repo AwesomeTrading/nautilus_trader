@@ -49,6 +49,10 @@ use strum::{AsRefStr, Display, EnumIter, EnumString};
         rename_all = "SCREAMING_SNAKE_CASE",
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.bitmex")
+)]
 pub enum BitmexSymbolStatus {
     /// Symbol is open for trading.
     Open,
@@ -121,6 +125,10 @@ impl From<BitmexSide> for OrderSide {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.bitmex")
 )]
 pub enum BitmexPositionSide {
     /// Long position.
@@ -263,6 +271,16 @@ pub enum BitmexOrderStatus {
     Rejected,
     /// Order has expired according to its time in force.
     Expired,
+}
+
+impl BitmexOrderStatus {
+    /// Returns whether this status represents a terminal order state.
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Filled | Self::Canceled | Self::Rejected | Self::Expired
+        )
+    }
 }
 
 impl From<BitmexOrderStatus> for OrderStatus {

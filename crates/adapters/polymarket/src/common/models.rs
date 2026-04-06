@@ -15,6 +15,13 @@
 
 //! Shared model types for the Polymarket adapter.
 
+use std::fmt::Display;
+
+use nautilus_common::cache::Cache;
+use nautilus_model::{
+    identifiers::InstrumentId,
+    instruments::{Instrument, InstrumentAny},
+};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use ustr::Ustr;
@@ -52,13 +59,53 @@ pub struct PolymarketMakerOrder {
     pub price: Decimal,
 }
 
+/// Human-readable label for a Polymarket instrument.
+#[derive(Debug, Clone)]
+pub struct PolymarketLabel {
+    pub description: String,
+    pub outcome: String,
+}
+
+impl Display for PolymarketLabel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} [{}]", self.description, self.outcome)
+    }
+}
+
+impl PolymarketLabel {
+    /// Build a label from an instrument reference.
+    pub fn from_instrument(instrument: &InstrumentAny) -> Self {
+        if let InstrumentAny::BinaryOption(opt) = instrument {
+            Self {
+                description: opt
+                    .description
+                    .map_or_else(|| instrument.id().to_string(), |d| d.to_string()),
+                outcome: opt
+                    .outcome
+                    .map_or_else(|| "?".to_string(), |o| o.to_string()),
+            }
+        } else {
+            Self {
+                description: instrument.id().to_string(),
+                outcome: "?".to_string(),
+            }
+        }
+    }
+
+    /// Look up an instrument by ID in the cache and build a label.
+    /// Returns `None` if the instrument is not in the cache.
+    pub fn from_cache(instrument_id: &InstrumentId, cache: &Cache) -> Option<Self> {
+        cache.instrument(instrument_id).map(Self::from_instrument)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
     use rust_decimal_macros::dec;
 
     use super::*;
-    use crate::common::enums::PolymarketOutcome;
+    use crate::{common::enums::PolymarketOutcome, http::models::PolymarketTradeReport};
 
     fn load<T: serde::de::DeserializeOwned>(filename: &str) -> T {
         let path = format!("test_data/{filename}");
@@ -94,7 +141,7 @@ mod tests {
         );
         assert_eq!(order.matched_amount, dec!(50.0000));
         assert_eq!(order.order_id, "0xorder001");
-        assert_eq!(order.outcome, PolymarketOutcome::Yes);
+        assert_eq!(order.outcome, PolymarketOutcome::yes());
         assert_eq!(order.price, dec!(0.6000));
     }
 
@@ -119,7 +166,7 @@ mod tests {
             "price": "0.4"
         }"#;
         let order: PolymarketMakerOrder = serde_json::from_str(json).unwrap();
-        assert_eq!(order.outcome, PolymarketOutcome::No);
+        assert_eq!(order.outcome, PolymarketOutcome::no());
     }
 
     #[rstest]
@@ -136,15 +183,13 @@ mod tests {
     // Tests for embedded maker orders from the trade report fixture
     #[rstest]
     fn test_maker_orders_from_trade_report() {
-        // Uses the trade report fixture which contains nested maker orders
-        use crate::http::models::PolymarketTradeReport;
         let trade: PolymarketTradeReport = load("http_trade_report.json");
 
         assert_eq!(trade.maker_orders.len(), 2);
         let m0 = &trade.maker_orders[0];
         assert_eq!(m0.matched_amount, dec!(25.0000));
         assert_eq!(m0.fee_rate_bps, dec!(0));
-        assert_eq!(m0.outcome, PolymarketOutcome::Yes);
+        assert_eq!(m0.outcome, PolymarketOutcome::yes());
 
         let m1 = &trade.maker_orders[1];
         assert_eq!(m1.matched_amount, dec!(5.0000));

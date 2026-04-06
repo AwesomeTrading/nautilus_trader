@@ -25,6 +25,10 @@ use crate::{Returns, statistic::PortfolioStatistic};
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.analysis", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.analysis")
+)]
 pub struct LongRatio {
     pub precision: usize,
 }
@@ -80,7 +84,7 @@ impl PortfolioStatistic for LongRatio {
 
 #[cfg(test)]
 mod tests {
-    use ahash::AHashMap;
+    use ahash::{AHashMap, AHashSet};
     use nautilus_core::{UnixNanos, approx_eq};
     use nautilus_model::{
         enums::{InstrumentClass, PositionSide},
@@ -128,7 +132,7 @@ mod tests {
             avg_px_close: Some(0.0),
             realized_return: 0.0,
             realized_pnl: None,
-            trade_ids: Vec::new(),
+            trade_ids: AHashSet::new(),
             buy_qty: Quantity::default(),
             sell_qty: Quantity::default(),
             commissions: AHashMap::new(),

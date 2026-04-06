@@ -17,7 +17,7 @@
 
 use std::fmt::Display;
 
-use nautilus_model::enums::{MarketStatusAction, TimeInForce};
+use nautilus_model::enums::{MarketStatusAction, TimeInForce, TriggerType};
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display as StrumDisplay, EnumIter, EnumString};
 
@@ -47,6 +47,10 @@ use strum::{AsRefStr, Display as StrumDisplay, EnumIter, EnumString};
         from_py_object,
         rename_all = "SCREAMING_SNAKE_CASE",
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.deribit")
 )]
 pub enum DeribitProductType {
     /// Future contract
@@ -78,6 +82,10 @@ pub enum DeribitProductType {
         from_py_object,
         rename_all = "SCREAMING_SNAKE_CASE",
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.deribit")
 )]
 pub enum DeribitCurrency {
     /// Bitcoin
@@ -228,6 +236,16 @@ impl TryFrom<TimeInForce> for DeribitTimeInForce {
             )),
         }
     }
+}
+
+/// Resolves an optional Nautilus trigger type to a Deribit trigger string.
+pub fn resolve_trigger_type(trigger_type: Option<TriggerType>) -> Option<String> {
+    trigger_type.and_then(|tt| match tt {
+        TriggerType::LastPrice | TriggerType::Default => Some("last_price".to_string()),
+        TriggerType::MarkPrice => Some("mark_price".to_string()),
+        TriggerType::IndexPrice => Some("index_price".to_string()),
+        _ => None,
+    })
 }
 
 #[cfg(test)]

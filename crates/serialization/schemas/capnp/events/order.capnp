@@ -264,6 +264,7 @@ struct OrderUpdated {
     tsEvent @11 :Base.UnixNanos;
     tsInit @12 :Base.UnixNanos;
     reconciliation @13 :Bool;
+    isQuoteQuantity @14 :Bool;
 }
 
 # OrderFilled - order fill execution

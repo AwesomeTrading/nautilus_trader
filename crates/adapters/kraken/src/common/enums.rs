@@ -15,7 +15,7 @@
 
 //! Enumerations that model Kraken string/int enums across HTTP and WebSocket payloads.
 
-use nautilus_model::enums::{OrderSide, OrderStatus, OrderType};
+use nautilus_model::enums::{MarketStatusAction, OrderSide, OrderStatus, OrderType};
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display, EnumString, FromRepr};
 
@@ -46,6 +46,10 @@ use strum::{AsRefStr, Display, EnumString, FromRepr};
         from_py_object,
         rename_all = "SCREAMING_SNAKE_CASE",
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -83,6 +87,10 @@ pub enum KrakenEnvironment {
         rename_all = "SCREAMING_SNAKE_CASE",
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenProductType {
@@ -115,6 +123,10 @@ pub enum KrakenProductType {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenOrderType {
@@ -132,6 +144,12 @@ pub enum KrakenOrderType {
     #[serde(rename = "take-profit-limit")]
     #[strum(serialize = "take-profit-limit")]
     TakeProfitLimit,
+    #[serde(rename = "trailing-stop")]
+    #[strum(serialize = "trailing-stop")]
+    TrailingStop,
+    #[serde(rename = "trailing-stop-limit")]
+    #[strum(serialize = "trailing-stop-limit")]
+    TrailingStopLimit,
     #[serde(rename = "settle-position")]
     #[strum(serialize = "settle-position")]
     SettlePosition,
@@ -160,6 +178,10 @@ pub enum KrakenOrderType {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
@@ -191,6 +213,10 @@ pub enum KrakenOrderSide {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "UPPERCASE")]
 #[strum(ascii_case_insensitive, serialize_all = "UPPERCASE")]
@@ -230,6 +256,10 @@ pub enum KrakenTimeInForce {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenOrderStatus {
@@ -264,6 +294,10 @@ pub enum KrakenOrderStatus {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenPositionSide {
@@ -294,6 +328,10 @@ pub enum KrakenPositionSide {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive, serialize_all = "snake_case")]
@@ -337,6 +375,10 @@ pub enum KrakenPairStatus {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenSystemStatus {
@@ -374,10 +416,17 @@ pub enum KrakenSystemStatus {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenAssetClass {
     Currency,
+    #[serde(rename = "tokenized_asset")]
+    #[strum(serialize = "tokenized_asset")]
+    TokenizedAsset,
 }
 
 /// Kraken futures order type.
@@ -404,10 +453,14 @@ pub enum KrakenAssetClass {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenFuturesOrderType {
-    #[serde(rename = "lmt")]
+    #[serde(rename = "lmt", alias = "limit")]
     #[strum(serialize = "lmt")]
     Limit,
     #[serde(rename = "ioc")]
@@ -416,7 +469,7 @@ pub enum KrakenFuturesOrderType {
     #[serde(rename = "post")]
     #[strum(serialize = "post")]
     Post,
-    #[serde(rename = "mkt")]
+    #[serde(rename = "mkt", alias = "market")]
     #[strum(serialize = "mkt")]
     Market,
     #[serde(rename = "stp")]
@@ -487,6 +540,10 @@ pub enum KrakenFuturesOrderEventType {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive, serialize_all = "camelCase")]
 pub enum KrakenFuturesOrderStatus {
@@ -520,6 +577,10 @@ pub enum KrakenFuturesOrderStatus {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenTriggerSignal {
@@ -555,6 +616,10 @@ pub enum KrakenTriggerSignal {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenSpotTrigger {
@@ -588,6 +653,10 @@ pub enum KrakenSpotTrigger {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenFillType {
@@ -619,6 +688,10 @@ pub enum KrakenFillType {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(ascii_case_insensitive, serialize_all = "lowercase")]
 pub enum KrakenApiResult {
@@ -649,6 +722,10 @@ pub enum KrakenApiResult {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive, serialize_all = "snake_case")]
@@ -682,6 +759,10 @@ pub enum KrakenInstrumentType {
         eq_int,
         from_py_object
     )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
 )]
 #[serde(rename_all = "camelCase")]
 #[strum(ascii_case_insensitive, serialize_all = "camelCase")]
@@ -732,6 +813,10 @@ pub enum KrakenSendStatus {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.kraken")
+)]
 #[serde(rename_all = "snake_case")]
 #[strum(ascii_case_insensitive, serialize_all = "snake_case")]
 pub enum KrakenTriggerSide {
@@ -755,6 +840,11 @@ impl From<KrakenOrderSide> for OrderSide {
 }
 
 impl From<KrakenOrderType> for OrderType {
+    /// Maps Kraken order types to Nautilus order types for reconciliation.
+    ///
+    /// Trailing stops map to their non-trailing equivalents because
+    /// Kraken reports lack the offset fields required to reconstruct
+    /// a trailing order during reconciliation.
     fn from(value: KrakenOrderType) -> Self {
         match value {
             KrakenOrderType::Market => Self::Market,
@@ -763,6 +853,8 @@ impl From<KrakenOrderType> for OrderType {
             KrakenOrderType::TakeProfit => Self::MarketIfTouched,
             KrakenOrderType::StopLossLimit => Self::StopLimit,
             KrakenOrderType::TakeProfitLimit => Self::LimitIfTouched,
+            KrakenOrderType::TrailingStop => Self::StopMarket,
+            KrakenOrderType::TrailingStopLimit => Self::StopLimit,
             KrakenOrderType::SettlePosition => Self::Market,
         }
     }
@@ -818,6 +910,18 @@ impl From<KrakenFuturesOrderStatus> for OrderStatus {
     }
 }
 
+impl From<KrakenPairStatus> for MarketStatusAction {
+    fn from(value: KrakenPairStatus) -> Self {
+        match value {
+            KrakenPairStatus::Online => Self::Trading,
+            KrakenPairStatus::CancelOnly => Self::Halt,
+            KrakenPairStatus::PostOnly => Self::Pause,
+            KrakenPairStatus::LimitOnly => Self::Pause,
+            KrakenPairStatus::ReduceOnly => Self::Pause,
+        }
+    }
+}
+
 /// Determines the product type from a Kraken symbol.
 ///
 /// Futures symbols have the following prefixes:
@@ -839,5 +943,36 @@ pub fn product_type_from_symbol(symbol: &str) -> KrakenProductType {
         KrakenProductType::Futures
     } else {
         KrakenProductType::Spot
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use nautilus_model::enums::{MarketStatusAction, OrderType};
+    use rstest::rstest;
+
+    use super::*;
+
+    #[rstest]
+    #[case::online(KrakenPairStatus::Online, MarketStatusAction::Trading)]
+    #[case::cancel_only(KrakenPairStatus::CancelOnly, MarketStatusAction::Halt)]
+    #[case::post_only(KrakenPairStatus::PostOnly, MarketStatusAction::Pause)]
+    #[case::limit_only(KrakenPairStatus::LimitOnly, MarketStatusAction::Pause)]
+    #[case::reduce_only(KrakenPairStatus::ReduceOnly, MarketStatusAction::Pause)]
+    fn test_pair_status_to_market_status_action(
+        #[case] input: KrakenPairStatus,
+        #[case] expected: MarketStatusAction,
+    ) {
+        assert_eq!(MarketStatusAction::from(input), expected);
+    }
+
+    #[rstest]
+    #[case::trailing_stop(KrakenOrderType::TrailingStop, OrderType::StopMarket)]
+    #[case::trailing_stop_limit(KrakenOrderType::TrailingStopLimit, OrderType::StopLimit)]
+    fn test_trailing_stop_order_type_mapping(
+        #[case] input: KrakenOrderType,
+        #[case] expected: OrderType,
+    ) {
+        assert_eq!(OrderType::from(input), expected);
     }
 }

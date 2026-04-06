@@ -17,8 +17,10 @@
 
 pub mod any;
 pub mod base;
+pub mod betting;
 pub mod cash;
 pub mod margin;
+pub mod margin_model;
 
 #[cfg(any(test, feature = "stubs"))]
 pub mod stubs;
@@ -29,7 +31,8 @@ use nautilus_core::UnixNanos;
 
 // Re-exports
 pub use crate::accounts::{
-    any::AccountAny, base::BaseAccount, cash::CashAccount, margin::MarginAccount,
+    any::AccountAny, base::BaseAccount, betting::BettingAccount, cash::CashAccount,
+    margin::MarginAccount,
 };
 use crate::{
     enums::{AccountType, LiquiditySide, OrderSide},

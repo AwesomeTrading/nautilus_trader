@@ -21,12 +21,15 @@ use nautilus_model::python::instruments::instrument_any_to_pyobject;
 use pyo3::prelude::*;
 
 use crate::{
-    enums::TardisExchange,
+    common::enums::TardisExchange,
     http::{TardisHttpClient, query::InstrumentFilterBuilder},
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl TardisHttpClient {
+    /// A Tardis HTTP API client.
+    /// See <https://docs.tardis.dev/api/http>.
     #[new]
     #[pyo3(signature = (api_key=None, base_url=None, timeout_secs=None, normalize_symbols=true))]
     fn py_new(
@@ -50,12 +53,13 @@ impl TardisHttpClient {
         self.credential().map(|c| c.api_key_masked())
     }
 
+    /// Returns all Nautilus instrument definitions for the given `exchange`, and filter params.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(name = "instruments")]
     #[pyo3(signature = (exchange, symbol=None, base_currency=None, quote_currency=None, instrument_type=None, contract_type=None, active=None, start=None, end=None, available_offset=None, effective=None, ts_init=None))]
     fn py_instruments<'py>(
         &self,
-        exchange: String,
+        exchange: &str,
         symbol: Option<String>,
         base_currency: Option<Vec<String>>,
         quote_currency: Option<Vec<String>>,
@@ -69,7 +73,7 @@ impl TardisHttpClient {
         ts_init: Option<u64>,
         py: Python<'py>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let exchange: TardisExchange = parse_enum(&exchange, stringify!(exchange))?;
+        let exchange: TardisExchange = parse_enum(exchange, stringify!(exchange))?;
 
         let filter = InstrumentFilterBuilder::default()
             .base_currency(base_currency)

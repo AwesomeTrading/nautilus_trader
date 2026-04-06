@@ -38,6 +38,7 @@ python = [
   "nautilus-system/python",
   "pyo3",
   "pyo3-async-runtimes",
+  "pyo3-stub-gen",
 ]
 high-precision = ["nautilus-model/high-precision"]
 
@@ -59,6 +60,7 @@ arc-swap = { workspace = true }
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+bon = { workspace = true }
 chrono = { workspace = true }
 cosmrs = { workspace = true }
 dashmap = { workspace = true }
@@ -66,7 +68,6 @@ derive_builder = { workspace = true }
 dotenvy = { workspace = true }
 dydx-proto = { workspace = true }
 futures-util = { workspace = true }
-hex = { workspace = true }
 log = { workspace = true }
 prost = { workspace = true }
 rust_decimal = { workspace = true }
@@ -85,6 +86,7 @@ ustr = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
 nautilus-testkit = { workspace = true }

@@ -69,6 +69,8 @@ NautilusTrader employs multiple layers of security to protect against supply
 chain attacks and vulnerabilities:
 
 - **Dependency auditing**: Automated security scanning via cargo-deny, cargo-vet, and OSV Scanner (Rust) and Dependabot alerts (Python).
+- **Dependency cooldown**: Python dependency resolution excludes packages published within the last 3 days (`exclude-newer` in `pyproject.toml`), giving the community time to detect and quarantine compromised releases before they enter the lockfile.
+- **Toolchain pinning**: The uv package manager version is pinned via `required-version` in `pyproject.toml` and enforced across CI, Docker, and local development.
 - **Code scanning**: CodeQL static analysis for Python and Rust code.
 - **Pre-commit security**: Gitleaks credential screening, private key detection, Zizmor GitHub Actions auditing, and Unicode control character detection.
 - **CODEOWNERS**: Critical infrastructure files require Core team review before merge.
@@ -76,6 +78,12 @@ chain attacks and vulnerabilities:
 - **Build integrity**: SLSA build provenance attestations, immutable GitHub Actions pinned to commit SHAs, container digest pinning, and hardened CI runners with network egress monitoring.
 - **License compliance**: Automated checks ensuring LGPL-3.0 compatibility.
 - **Source restrictions**: Rust packages sourced exclusively from crates.io; git dependencies and unknown registries are prohibited.
+- **Cryptography**: All TLS and cryptographic operations use [aws-lc-rs](https://github.com/aws/aws-lc-rs),
+  the Rust binding for AWS-LC. The library runs in non-FIPS mode because the
+  FIPS 140-3 module (`aws-lc-fips-sys`) requires the Go toolchain as a build
+  dependency. The underlying cryptographic primitives (AES-GCM, SHA-2, ECDSA,
+  ChaCha20-Poly1305) are identical in both modes; the FIPS module adds runtime
+  self-tests and module boundary enforcement required for federal certification.
 
 For our full supply chain security policy, see <https://nautilustrader.io/security/supply-chain/>.
 

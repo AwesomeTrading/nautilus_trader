@@ -26,6 +26,7 @@ use anyhow::Context;
 use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use nautilus_common::live::get_runtime;
+use nautilus_core::AtomicMap;
 use nautilus_model::{
     data::BarType,
     identifiers::{AccountId, ClientOrderId, InstrumentId},
@@ -70,6 +71,10 @@ pub(super) enum AssetContextDataType {
         from_py_object
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.hyperliquid")
+)]
 pub struct HyperliquidWebSocketClient {
     url: String,
     connection_mode: Arc<ArcSwap<AtomicU8>>,
@@ -78,8 +83,8 @@ pub struct HyperliquidWebSocketClient {
     out_rx: Option<tokio::sync::mpsc::UnboundedReceiver<NautilusWsMessage>>,
     auth_tracker: AuthTracker,
     subscriptions: SubscriptionState,
-    instruments: Arc<DashMap<Ustr, InstrumentAny>>,
-    bar_types: Arc<DashMap<String, BarType>>,
+    instruments: Arc<AtomicMap<Ustr, InstrumentAny>>,
+    bar_types: Arc<AtomicMap<String, BarType>>,
     asset_context_subs: Arc<DashMap<Ustr, AHashSet<AssetContextDataType>>>,
     cloid_cache: Arc<DashMap<Ustr, ClientOrderId>>,
     task_handle: Option<tokio::task::JoinHandle<()>>,
@@ -131,8 +136,8 @@ impl HyperliquidWebSocketClient {
             signal: Arc::new(AtomicBool::new(false)),
             auth_tracker: AuthTracker::new(),
             subscriptions: SubscriptionState::new(':'),
-            instruments: Arc::new(DashMap::new()),
-            bar_types: Arc::new(DashMap::new()),
+            instruments: Arc::new(AtomicMap::new()),
+            bar_types: Arc::new(AtomicMap::new()),
             asset_context_subs: Arc::new(DashMap::new()),
             cloid_cache: Arc::new(DashMap::new()),
             cmd_tx: {
@@ -187,11 +192,8 @@ impl HyperliquidWebSocketClient {
         }
 
         // Initialize handler with existing instruments
-        let instruments_vec: Vec<InstrumentAny> = self
-            .instruments
-            .iter()
-            .map(|entry| entry.value().clone())
-            .collect();
+        let instruments_vec: Vec<InstrumentAny> =
+            self.instruments.load().values().cloned().collect();
 
         if !instruments_vec.is_empty()
             && let Err(e) = cmd_tx.send(HandlerCommand::InitializeInstruments(instruments_vec))
@@ -283,6 +285,18 @@ impl HyperliquidWebSocketClient {
         self.task_handle = Some(handle);
     }
 
+    /// Force-close fallback for the sync `stop()` path.
+    /// Prefer `disconnect()` for graceful shutdown.
+    pub(crate) fn abort(&mut self) {
+        self.signal.store(true, Ordering::Relaxed);
+        self.connection_mode
+            .store(Arc::new(AtomicU8::new(ConnectionMode::Closed as u8)));
+
+        if let Some(handle) = self.task_handle.take() {
+            handle.abort();
+        }
+    }
+
     /// Disconnects the WebSocket connection.
     pub async fn disconnect(&mut self) -> anyhow::Result<()> {
         log::info!("Disconnecting Hyperliquid WebSocket");
@@ -337,15 +351,14 @@ impl HyperliquidWebSocketClient {
     /// - Perps use base currency (e.g., "BTC")
     /// - Spot uses @{pair_index} format (e.g., "@107") or slash format for PURR
     pub fn cache_instruments(&mut self, instruments: Vec<InstrumentAny>) {
-        self.instruments.clear();
+        let mut map = AHashMap::new();
         for inst in instruments {
             let coin = inst.raw_symbol().inner();
-            self.instruments.insert(coin, inst);
+            map.insert(coin, inst);
         }
-        log::info!(
-            "Hyperliquid instrument cache initialized with {} instruments",
-            self.instruments.len()
-        );
+        let count = map.len();
+        self.instruments.store(map);
+        log::info!("Hyperliquid instrument cache initialized with {count} instruments");
     }
 
     /// Caches a single instrument.
@@ -360,6 +373,12 @@ impl HyperliquidWebSocketClient {
         if let Ok(cmd_tx) = self.cmd_tx.try_read() {
             let _ = cmd_tx.send(HandlerCommand::UpdateInstrument(instrument));
         }
+    }
+
+    /// Returns a shared reference to the instrument cache.
+    #[must_use]
+    pub fn instruments_cache(&self) -> Arc<AtomicMap<Ustr, InstrumentAny>> {
+        self.instruments.clone()
     }
 
     /// Caches spot fill coin mappings for instrument lookup.
@@ -427,14 +446,15 @@ impl HyperliquidWebSocketClient {
     /// Searches the cache for a matching instrument ID.
     pub fn get_instrument(&self, id: &InstrumentId) -> Option<InstrumentAny> {
         self.instruments
-            .iter()
-            .find(|entry| entry.value().id() == *id)
-            .map(|entry| entry.value().clone())
+            .load()
+            .values()
+            .find(|inst| inst.id() == *id)
+            .cloned()
     }
 
     /// Gets an instrument from the cache by raw_symbol (coin).
     pub fn get_instrument_by_symbol(&self, symbol: &Ustr) -> Option<InstrumentAny> {
-        self.instruments.get(symbol).map(|e| e.value().clone())
+        self.instruments.get_cloned(symbol)
     }
 
     /// Returns the count of confirmed subscriptions.
@@ -448,7 +468,7 @@ impl HyperliquidWebSocketClient {
     pub fn get_bar_type(&self, coin: &str, interval: &str) -> Option<BarType> {
         // Use canonical key format matching subscribe_bars
         let key = format!("candle:{coin}:{interval}");
-        self.bar_types.get(&key).map(|entry| *entry.value())
+        self.bar_types.load().get(&key).copied()
     }
 
     /// Subscribe to L2 order book for an instrument.
@@ -959,11 +979,11 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::common::enums::HyperliquidBarInterval;
+    use crate::{common::enums::HyperliquidBarInterval, websocket::handler::subscription_to_key};
 
     /// Generates a unique topic key for a subscription request.
     fn subscription_topic(sub: &SubscriptionRequest) -> String {
-        crate::websocket::handler::subscription_to_key(sub)
+        subscription_to_key(sub)
     }
 
     #[rstest]

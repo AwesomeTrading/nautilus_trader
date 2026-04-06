@@ -43,6 +43,10 @@ use crate::{
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.model", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct OrderReleased {
     /// The trader ID associated with the event.
     pub trader_id: TraderId,
@@ -122,7 +126,7 @@ impl OrderEvent for OrderReleased {
         self.event_id
     }
 
-    fn kind(&self) -> &str {
+    fn type_name(&self) -> &'static str {
         stringify!(OrderReleased)
     }
 
@@ -299,5 +303,13 @@ mod tests {
             display,
             "OrderReleased(instrument_id=BTCUSDT.COINBASE, client_order_id=O-19700101-000000-001-001-1, released_price=22_000)"
         );
+    }
+
+    #[rstest]
+    fn test_order_released_serialization() {
+        let original = OrderReleased::default();
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: OrderReleased = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
     }
 }

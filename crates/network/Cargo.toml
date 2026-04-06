@@ -27,7 +27,12 @@ extension-module = [
   "python",
   "pyo3/extension-module",
 ]
-python = ["nautilus-core/python", "pyo3", "pyo3-async-runtimes"]
+python = [
+  "nautilus-core/python",
+  "pyo3",
+  "pyo3-async-runtimes",
+  "pyo3-stub-gen",
+]
 turmoil = ["dep:turmoil"]
 
 [package.metadata.docs.rs]
@@ -40,6 +45,7 @@ nautilus-cryptography = { workspace = true }
 
 ahash = { workspace = true }
 anyhow = { workspace = true }
+bon = { workspace = true }
 bytes = { workspace = true }
 dashmap = { workspace = true }
 futures = { workspace = true }
@@ -65,6 +71,7 @@ webpki-roots = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
 turmoil = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -77,3 +84,13 @@ rstest = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 turmoil = { workspace = true }
+
+[[bench]]
+name = "ratelimiter"
+path = "benches/ratelimiter.rs"
+harness = false
+
+[[bench]]
+name = "http_response"
+path = "benches/http_response.rs"
+harness = false

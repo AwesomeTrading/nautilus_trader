@@ -57,6 +57,7 @@ use crate::{
 /// submitter.submit_market_order(instrument_id, ...)  # no wallet param
 /// ```
 #[pyclass(name = "DydxOrderSubmitter")]
+#[pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.dydx")]
 #[derive(Debug)]
 pub struct PyDydxOrderSubmitter {
     pub(crate) inner: Arc<OrderSubmitter>,
@@ -65,6 +66,7 @@ pub struct PyDydxOrderSubmitter {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PyDydxOrderSubmitter {
     /// Create a new order submitter with wallet owned internally.
     ///
@@ -91,6 +93,7 @@ impl PyDydxOrderSubmitter {
         chain_id=None,
         grpc_rate_limit_per_second=None,
     ))]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn py_new(
         grpc_client: PyDydxGrpcClient,
         http_client: DydxHttpClient,

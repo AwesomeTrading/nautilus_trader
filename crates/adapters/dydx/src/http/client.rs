@@ -14,7 +14,7 @@
 // -------------------------------------------------------------------------------------------------
 
 //! Provides an ergonomic wrapper around the **dYdX v4 Indexer REST API** –
-//! <https://docs.dydx.exchange/api_integration-indexer/indexer_api>.
+//! <https://docs.dydx.xyz/api_integration-indexer/indexer_api>.
 //!
 //! This module exports two complementary HTTP clients following the standardized
 //! two-layer architecture pattern established in OKX, Bybit, and BitMEX adapters:
@@ -46,9 +46,9 @@
 //!
 //! | Endpoint          | Reference                                                                 |
 //! |-------------------|---------------------------------------------------------------------------|
-//! | Market data       | <https://docs.dydx.exchange/api_integration-indexer/indexer_api#markets>  |
-//! | Account data      | <https://docs.dydx.exchange/api_integration-indexer/indexer_api#accounts> |
-//! | Utility endpoints | <https://docs.dydx.exchange/api_integration-indexer/indexer_api#utility>  |
+//! | Market data       | <https://docs.dydx.xyz/api_integration-indexer/indexer_api#markets>  |
+//! | Account data      | <https://docs.dydx.xyz/api_integration-indexer/indexer_api#accounts> |
+//! | Utility endpoints | <https://docs.dydx.xyz/api_integration-indexer/indexer_api#utility>  |
 
 use std::{
     collections::HashMap,
@@ -64,7 +64,9 @@ use nautilus_core::{
     time::{AtomicTime, get_atomic_clock_realtime},
 };
 use nautilus_model::{
-    data::{Bar, BarType, BookOrder, OrderBookDelta, OrderBookDeltas, TradeTick},
+    data::{
+        Bar, BarType, BookOrder, FundingRateUpdate, OrderBookDelta, OrderBookDeltas, TradeTick,
+    },
     enums::{
         AggregationSource, BarAggregation, BookAction, OrderSide as NautilusOrderSide, PriceType,
         RecordFlag,
@@ -155,8 +157,7 @@ pub struct DydxRawHttpClient {
 
 impl Default for DydxRawHttpClient {
     fn default() -> Self {
-        Self::new(None, Some(60), None, false, None)
-            .expect("Failed to create default DydxRawHttpClient")
+        Self::new(None, 60, None, false, None).expect("Failed to create default DydxRawHttpClient")
     }
 }
 
@@ -170,12 +171,12 @@ impl Debug for DydxRawHttpClient {
 }
 
 impl DydxRawHttpClient {
-    /// Cancel all pending HTTP requests.
+    /// Cancels all pending HTTP requests.
     pub fn cancel_all_requests(&self) {
         self.cancellation_token.cancel();
     }
 
-    /// Get the cancellation token for this client.
+    /// Returns the cancellation token for this client.
     pub fn cancellation_token(&self) -> &CancellationToken {
         &self.cancellation_token
     }
@@ -190,7 +191,7 @@ impl DydxRawHttpClient {
     /// Returns an error if the retry manager cannot be created.
     pub fn new(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
         is_testnet: bool,
         retry_config: Option<RetryConfig>,
@@ -211,7 +212,7 @@ impl DydxRawHttpClient {
             vec![], // No specific headers to extract from responses
             vec![], // No keyed quotas (we use a single global quota)
             Some(*DYDX_REST_QUOTA),
-            timeout_secs,
+            Some(timeout_secs),
             proxy_url,
         )
         .map_err(|e| {
@@ -227,19 +228,19 @@ impl DydxRawHttpClient {
         })
     }
 
-    /// Check if this client is configured for testnet.
+    /// Returns `true` if this client is configured for testnet.
     #[must_use]
     pub const fn is_testnet(&self) -> bool {
         self.is_testnet
     }
 
-    /// Get the base URL being used by this client.
+    /// Returns the base URL used by this client.
     #[must_use]
     pub fn base_url(&self) -> &str {
         &self.base_url
     }
 
-    /// Send a request to a dYdX Indexer API endpoint.
+    /// Sends a request to a dYdX Indexer API endpoint.
     ///
     /// **Note**: dYdX Indexer API does not require authentication headers.
     ///
@@ -306,7 +307,7 @@ impl DydxRawHttpClient {
             if msg == "canceled" {
                 DydxHttpError::Canceled("Adapter disconnecting or shutting down".to_string())
             } else if msg.contains("Timed out") {
-                // Timeouts are transient — map to HttpClientError so they are retried
+                // Timeouts are transient -- map to HttpClientError so they are retried
                 DydxHttpError::HttpClientError(msg)
             } else {
                 DydxHttpError::ValidationError(msg)
@@ -330,7 +331,7 @@ impl DydxRawHttpClient {
         })
     }
 
-    /// Send a POST request to a dYdX Indexer API endpoint.
+    /// Sends a POST request to a dYdX Indexer API endpoint.
     ///
     /// Note: Most dYdX Indexer endpoints are GET-based. POST is rarely used.
     ///
@@ -395,7 +396,7 @@ impl DydxRawHttpClient {
             if msg == "canceled" {
                 DydxHttpError::Canceled("Adapter disconnecting or shutting down".to_string())
             } else if msg.contains("Timed out") {
-                // Timeouts are transient — map to HttpClientError so they are retried
+                // Timeouts are transient -- map to HttpClientError so they are retried
                 DydxHttpError::HttpClientError(msg)
             } else {
                 DydxHttpError::ValidationError(msg)
@@ -620,7 +621,47 @@ impl DydxRawHttpClient {
         self.send_request(Method::GET, endpoint, Some(&query)).await
     }
 
-    /// Get current server time.
+    /// Fetch historical funding rates for a market.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or response parsing fails.
+    pub async fn get_historical_funding(
+        &self,
+        ticker: &str,
+        limit: Option<u32>,
+        effective_before_or_at_height: Option<u64>,
+        effective_before_or_at: Option<DateTime<Utc>>,
+    ) -> Result<super::models::HistoricalFundingResponse, DydxHttpError> {
+        let endpoint = format!("/v4/historicalFunding/{ticker}");
+        let mut query_parts = Vec::new();
+
+        if let Some(l) = limit {
+            query_parts.push(format!("limit={l}"));
+        }
+
+        if let Some(height) = effective_before_or_at_height {
+            query_parts.push(format!("effectiveBeforeOrAtHeight={height}"));
+        }
+
+        if let Some(before) = effective_before_or_at {
+            let before_str = before.to_rfc3339();
+            query_parts.push(format!(
+                "effectiveBeforeOrAt={}",
+                urlencoding::encode(&before_str)
+            ));
+        }
+
+        let query = if query_parts.is_empty() {
+            None
+        } else {
+            Some(query_parts.join("&"))
+        };
+        self.send_request(Method::GET, &endpoint, query.as_deref())
+            .await
+    }
+
+    /// Returns the current server time.
     ///
     /// # Errors
     ///
@@ -629,7 +670,7 @@ impl DydxRawHttpClient {
         self.send_request(Method::GET, "/v4/time", None).await
     }
 
-    /// Get current blockchain height.
+    /// Returns the current blockchain height.
     ///
     /// # Errors
     ///
@@ -659,6 +700,10 @@ impl DydxRawHttpClient {
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.dydx", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.dydx")
+)]
 pub struct DydxHttpClient {
     /// Raw HTTP client wrapped in Arc for efficient cloning.
     pub(crate) inner: Arc<DydxRawHttpClient>,
@@ -682,8 +727,7 @@ impl Clone for DydxHttpClient {
 
 impl Default for DydxHttpClient {
     fn default() -> Self {
-        Self::new(None, Some(60), None, false, None)
-            .expect("Failed to create default DydxHttpClient")
+        Self::new(None, 60, None, false, None).expect("Failed to create default DydxHttpClient")
     }
 }
 
@@ -702,7 +746,7 @@ impl DydxHttpClient {
     /// Returns an error if the underlying HTTP client or retry manager cannot be created.
     pub fn new(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
         is_testnet: bool,
         retry_config: Option<RetryConfig>,
@@ -731,7 +775,7 @@ impl DydxHttpClient {
     /// Returns an error if the underlying HTTP client or retry manager cannot be created.
     pub fn new_with_cache(
         base_url: Option<String>,
-        timeout_secs: Option<u64>,
+        timeout_secs: u64,
         proxy_url: Option<String>,
         is_testnet: bool,
         retry_config: Option<RetryConfig>,
@@ -1230,7 +1274,7 @@ impl DydxHttpClient {
             if let Some(s) = start
                 && oldest_trade.created_at < s
             {
-                // This page contains trades before start — filter and stop
+                // This page contains trades before start -- filter and stop
                 for trade in &response.trades {
                     if start.is_some_and(|s| trade.created_at < s) {
                         continue;
@@ -1286,6 +1330,63 @@ impl DydxHttpClient {
         }
 
         Ok(all_trades)
+    }
+
+    /// Requests historical funding rates for an instrument.
+    ///
+    /// Fetches funding rate data from the dYdX Indexer API's
+    /// `/v4/historicalFunding/:ticker` endpoint and converts them to Nautilus
+    /// `FundingRateUpdate` objects.
+    ///
+    /// Results are returned in chronological order (oldest first).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails or response cannot be parsed.
+    pub async fn request_funding_rates(
+        &self,
+        instrument_id: InstrumentId,
+        start: Option<DateTime<Utc>>,
+        end: Option<DateTime<Utc>>,
+        limit: Option<u32>,
+    ) -> anyhow::Result<Vec<FundingRateUpdate>> {
+        let ticker = extract_raw_symbol(instrument_id.symbol.as_str());
+        let ts_init = self.generate_ts_init();
+
+        let response = self
+            .inner
+            .get_historical_funding(ticker, limit, None, end)
+            .await?;
+
+        let mut rates = Vec::with_capacity(response.historical_funding.len());
+
+        for entry in &response.historical_funding {
+            // Filter by start time if specified
+            if start.is_some_and(|s| entry.effective_at < s) {
+                continue;
+            }
+
+            let ts_event =
+                UnixNanos::from(entry.effective_at.timestamp_nanos_opt().ok_or_else(|| {
+                    anyhow::anyhow!("Timestamp overflow for {}", entry.effective_at)
+                })? as u64);
+
+            rates.push(FundingRateUpdate::new(
+                instrument_id,
+                entry.rate,
+                Some(60),
+                None,
+                ts_event,
+                ts_init,
+            ));
+        }
+
+        // dYdX returns newest first; reverse to chronological order
+        rates.reverse();
+
+        log::info!("Fetched {} funding rates for {instrument_id}", rates.len(),);
+
+        Ok(rates)
     }
 
     /// Requests an order book snapshot for a symbol.
@@ -1372,25 +1473,25 @@ impl DydxHttpClient {
         &self.inner
     }
 
-    /// Check if this client is configured for testnet.
+    /// Returns `true` if this client is configured for testnet.
     #[must_use]
     pub fn is_testnet(&self) -> bool {
         self.inner.is_testnet()
     }
 
-    /// Get the base URL being used by this client.
+    /// Returns the base URL used by this client.
     #[must_use]
     pub fn base_url(&self) -> &str {
         self.inner.base_url()
     }
 
-    /// Check if the instrument cache has been initialized.
+    /// Returns `true` if the instrument cache has been initialized.
     #[must_use]
     pub fn is_cache_initialized(&self) -> bool {
         self.instrument_cache.is_initialized()
     }
 
-    /// Get the number of instruments currently cached.
+    /// Returns the number of instruments currently cached.
     #[must_use]
     pub fn cached_instruments_count(&self) -> usize {
         self.instrument_cache.len()
@@ -1652,7 +1753,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_raw_client_creation() {
-        let client = DydxRawHttpClient::new(None, Some(30), None, false, None);
+        let client = DydxRawHttpClient::new(None, 30, None, false, None);
         assert!(client.is_ok());
 
         let client = client.unwrap();
@@ -1662,7 +1763,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_raw_client_testnet() {
-        let client = DydxRawHttpClient::new(None, Some(30), None, true, None);
+        let client = DydxRawHttpClient::new(None, 30, None, true, None);
         assert!(client.is_ok());
 
         let client = client.unwrap();
@@ -1672,7 +1773,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_domain_client_creation() {
-        let client = DydxHttpClient::new(None, Some(30), None, false, None);
+        let client = DydxHttpClient::new(None, 30, None, false, None);
         assert!(client.is_ok());
 
         let client = client.unwrap();
@@ -1684,7 +1785,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_domain_client_testnet() {
-        let client = DydxHttpClient::new(None, Some(30), None, true, None);
+        let client = DydxHttpClient::new(None, 30, None, true, None);
         assert!(client.is_ok());
 
         let client = client.unwrap();
@@ -1702,7 +1803,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_domain_client_clone() {
-        let client = DydxHttpClient::new(None, Some(30), None, false, None).unwrap();
+        let client = DydxHttpClient::new(None, 30, None, false, None).unwrap();
 
         // Clone before initialization
         let cloned = client.clone();
@@ -1763,8 +1864,7 @@ mod tests {
         // Keep HTTP client timeout at a typical value; rely on RetryManager
         // operation timeout to enforce non-blocking behavior.
         let client =
-            DydxRawHttpClient::new(Some(base_url), Some(60), None, false, Some(retry_config))
-                .unwrap();
+            DydxRawHttpClient::new(Some(base_url), 60, None, false, Some(retry_config)).unwrap();
 
         let start = std::time::Instant::now();
         let result: Result<serde_json::Value, error::DydxHttpError> =

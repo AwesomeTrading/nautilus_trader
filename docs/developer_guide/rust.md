@@ -47,7 +47,7 @@ Cargo's build cache is keyed by the exact combination of features, profiles, and
 | Target                      | Features                         | Profile   | `--all-targets` | `--no-deps` | Purpose        |
 |-----------------------------|----------------------------------|-----------|-----------------|-------------|----------------|
 | `cargo-test`                | `ffi,python,high-precision,defi` | `nextest` | ✓ (implicit)    | n/a         | Run tests.     |
-| `cargo-clippy` (pre-commit) | `ffi,python,high-precision,defi` | `nextest` | ✓               | n/a         | Lint all code. |
+| `cargo-clippy` (pre‑commit) | `ffi,python,high-precision,defi` | `nextest` | ✓               | n/a         | Lint all code. |
 
 These targets share the same feature set and profile, allowing cargo to reuse compiled artifacts between linting and testing without rebuilds.
 The `nextest` profile is used to align with the workflow of the majority of core maintainers who use cargo-nextest for running tests.
@@ -304,6 +304,10 @@ Consistent attribute usage and ordering:
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.model")
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct Symbol(Ustr);
 ```
 
@@ -339,6 +343,10 @@ For enums with extensive derive attributes:
         rename_all = "SCREAMING_SNAKE_CASE",
     )
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum(module = "nautilus_trader.model")
+)]
 pub enum AccountType {
     /// An account with unleveraged cash assets only.
     Cash = 1,
@@ -346,6 +354,73 @@ pub enum AccountType {
     Margin = 2,
 }
 ```
+
+### Type stub annotations
+
+Python type stubs (`.pyi` files) are generated from Rust source using
+[pyo3-stub-gen](https://github.com/Jij-Inc/pyo3-stub-gen). Every type and function
+exposed to Python needs a matching stub annotation so the generated stubs stay in sync
+with the bindings.
+
+**Annotation types:**
+
+| PyO3 construct    | Stub annotation                                  |
+| ----------------- | ------------------------------------------------ |
+| `#[pyclass]`      | `pyo3_stub_gen::derive::gen_stub_pyclass`        |
+| enum `#[pyclass]` | `pyo3_stub_gen::derive::gen_stub_pyclass_enum`   |
+| `#[pymethods]`    | `pyo3_stub_gen::derive::gen_stub_pymethods`      |
+| `#[pyfunction]`   | `pyo3_stub_gen::derive::gen_stub_pyfunction`     |
+
+**Placement rules:**
+
+- On structs and enums, use `#[cfg_attr(feature = "python", ...)]` and place the stub
+  annotation directly below the `pyo3::pyclass` attribute.
+- On `#[pymethods]` impl blocks, place `#[pyo3_stub_gen::derive::gen_stub_pymethods]`
+  directly below `#[pymethods]`.
+- On functions, place the stub annotation directly above `#[pyfunction]`, after any doc
+  comments. Fully qualify the path rather than importing it.
+
+```rust
+/// Converts a list of `Bar` into Arrow IPC bytes.
+#[pyo3_stub_gen::derive::gen_stub_pyfunction(module = "nautilus_trader.serialization")]
+#[pyfunction(name = "bars_to_arrow")]
+pub fn py_bars_to_arrow(data: Vec<Bar>) -> PyResult<Py<PyBytes>> {
+    // ...
+}
+```
+
+```rust
+#[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
+impl AccountState {
+    #[staticmethod]
+    #[pyo3(name = "from_dict")]
+    pub fn py_from_dict(values: &Bound<'_, PyDict>) -> PyResult<Self> {
+        // ...
+    }
+}
+```
+
+**Module parameter:** set `module = "nautilus_trader.<package>"` to match the Python
+package where the type is imported. For example, model types use
+`nautilus_trader.model` and serialization functions use
+`nautilus_trader.serialization`.
+
+**Cargo.toml:** add `pyo3-stub-gen` as an optional dependency and include it in the
+`python` feature list:
+
+```toml
+[features]
+python = ["pyo3", "pyo3-stub-gen"]
+
+[dependencies]
+pyo3-stub-gen = { workspace = true, optional = true }
+```
+
+**Regenerating stubs:** run `make py-stubs-v2` (or `python python/generate_stubs.py`)
+after changing annotations. The post-processor handles `py_` prefix stripping,
+`@property`/`@staticmethod`/`@classmethod` decoration, keyword escaping, deduplication,
+and ruff formatting.
 
 ### Constructor patterns
 
@@ -1043,12 +1118,76 @@ Where unsafe code relies on invariants, add defense mechanisms:
 - **RAII guards**: Ensure cleanup on both normal return and panic paths.
 - **Runtime checks**: Fail fast when invariants are violated rather than proceeding unsafely.
 
+### Runtime invariants
+
+Several core subsystems rely on runtime invariants rather than compile-time
+guarantees. Tests verify the first three contracts below. The guard usage
+rules are enforced by convention. Any PR that touches `UnsafeCell`,
+registries, `unsendable`, or live-node threading should confirm the
+invariant tests still pass.
+
+#### Thread-local registries
+
+The actor registry, component registry, and message bus each use
+`thread_local!` storage. An object registered on one thread is never visible
+from another. The live node event loop runs on a single thread, and all
+registry and message bus access happens on that thread.
+
+`LiveNodeHandle` is the only intended cross-thread control surface. It uses
+`Arc<AtomicBool>` for stop signaling and `Arc<AtomicU8>` for state, both
+with `Ordering::Relaxed`.
+
+#### Actor registry vs component registry
+
+Both registries store `Rc<UnsafeCell<dyn Trait>>` in thread-local maps but
+differ in how they handle aliased access:
+
+| Property          | Actor registry                     | Component registry                 |
+|-------------------|------------------------------------|------------------------------------|
+| Aliasing          | Allowed (multiple guards)          | Prevented (`BorrowGuard` + set)    |
+| Re‑entrant access | Yes, required for callbacks        | No, lifecycle ops are sequential   |
+| Error handling    | Panic or `None` on lookup failure  | Returns `anyhow::Result` on error  |
+| Guard type        | `ActorRef<T>` (Rc‑backed)          | Stack‑local `BorrowGuard`          |
+
+The actor registry chooses re-entrant access over aliasing prevention because
+message handlers frequently call back into the registry to look up other
+actors. The component registry can enforce strict aliasing because lifecycle
+operations (start, stop, reset, dispose) are non-re-entrant.
+
+#### `ActorRef` usage rules
+
+`ActorRef` guards must be:
+
+- Obtained and dropped within a single synchronous scope.
+- Never stored in a struct field.
+- Never held across an `.await` point.
+- Never sent to another thread.
+
+The canonical pattern captures an actor's `Ustr` ID in a closure and looks
+up the actor each time the callback fires:
+
+```rust
+let actor_id = actor.actor_id().inner();
+let handler = TypedHandler::from(move |quote: &QuoteTick| {
+    if let Some(mut actor) = try_get_actor_unchecked::<MyActor>(&actor_id) {
+        actor.handle_quote(quote);
+    }
+});
+```
+
 ## Tooling configuration
 
 The project uses several tools for code quality:
 
 - **rustfmt**: Automatic code formatting (see `rustfmt.toml`).
 - **clippy**: Linting and best practices (see `clippy.toml`).
+  When suppressing `missing_panics_doc` or `missing_errors_doc`, include a `reason`
+  explaining why the lint does not apply:
+
+  ```rust
+  #[allow(clippy::missing_panics_doc, reason = "mutex poisoning is not expected")]
+  ```
+
 - **cbindgen**: C header generation for FFI.
 
 ## Rust version management

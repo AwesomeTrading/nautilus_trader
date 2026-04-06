@@ -6,9 +6,9 @@
 ![license](https://img.shields.io/github/license/nautechsystems/nautilus_trader?color=blue)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://discord.gg/NautilusTrader)
 
-Data serialization and format conversion for [NautilusTrader](http://nautilustrader.io).
+Data serialization and format conversion for [NautilusTrader](https://nautilustrader.io).
 
-The `nautilus-serialization` crate provides comprehensive data serialization capabilities for converting
+The `nautilus-serialization` crate provides data serialization capabilities for converting
 trading data between different formats including Apache Arrow, Parquet, and Cap'n Proto.
 This enables efficient data storage, retrieval, and interoperability across different systems:
 
@@ -16,19 +16,17 @@ This enables efficient data storage, retrieval, and interoperability across diff
 - **Parquet file operations**: High-performance columnar storage for historical data analysis.
 - **Record batch processing**: Efficient batch operations for time-series data.
 - **Schema management**: Type-safe schema definitions with metadata preservation.
-- **Cross-format conversion**: Seamless data interchange between Arrow, Parquet, and native types.
+- **Cross-format conversion**: Data interchange between Arrow, Parquet, and native types.
 - **Cap'n Proto serialization**: Zero-copy, schema-based serialization for efficient data interchange.
 - **SBE decode utilities**: Zero-copy cursor, shared decode errors, and generic var/group decoders for SBE parsers.
 
-## Platform
+## NautilusTrader
 
-[NautilusTrader](http://nautilustrader.io) is an open-source, high-performance, production-grade
-algorithmic trading platform, providing quantitative traders with the ability to backtest
-portfolios of automated trading strategies on historical data with an event-driven engine,
-and also deploy those same strategies live, with no code changes.
+[NautilusTrader](https://nautilustrader.io) is an open-source, production-grade, Rust-native
+engine for multi-asset, multi-venue trading systems.
 
-NautilusTrader's design, architecture, and implementation philosophy prioritizes software correctness and safety at the
-highest level, with the aim of supporting mission-critical, trading system backtesting and live deployment workloads.
+The system spans research, deterministic simulation, and live execution within a single
+event-driven architecture, providing research-to-live semantic parity.
 
 ## Feature flags
 

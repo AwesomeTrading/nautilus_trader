@@ -2953,8 +2953,8 @@ class TestSimulatedExchangeMarginAccount:
             instrument=_USDJPY_SIM,
             bid_price=90.000,
             ask_price=90.001,
-            ts_event=100_000,
-            ts_init=100_000,
+            ts_event=2_000_000_000,
+            ts_init=2_000_000_000,
         )
 
         self.exchange.process_quote_tick(tick2)
@@ -3194,6 +3194,23 @@ class TestSimulatedExchangeMarginAccount:
 
         # Assert
         assert result == Money(1001000.00, USD)
+
+    def test_adjust_account_does_not_mutate_prior_account_state_balances(self) -> None:
+        # Arrange
+        account = self.exchange.exec_client.get_account()
+        events_before = len(account.events)
+        initial_balance = account.balance_total(USD)
+
+        # Act
+        self.exchange.adjust_account(Money(1000, USD))
+
+        # Assert: the new balance reflects the adjustment
+        assert account.balance_total(USD) == Money(1001000.00, USD)
+
+        # Assert: the prior AccountState event retains its original balance
+        prior_event = account.events[events_before - 1]
+        prior_balance = prior_event.balances[0]
+        assert prior_balance.total == initial_balance
 
     def test_adjust_account_when_account_frozen_does_not_change_balance(self) -> None:
         # Arrange

@@ -177,7 +177,7 @@ Features marked for removal.
 **Format**:
 
 ```markdown
-- Deprecated `convert_quote_qty_to_base`; disable (`False`) to maintain consistent behaviour. Will be removed in future version
+- Deprecated `some_config_option`; disable (`False`) to maintain consistent behaviour. Will be removed in future version
 ```
 
 **Guidelines**:

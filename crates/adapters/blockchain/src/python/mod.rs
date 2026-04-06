@@ -15,6 +15,11 @@
 
 //! Python bindings from [PyO3](https://pyo3.rs).
 
+#![allow(
+    clippy::missing_errors_doc,
+    reason = "errors documented on underlying Rust methods"
+)]
+
 pub mod config;
 
 #[cfg(feature = "hypersync")]
@@ -31,6 +36,7 @@ use pyo3::prelude::*;
 
 /// Extractor function for `BlockchainDataClientFactory`.
 #[cfg(feature = "hypersync")]
+#[allow(clippy::needless_pass_by_value)] // Must match FactoryExtractor function pointer signature
 fn extract_blockchain_factory(
     py: Python<'_>,
     factory: Py<PyAny>,
@@ -45,6 +51,7 @@ fn extract_blockchain_factory(
 
 /// Extractor function for `BlockchainDataClientConfig`.
 #[cfg(feature = "hypersync")]
+#[allow(clippy::needless_pass_by_value)] // Must match ConfigExtractor function pointer signature
 fn extract_blockchain_config(py: Python<'_>, config: Py<PyAny>) -> PyResult<Box<dyn ClientConfig>> {
     match config.extract::<crate::config::BlockchainDataClientConfig>(py) {
         Ok(concrete_config) => Ok(Box::new(concrete_config)),

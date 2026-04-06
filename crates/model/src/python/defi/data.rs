@@ -37,7 +37,9 @@ use crate::{
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl Block {
+    /// Returns the blockchain for this block.
     #[getter]
     #[pyo3(name = "chain")]
     fn py_chain(&self) -> Option<Blockchain> {
@@ -138,9 +140,15 @@ impl Block {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PoolSwap {
+    /// Represents a token swap transaction on a decentralized exchange (DEX).
+    ///
+    /// This structure captures both the raw blockchain data from a swap event and
+    /// optionally includes computed market-oriented trade information. It serves as
+    /// the primary data structure for tracking and analyzing DEX swap activity.
     #[new]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     fn py_new(
         chain: Chain,
         dex: Dex,
@@ -211,14 +219,14 @@ impl PoolSwap {
 
     #[getter]
     #[pyo3(name = "chain")]
-    fn py_chain(&self) -> PyResult<Chain> {
-        Ok(self.chain.as_ref().clone())
+    fn py_chain(&self) -> Chain {
+        self.chain.as_ref().clone()
     }
 
     #[getter]
     #[pyo3(name = "dex")]
-    fn py_dex(&self) -> PyResult<Dex> {
-        Ok(self.dex.as_ref().clone())
+    fn py_dex(&self) -> Dex {
+        self.dex.as_ref().clone()
     }
 
     #[getter]
@@ -277,9 +285,11 @@ impl PoolSwap {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PoolLiquidityUpdate {
+    /// Represents a liquidity update event in a decentralized exchange (DEX) pool.
     #[new]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     fn py_new(
         chain: Chain,
         dex: Dex,
@@ -355,14 +365,14 @@ impl PoolLiquidityUpdate {
 
     #[getter]
     #[pyo3(name = "chain")]
-    fn py_chain(&self) -> PyResult<Chain> {
-        Ok(self.chain.as_ref().clone())
+    fn py_chain(&self) -> Chain {
+        self.chain.as_ref().clone()
     }
 
     #[getter]
     #[pyo3(name = "dex")]
-    fn py_dex(&self) -> PyResult<Dex> {
-        Ok(self.dex.as_ref().clone())
+    fn py_dex(&self) -> Dex {
+        self.dex.as_ref().clone()
     }
 
     #[getter]
@@ -463,9 +473,11 @@ impl PoolLiquidityUpdate {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PoolFeeCollect {
+    /// Represents a fee collection event in a decentralized exchange (DEX) pool.
     #[new]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     fn py_new(
         chain: Chain,
         dex: Dex,
@@ -530,14 +542,14 @@ impl PoolFeeCollect {
 
     #[getter]
     #[pyo3(name = "chain")]
-    fn py_chain(&self) -> PyResult<Chain> {
-        Ok(self.chain.as_ref().clone())
+    fn py_chain(&self) -> Chain {
+        self.chain.as_ref().clone()
     }
 
     #[getter]
     #[pyo3(name = "dex")]
-    fn py_dex(&self) -> PyResult<Dex> {
-        Ok(self.dex.as_ref().clone())
+    fn py_dex(&self) -> Dex {
+        self.dex.as_ref().clone()
     }
 
     #[getter]
@@ -620,9 +632,15 @@ impl PoolFeeCollect {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl PoolFlash {
+    /// Represents a flash loan event from a Uniswap V3 pool.
+    ///
+    /// Flash loans allow users to borrow tokens without collateral as long as they are returned
+    /// within the same transaction. Fees are paid on the borrowed amount, which are added to
+    /// the pool's fee growth accumulators.
     #[new]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     fn py_new(
         chain: Chain,
         dex: Dex,
@@ -692,14 +710,14 @@ impl PoolFlash {
 
     #[getter]
     #[pyo3(name = "chain")]
-    fn py_chain(&self) -> PyResult<Chain> {
-        Ok(self.chain.as_ref().clone())
+    fn py_chain(&self) -> Chain {
+        self.chain.as_ref().clone()
     }
 
     #[getter]
     #[pyo3(name = "dex")]
-    fn py_dex(&self) -> PyResult<Dex> {
-        Ok(self.dex.as_ref().clone())
+    fn py_dex(&self) -> Dex {
+        self.dex.as_ref().clone()
     }
 
     #[getter]
@@ -782,9 +800,11 @@ impl PoolFlash {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl Transaction {
+    /// Represents a transaction on an EVM based blockchain.
     #[new]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
     fn py_new(
         chain: Chain,
         hash: String,

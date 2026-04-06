@@ -15,7 +15,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::machine::types::ReplayNormalizedRequestOptions;
+use super::machine::types::{ReplayNormalizedRequestOptions, StreamNormalizedRequestOptions};
 
 /// Determines the output format for Tardis `book_snapshot_*` messages.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -28,8 +28,8 @@ pub enum BookSnapshotOutput {
     Depth10,
 }
 
-/// Provides a configuration for a Tarid Machine -> Nautilus data -> Parquet replay run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Provides a configuration for a Tardis Machine -> Nautilus data -> Parquet replay run.
+#[derive(Debug, Clone, Serialize, Deserialize, bon::Builder)]
 pub struct TardisReplayConfig {
     /// The Tardis Machine websocket url.
     pub tardis_ws_url: Option<String>,
@@ -38,6 +38,7 @@ pub struct TardisReplayConfig {
     /// The output directory for writing Nautilus format Parquet files.
     pub output_path: Option<String>,
     /// The Tardis Machine replay options.
+    #[builder(default)]
     pub options: Vec<ReplayNormalizedRequestOptions>,
     /// Optional WebSocket proxy URL.
     ///
@@ -52,10 +53,14 @@ pub struct TardisReplayConfig {
 }
 
 /// Configuration for the Tardis data client.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, bon::Builder)]
 #[cfg_attr(
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.tardis", from_py_object)
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.tardis")
 )]
 pub struct TardisDataClientConfig {
     /// Tardis API key for HTTP instrument fetching.
@@ -65,22 +70,25 @@ pub struct TardisDataClientConfig {
     /// Falls back to `TARDIS_MACHINE_WS_URL` env var if not set.
     pub tardis_ws_url: Option<String>,
     /// Whether to normalize symbols to Nautilus conventions.
+    #[builder(default = true)]
     pub normalize_symbols: bool,
     /// Output format for `book_snapshot_*` messages.
+    #[builder(default)]
     pub book_snapshot_output: BookSnapshotOutput,
     /// Replay options defining exchanges, symbols, date ranges, and data types.
+    /// When non-empty the client connects to `ws-replay-normalized`.
+    #[builder(default)]
     pub options: Vec<ReplayNormalizedRequestOptions>,
+    /// Live stream options defining exchanges, symbols, and data types.
+    /// When non-empty (and `options` is empty) the client connects to
+    /// `ws-stream-normalized` with automatic reconnection.
+    #[builder(default)]
+    pub stream_options: Vec<StreamNormalizedRequestOptions>,
 }
 
 impl Default for TardisDataClientConfig {
     fn default() -> Self {
-        Self {
-            api_key: None,
-            tardis_ws_url: None,
-            normalize_symbols: true,
-            book_snapshot_output: BookSnapshotOutput::default(),
-            options: Vec::new(),
-        }
+        Self::builder().build()
     }
 }
 
@@ -101,6 +109,7 @@ mod tests {
             BookSnapshotOutput::Deltas
         ));
         assert!(config.options.is_empty());
+        assert!(config.stream_options.is_empty());
     }
 
     #[rstest]

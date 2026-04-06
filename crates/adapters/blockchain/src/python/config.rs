@@ -24,9 +24,9 @@ use pyo3::prelude::*;
 use crate::config::{BlockchainDataClientConfig, DexPoolFilters};
 
 #[pymethods]
-#[pyo3_stub_gen::derive::gen_stub_pymethods(module = "nautilus_trader.adapters.blockchain")]
+#[pyo3_stub_gen::derive::gen_stub_pymethods(module = "nautilus_trader.blockchain")]
 impl DexPoolFilters {
-    /// Creates a new `DexPoolFilters` instance.
+    /// Defines filtering criteria for the DEX pool universe that the data client will operate on.
     #[new]
     #[must_use]
     pub fn py_new(remove_pools_with_empty_erc20_fields: Option<bool>) -> Self {
@@ -35,9 +35,9 @@ impl DexPoolFilters {
 }
 
 #[pymethods]
-#[pyo3_stub_gen::derive::gen_stub_pymethods(module = "nautilus_trader.adapters.blockchain")]
+#[pyo3_stub_gen::derive::gen_stub_pymethods(module = "nautilus_trader.blockchain")]
 impl BlockchainDataClientConfig {
-    /// Creates a new `BlockchainDataClientConfig` instance.
+    /// Configuration for blockchain data clients.
     #[new]
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (chain, dex_ids, http_rpc_url, rpc_requests_per_second=None, multicall_calls_per_rpc_request=None, wss_rpc_url=None, use_hypersync_for_live_data=true, from_block=None, pool_filters=None, postgres_cache_database_config=None))]

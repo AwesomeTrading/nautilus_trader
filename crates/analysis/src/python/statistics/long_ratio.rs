@@ -23,6 +23,7 @@ use pyo3::prelude::*;
 use crate::{statistic::PortfolioStatistic, statistics::long_ratio::LongRatio};
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl LongRatio {
     #[new]
     #[pyo3(signature = (precision=None))]
@@ -41,6 +42,7 @@ impl LongRatio {
     }
 
     #[pyo3(name = "calculate_from_positions")]
+    #[allow(clippy::needless_pass_by_value)]
     fn py_calculate_from_positions(
         &mut self,
         py: Python,

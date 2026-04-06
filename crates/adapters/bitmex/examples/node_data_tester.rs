@@ -22,8 +22,6 @@
 //!
 //! Run with: `cargo run --example bitmex-data-tester --package nautilus-bitmex`
 
-use std::num::NonZeroUsize;
-
 use nautilus_bitmex::{config::BitmexDataClientConfig, factories::BitmexDataClientFactory};
 use nautilus_common::enums::Environment;
 use nautilus_live::node::LiveNode;
@@ -59,15 +57,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_data_client(None, Box::new(client_factory), Box::new(bitmex_config))?
         .build()?;
 
-    let tester_config = DataTesterConfig::new(client_id, instrument_ids)
-        .with_subscribe_quotes(true)
-        .with_subscribe_trades(true)
-        .with_subscribe_mark_prices(true)
-        .with_subscribe_index_prices(true)
-        .with_subscribe_funding_rates(true)
-        .with_subscribe_instrument_status(true)
-        .with_subscribe_book_at_interval(true)
-        .with_book_interval_ms(NonZeroUsize::new(10).expect("10 is non-zero"));
+    let tester_config = DataTesterConfig::builder()
+        .client_id(client_id)
+        .instrument_ids(instrument_ids)
+        .subscribe_quotes(true)
+        .subscribe_trades(true)
+        .subscribe_mark_prices(true)
+        .subscribe_index_prices(true)
+        .subscribe_funding_rates(true)
+        .subscribe_instrument_status(true)
+        .manage_book(true)
+        .build();
     let tester = DataTester::new(tester_config);
 
     node.add_actor(tester)?;

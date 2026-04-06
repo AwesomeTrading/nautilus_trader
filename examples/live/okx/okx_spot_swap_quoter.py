@@ -194,6 +194,7 @@ class SpotSwapQuoter(Strategy):
 
         # Guard against non-positive prices
         min_price = self.spot_instrument.price_increment
+
         if desired_bid <= 0:
             self.log.warning(
                 f"Calculated bid price {desired_bid} <= 0, using min price {min_price}",
@@ -255,6 +256,7 @@ class SpotSwapQuoter(Strategy):
 
         # Guard against non-positive prices
         min_price = self.swap_instrument.price_increment
+
         if desired_bid <= 0:
             self.log.warning(
                 f"Calculated swap bid price {desired_bid} <= 0, using min price {min_price}",
@@ -412,7 +414,6 @@ config_node = TradingNodeConfig(
         use_pyo3=True,
     ),
     exec_engine=LiveExecEngineConfig(
-        convert_quote_qty_to_base=False,
         reconciliation=True,
         reconciliation_instrument_ids=reconciliation_instrument_ids,
         open_check_interval_secs=5.0,

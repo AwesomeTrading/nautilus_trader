@@ -38,8 +38,9 @@ def get_http_base_url(  # noqa: C901 (URL dispatch)
     if environment == BinanceEnvironment.DEMO:
         if account_type.is_spot_or_margin:
             return "https://demo-api.binance.com"
-        elif account_type.is_futures:
-            # Futures demo uses same URLs as futures testnet
+        elif account_type == BinanceAccountType.USDT_FUTURES:
+            return "https://demo-fapi.binance.com"
+        elif account_type == BinanceAccountType.COIN_FUTURES:
             return "https://testnet.binancefuture.com"
         else:
             raise RuntimeError(  # pragma: no cover (design-time error)
@@ -47,6 +48,7 @@ def get_http_base_url(  # noqa: C901 (URL dispatch)
             )
 
     top_level_domain: str = "us" if is_us else "com"
+
     if account_type.is_spot:
         return f"https://api.binance.{top_level_domain}"
     elif account_type.is_margin:
@@ -98,6 +100,7 @@ def get_ws_api_base_url(  # noqa: C901 (URL dispatch)
             )
 
     top_level_domain: str = "us" if is_us else "com"
+
     if account_type.is_spot_or_margin:
         return f"wss://ws-api.binance.{top_level_domain}:443/ws-api/v3"
     elif account_type == BinanceAccountType.USDT_FUTURES:
@@ -141,6 +144,7 @@ def get_ws_base_url(  # noqa: C901 (URL dispatch)
             )
 
     top_level_domain: str = "us" if is_us else "com"
+
     if account_type.is_spot_or_margin:
         return f"wss://stream.binance.{top_level_domain}:9443"
     elif account_type == BinanceAccountType.USDT_FUTURES:

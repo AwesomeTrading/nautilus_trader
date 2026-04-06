@@ -36,8 +36,10 @@ python = [
   "nautilus-core/python",
   "nautilus-model/python",
   "nautilus-network/python",
+  "nautilus-system/python",
   "pyo3",
   "pyo3-async-runtimes",
+  "pyo3-stub-gen",
 ]
 high-precision = ["nautilus-model/high-precision"]
 
@@ -52,22 +54,22 @@ nautilus-live = { workspace = true }
 nautilus-model = { workspace = true }
 nautilus-network = { workspace = true }
 nautilus-system = { workspace = true }
+nautilus-trading = { workspace = true }
 
 ahash = { workspace = true }
+alloy = { workspace = true, features = ["provider-http", "network", "reqwest"] }
 alloy-primitives = { workspace = true }
-alloy-signer = { workspace = true }
-alloy-signer-local = { workspace = true }
-alloy-sol-types = { workspace = true }
 anyhow = { workspace = true }
 arc-swap = { workspace = true }
 async-trait = { workspace = true }
 aws-lc-rs = { workspace = true }
 base64 = { workspace = true }
+bon = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
 derive_builder = { workspace = true }
+dotenvy = { workspace = true }
 futures-util = { workspace = true }
-hex = { workspace = true }
 log = { workspace = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }
@@ -86,9 +88,60 @@ zeroize = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
 nautilus-testkit = { workspace = true }
 
 axum = { workspace = true }
 rstest = { workspace = true }
+
+[[bin]]
+name = "polymarket-updown-markets"
+path = "bin/updown_markets.rs"
+doc = false
+
+[[bin]]
+name = "polymarket-trending-markets"
+path = "bin/trending_markets.rs"
+doc = false
+
+[[bin]]
+name = "polymarket-composite-filter"
+path = "bin/composite_filter.rs"
+doc = false
+
+[[bin]]
+name = "polymarket-search-markets"
+path = "bin/search_markets.rs"
+doc = false
+
+[[bin]]
+name = "polymarket-event-discovery"
+path = "bin/event_discovery.rs"
+doc = false
+
+[[bin]]
+name = "polymarket-create-api-key"
+path = "bin/create_api_key.rs"
+doc = false
+
+[[example]]
+name = "polymarket-data-tester"
+path = "examples/node_data_tester.rs"
+doc = false
+
+[[example]]
+name = "polymarket-election-subscriber"
+path = "examples/election_trade_subscriber.rs"
+doc = false
+
+[[example]]
+name = "polymarket-exec-tester"
+path = "examples/node_exec_tester.rs"
+doc = false
+
+[[example]]
+name = "polymarket-new-market-monitor"
+path = "examples/new_market_monitor.rs"
+doc = false

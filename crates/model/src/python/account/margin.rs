@@ -27,7 +27,9 @@ use crate::{
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl MarginAccount {
+    /// Creates a new `MarginAccount` instance.
     #[new]
     fn py_new(event: AccountState, calculate_account_state: bool) -> Self {
         Self::new(event, calculate_account_state)
@@ -70,6 +72,7 @@ impl MarginAccount {
         )
     }
 
+    /// Sets the default leverage for the account.
     #[pyo3(name = "set_default_leverage")]
     fn py_set_default_leverage(&mut self, default_leverage: Decimal) {
         self.set_default_leverage(default_leverage);
@@ -91,14 +94,15 @@ impl MarginAccount {
         self.get_leverage(instrument_id)
     }
 
+    /// Sets the leverage for a specific instrument.
     #[pyo3(name = "set_leverage")]
     fn py_set_leverage(&mut self, instrument_id: InstrumentId, leverage: Decimal) {
         self.set_leverage(instrument_id, leverage);
     }
 
     #[pyo3(name = "is_unleveraged")]
-    fn py_is_unleveraged(&self, instrument_id: InstrumentId) -> PyResult<bool> {
-        Ok(self.is_unleveraged(instrument_id))
+    fn py_is_unleveraged(&self, instrument_id: InstrumentId) -> bool {
+        self.is_unleveraged(instrument_id)
     }
 
     #[pyo3(name = "initial_margins")]
@@ -123,44 +127,39 @@ impl MarginAccount {
         maintenance_margins.into_py_any(py)
     }
 
+    /// Updates the initial margin for the specified instrument.
     #[pyo3(name = "update_initial_margin")]
-    fn py_update_initial_margin(
-        &mut self,
-        instrument_id: InstrumentId,
-        initial_margin: Money,
-    ) -> PyResult<()> {
+    fn py_update_initial_margin(&mut self, instrument_id: InstrumentId, initial_margin: Money) {
         self.update_initial_margin(instrument_id, initial_margin);
-        Ok(())
     }
 
+    /// Returns the initial margin amount for the specified instrument.
     #[pyo3(name = "initial_margin")]
-    fn py_initial_margin(&self, instrument_id: InstrumentId) -> PyResult<Money> {
-        Ok(self.initial_margin(instrument_id))
+    fn py_initial_margin(&self, instrument_id: InstrumentId) -> Money {
+        self.initial_margin(instrument_id)
     }
 
+    /// Updates the maintenance margin for the specified instrument.
     #[pyo3(name = "update_maintenance_margin")]
     fn py_update_maintenance_margin(
         &mut self,
         instrument_id: InstrumentId,
         maintenance_margin: Money,
-    ) -> PyResult<()> {
+    ) {
         self.update_maintenance_margin(instrument_id, maintenance_margin);
-        Ok(())
     }
 
+    /// Returns the maintenance margin amount for the specified instrument.
     #[pyo3(name = "maintenance_margin")]
-    fn py_maintenance_margin(&self, instrument_id: InstrumentId) -> PyResult<Money> {
-        Ok(self.maintenance_margin(instrument_id))
+    fn py_maintenance_margin(&self, instrument_id: InstrumentId) -> Money {
+        self.maintenance_margin(instrument_id)
     }
 
     #[pyo3(name = "calculate_initial_margin")]
     #[pyo3(signature = (instrument, quantity, price, use_quote_for_inverse=None))]
-    /// Calculates the initial margin for a given instrument and quantity at the specified price.
+    /// Calculates the initial margin amount for the specified instrument and quantity.
     ///
-    /// # Errors
-    ///
-    /// Returns a `PyErr` if the Python `instrument` object cannot be converted to a supported internal instrument,
-    /// or if the instrument type is unsupported.
+    /// Delegates to the configured `MarginModel`.
     pub fn py_calculate_initial_margin(
         &mut self,
         instrument: Py<PyAny>,
@@ -216,15 +215,15 @@ impl MarginAccount {
             InstrumentAny::PerpetualContract(inst) => self
                 .calculate_initial_margin(&inst, quantity, price, use_quote_for_inverse)
                 .map_err(to_pyvalue_err),
+            InstrumentAny::TokenizedAsset(inst) => self
+                .calculate_initial_margin(&inst, quantity, price, use_quote_for_inverse)
+                .map_err(to_pyvalue_err),
         }
     }
 
-    /// Calculates the maintenance margin for a given instrument and quantity at the specified price.
+    /// Calculates the maintenance margin amount for the specified instrument and quantity.
     ///
-    /// # Errors
-    ///
-    /// Returns a `PyErr` if the Python `instrument` object cannot be converted to a supported internal instrument,
-    /// or if the instrument type is unsupported.
+    /// Delegates to the configured `MarginModel`.
     #[pyo3(name = "calculate_maintenance_margin")]
     #[pyo3(signature = (instrument, quantity, price, use_quote_for_inverse=None))]
     pub fn py_calculate_maintenance_margin(
@@ -280,6 +279,9 @@ impl MarginAccount {
                 .calculate_maintenance_margin(&inst, quantity, price, use_quote_for_inverse)
                 .map_err(to_pyvalue_err),
             InstrumentAny::PerpetualContract(inst) => self
+                .calculate_maintenance_margin(&inst, quantity, price, use_quote_for_inverse)
+                .map_err(to_pyvalue_err),
+            InstrumentAny::TokenizedAsset(inst) => self
                 .calculate_maintenance_margin(&inst, quantity, price, use_quote_for_inverse)
                 .map_err(to_pyvalue_err),
         }

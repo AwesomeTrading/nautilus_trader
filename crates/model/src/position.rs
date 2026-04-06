@@ -52,6 +52,10 @@ use crate::{
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.model", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct Position {
     pub events: Vec<OrderFilled>,
     pub adjustments: Vec<PositionAdjusted>,
@@ -85,7 +89,8 @@ pub struct Position {
     pub avg_px_close: Option<f64>,
     pub realized_return: f64,
     pub realized_pnl: Option<Money>,
-    pub trade_ids: Vec<TradeId>,
+    #[serde(with = "nautilus_core::serialization::sorted_hashset")]
+    pub trade_ids: AHashSet<TradeId>,
     pub buy_qty: Quantity,
     pub sell_qty: Quantity,
     pub commissions: AHashMap<Currency, Money>,
@@ -115,7 +120,7 @@ impl Position {
         let mut item = Self {
             events: Vec::<OrderFilled>::new(),
             adjustments: Vec::<PositionAdjusted>::new(),
-            trade_ids: Vec::<TradeId>::new(),
+            trade_ids: AHashSet::<TradeId>::new(),
             buy_qty: Quantity::zero(instrument.size_precision()),
             sell_qty: Quantity::zero(instrument.size_precision()),
             commissions: AHashMap::<Currency, Money>::new(),
@@ -217,7 +222,7 @@ impl Position {
 
         // Reset mutable state
         self.events = Vec::new();
-        self.trade_ids = Vec::new();
+        self.trade_ids = AHashSet::new();
         self.adjustments = Vec::new();
         self.buy_qty = Quantity::zero(size_precision);
         self.sell_qty = Quantity::zero(size_precision);
@@ -272,8 +277,15 @@ impl Position {
             "`fill.trade_id` already contained in `trade_ids",
         )
         .expect(FAILED);
-        check_predicate_true(fill.ts_event >= self.ts_opened, "fill.ts_event < ts_opened")
-            .expect(FAILED);
+
+        if fill.ts_event < self.ts_opened {
+            log::warn!(
+                "Fill ts_event {} for {} is before position ts_opened {}",
+                fill.ts_event,
+                self.id,
+                self.ts_opened,
+            );
+        }
 
         if self.side == PositionSide::Flat {
             // Reopening position after close
@@ -297,7 +309,7 @@ impl Position {
         }
 
         self.events.push(*fill);
-        self.trade_ids.push(fill.trade_id);
+        self.trade_ids.insert(fill.trade_id);
 
         // Calculate cumulative commissions
         if let Some(commission) = fill.commission {
@@ -411,8 +423,14 @@ impl Position {
             self.settlement_currency,
         ));
 
+        let was_short = self.signed_qty < 0.0;
         self.signed_qty += last_qty;
         self.buy_qty = self.buy_qty + last_qty_object;
+
+        // Position reversed from short to long
+        if was_short && self.signed_qty > 0.0 {
+            self.avg_px_open = last_px;
+        }
     }
 
     fn handle_sell_order_fill(&mut self, fill: &OrderFilled) {
@@ -457,8 +475,14 @@ impl Position {
             self.settlement_currency,
         ));
 
+        let was_long = self.signed_qty > 0.0;
         self.signed_qty -= last_qty;
         self.sell_qty = self.sell_qty + last_qty_object;
+
+        // Position reversed from long to short
+        if was_long && self.signed_qty < 0.0 {
+            self.avg_px_open = last_px;
+        }
     }
 
     /// Applies a position adjustment event.
@@ -831,7 +855,7 @@ impl Position {
     /// Returns the last `TradeId` for the position (if any after purging).
     #[must_use]
     pub fn last_trade_id(&self) -> Option<TradeId> {
-        self.trade_ids.last().copied()
+        self.events.last().map(|e| e.trade_id)
     }
 
     /// Returns whether the position is long (positive quantity).
@@ -890,7 +914,7 @@ impl Hash for Position {
 
 impl Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let quantity_str = if self.quantity == Quantity::zero(self.price_precision) {
+        let quantity_str = if self.quantity == Quantity::zero(self.size_precision) {
             String::new()
         } else {
             self.quantity.to_formatted_string() + " "
@@ -2382,7 +2406,7 @@ mod tests {
         assert_eq!(position.events.len(), 1);
         assert_eq!(position.trade_ids.len(), 1);
         assert_eq!(position.events[0].client_order_id, order2.client_order_id());
-        assert_eq!(position.trade_ids[0], TradeId::new("2"));
+        assert!(position.trade_ids.contains(&TradeId::new("2")));
     }
 
     #[rstest]
@@ -3940,5 +3964,56 @@ mod tests {
             "Total ETH commission should be 0.001, was {}",
             eth_commission.as_f64()
         );
+    }
+
+    #[rstest]
+    fn test_position_apply_fill_with_earlier_timestamp_adjusts_ts_opened(audusd_sim: CurrencyPair) {
+        let audusd_sim = InstrumentAny::CurrencyPair(audusd_sim);
+        let order1 = OrderTestBuilder::new(OrderType::Market)
+            .instrument_id(audusd_sim.id())
+            .side(OrderSide::Buy)
+            .quantity(Quantity::from(100_000))
+            .build();
+        let order2 = OrderTestBuilder::new(OrderType::Market)
+            .instrument_id(audusd_sim.id())
+            .side(OrderSide::Buy)
+            .quantity(Quantity::from(100_000))
+            .build();
+
+        // First fill at ts=2000
+        let fill1 = TestOrderEventStubs::filled(
+            &order1,
+            &audusd_sim,
+            Some(TradeId::new("t1")),
+            None,
+            Some(Price::from("1.00001")),
+            None,
+            None,
+            None,
+            Some(UnixNanos::from(2_000u64)),
+            None,
+        );
+        let mut position = Position::new(&audusd_sim, fill1.into());
+        assert_eq!(position.ts_opened, UnixNanos::from(2_000u64));
+
+        // Second fill at ts=1000 (earlier than position open)
+        let fill2 = TestOrderEventStubs::filled(
+            &order2,
+            &audusd_sim,
+            Some(TradeId::new("t2")),
+            None,
+            Some(Price::from("1.00002")),
+            None,
+            None,
+            None,
+            Some(UnixNanos::from(1_000u64)),
+            None,
+        );
+
+        // Should not panic; ts_opened and opening_order_id stay unchanged
+        position.apply(&fill2.into());
+        assert_eq!(position.ts_opened, UnixNanos::from(2_000u64));
+        assert_eq!(position.opening_order_id, order1.client_order_id());
+        assert_eq!(position.events.len(), 2);
     }
 }

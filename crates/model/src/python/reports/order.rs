@@ -36,7 +36,9 @@ use crate::{
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl OrderStatusReport {
+    /// Represents an order status at a point in time.
     #[new]
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
@@ -106,7 +108,7 @@ impl OrderStatusReport {
         reduce_only: bool,
         cancel_reason: Option<String>,
         ts_triggered: Option<u64>,
-    ) -> PyResult<Self> {
+    ) -> Self {
         let mut report = Self::new(
             account_id,
             instrument_id,
@@ -196,7 +198,7 @@ impl OrderStatusReport {
             report = report.with_ts_triggered(ts_triggered.into());
         }
 
-        Ok(report)
+        report
     }
 
     fn __richcmp__(&self, other: &Self, op: CompareOp, py: Python<'_>) -> Py<PyAny> {

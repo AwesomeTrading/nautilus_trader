@@ -22,6 +22,8 @@ crate-type = ["rlib", "cdylib"]
 
 [features]
 default = []
+extension-module = ["python", "pyo3/extension-module"]
+python = ["pyo3"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -33,7 +35,10 @@ nautilus-common = { workspace = true }
 nautilus-core = { workspace = true }
 nautilus-model = { workspace = true, features = ["stubs"] }
 
+pyo3 = { workspace = true, optional = true }
+
 ahash = { workspace = true }
+bon = { workspace = true }
 log = { workspace = true }
 rust_decimal = { workspace = true }
 rust_decimal_macros = { workspace = true }

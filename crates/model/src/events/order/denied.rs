@@ -46,6 +46,10 @@ use crate::{
     feature = "python",
     pyo3::pyclass(module = "nautilus_trader.core.nautilus_pyo3.model", from_py_object)
 )]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.model")
+)]
 pub struct OrderDenied {
     /// The trader ID associated with the event.
     pub trader_id: TraderId,
@@ -126,7 +130,7 @@ impl OrderEvent for OrderDenied {
         self.event_id
     }
 
-    fn kind(&self) -> &str {
+    fn type_name(&self) -> &'static str {
         stringify!(OrderDenied)
     }
 
@@ -305,5 +309,13 @@ mod tests {
             display,
             "OrderDenied(instrument_id=BTCUSDT.COINBASE, client_order_id=O-19700101-000000-001-001-1, reason='Exceeded MAX_ORDER_SUBMIT_RATE')"
         );
+    }
+
+    #[rstest]
+    fn test_order_denied_serialization() {
+        let original = OrderDenied::default();
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: OrderDenied = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
     }
 }

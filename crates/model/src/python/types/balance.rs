@@ -13,7 +13,11 @@
 //  limitations under the License.
 // -------------------------------------------------------------------------------------------------
 
-use std::str::FromStr;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
 use nautilus_core::python::{parsing::get_required_string, to_pyvalue_err};
 use pyo3::{prelude::*, types::PyDict};
@@ -24,7 +28,9 @@ use crate::{
 };
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl AccountBalance {
+    /// Represents an account balance denominated in a particular currency.
     #[new]
     fn py_new(total: Money, locked: Money, free: Money) -> PyResult<Self> {
         Self::new_checked(total, locked, free).map_err(to_pyvalue_err)
@@ -36,6 +42,21 @@ impl AccountBalance {
 
     fn __str__(&self) -> String {
         self.to_string()
+    }
+
+    fn __hash__(&self) -> isize {
+        let mut h = DefaultHasher::new();
+        self.total.raw.hash(&mut h);
+        self.locked.raw.hash(&mut h);
+        self.free.raw.hash(&mut h);
+        self.currency.code.hash(&mut h);
+        h.finish() as isize
+    }
+
+    /// Returns a copy of this balance.
+    #[pyo3(name = "copy")]
+    fn py_copy(&self) -> Self {
+        *self
     }
 
     /// Constructs an [`AccountBalance`] from a Python dict.
@@ -105,7 +126,9 @@ impl AccountBalance {
 }
 
 #[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
 impl MarginBalance {
+    /// Creates a new `MarginBalance` instance.
     #[new]
     fn py_new(initial: Money, maintenance: Money, instrument: InstrumentId) -> Self {
         Self::new(initial, maintenance, instrument)
@@ -117,6 +140,21 @@ impl MarginBalance {
 
     fn __str__(&self) -> String {
         self.to_string()
+    }
+
+    fn __hash__(&self) -> isize {
+        let mut h = DefaultHasher::new();
+        self.initial.raw.hash(&mut h);
+        self.maintenance.raw.hash(&mut h);
+        self.currency.code.hash(&mut h);
+        self.instrument_id.hash(&mut h);
+        h.finish() as isize
+    }
+
+    /// Returns a copy of this margin balance.
+    #[pyo3(name = "copy")]
+    fn py_copy(&self) -> Self {
+        *self
     }
 
     /// Constructs a [`MarginBalance`] from a Python dict.
