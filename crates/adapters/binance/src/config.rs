@@ -54,6 +54,10 @@ pub struct BinanceDataClientConfig {
     /// changes (e.g. Trading -> Halt). Set to 0 to disable. Defaults to 3600 (60 minutes).
     #[builder(default = 3600)]
     pub instrument_status_poll_secs: u64,
+    /// Optional allowlist of instrument IDs to load (e.g. `["BTCUSDT-PERP.BINANCE"]`).
+    /// When set, only matching instruments are kept after fetching exchange info.
+    /// When `None` (default), all instruments are loaded.
+    pub instrument_ids: Option<Vec<String>>,
 }
 
 impl Default for BinanceDataClientConfig {

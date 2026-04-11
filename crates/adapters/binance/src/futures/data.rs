@@ -878,11 +878,23 @@ impl DataClient for BinanceFuturesDataClient {
         // Reinitialize token in case of reconnection after disconnect
         self.cancellation_token = CancellationToken::new();
 
-        let instruments = self
+        let mut instruments = self
             .http_client
             .request_instruments()
             .await
             .context("failed to request Binance Futures instruments")?;
+
+        // Filter to configured instrument IDs if an allowlist is set
+        if let Some(ref ids) = self.config.instrument_ids {
+            let before = instruments.len();
+            instruments.retain(|inst| {
+                ids.iter().any(|id| inst.id().to_string() == *id)
+            });
+            log::info!(
+                "Filtered instruments by allowlist: {before} -> {} (allowlist={ids:?})",
+                instruments.len(),
+            );
+        }
 
         // Seed the status cache from the HTTP client's instruments cache
         {
@@ -1620,36 +1632,49 @@ impl DataClient for BinanceFuturesDataClient {
         let end_nanos = datetime_to_unix_nanos(end);
 
         get_runtime().spawn(async move {
-            match http.request_instruments().await {
-                Ok(all_instruments) => {
-                    for instrument in &all_instruments {
-                        upsert_instrument(&instruments, instrument.clone());
-                    }
+            // Try the in-memory cache first to avoid redundant HTTP round trips.
+            // The cache is populated during connect() and by request_instruments().
+            let cached = {
+                let guard = instruments.load();
+                guard.get(&instrument_id).cloned()
+            };
 
-                    let instrument = all_instruments
-                        .into_iter()
-                        .find(|i| i.id() == instrument_id);
-
-                    if let Some(instrument) = instrument {
-                        let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
-                            request_id,
-                            client_id,
-                            instrument.id(),
-                            instrument,
-                            start_nanos,
-                            end_nanos,
-                            clock.get_time_ns(),
-                            params,
-                        )));
-
-                        if let Err(e) = sender.send(DataEvent::Response(response)) {
-                            log::error!("Failed to send instrument response: {e}");
+            let instrument = if let Some(inst) = cached {
+                Some(inst)
+            } else {
+                // Cache miss — fall back to HTTP fetch for the full exchange info
+                log::debug!("Instrument cache miss for {instrument_id}, fetching from HTTP");
+                match http.request_instruments().await {
+                    Ok(all_instruments) => {
+                        for inst in &all_instruments {
+                            upsert_instrument(&instruments, inst.clone());
                         }
-                    } else {
-                        log::error!("Instrument not found: {instrument_id}");
+                        all_instruments.into_iter().find(|i| i.id() == instrument_id)
+                    }
+                    Err(e) => {
+                        log::error!("Instrument request failed: {e:?}");
+                        return;
                     }
                 }
-                Err(e) => log::error!("Instrument request failed: {e:?}"),
+            };
+
+            if let Some(instrument) = instrument {
+                let response = DataResponse::Instrument(Box::new(InstrumentResponse::new(
+                    request_id,
+                    client_id,
+                    instrument.id(),
+                    instrument,
+                    start_nanos,
+                    end_nanos,
+                    clock.get_time_ns(),
+                    params,
+                )));
+
+                if let Err(e) = sender.send(DataEvent::Response(response)) {
+                    log::error!("Failed to send instrument response: {e}");
+                }
+            } else {
+                log::error!("Instrument not found: {instrument_id}");
             }
         });
 
