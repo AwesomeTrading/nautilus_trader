@@ -245,6 +245,22 @@ impl LiveNodeBuilder {
 
         let kernel = NautilusKernel::new(self.name.clone(), self.config.clone())?;
 
+        // Wire Controller to enable dynamic strategy management at runtime
+        {
+            use nautilus_common::actor::data_actor::DataActorConfig;
+            use nautilus_model::identifiers::ActorId;
+            use nautilus_system::controller::Controller;
+
+            let controller = Controller::new(
+                kernel.trader.clone(),
+                Some(DataActorConfig {
+                    actor_id: Some(ActorId::from("Controller-001")),
+                    ..Default::default()
+                }),
+            );
+            kernel.trader.borrow_mut().add_actor(controller)?;
+        }
+
         for (name, factory) in self.data_client_factories {
             if let Some(config) = self.data_client_configs.remove(&name) {
                 log::debug!("Creating data client {name}");
