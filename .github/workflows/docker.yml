@@ -139,7 +139,11 @@ jobs:
 
   build-docker-images-nautilus-trader:
     name: build-docker-images (nautilus_trader-${{ matrix.platform }})
-    if: github.ref != 'refs/heads/test-docker'
+    # TEMP: test-docker added to exercise merge jobs (Attest SBOM retry). Revert before merging to develop.
+    if: >-
+      github.ref == 'refs/heads/master' ||
+      github.ref == 'refs/heads/nightly' ||
+      github.ref == 'refs/heads/test-docker'
     runs-on: ${{ matrix.runner }}
     permissions:
       packages: write
@@ -402,7 +406,11 @@ jobs:
 
   build-docker-images-jupyterlab:
     name: build-docker-images (jupyterlab-${{ matrix.platform }})
-    if: github.ref != 'refs/heads/test-docker'
+    # TEMP: test-docker added to exercise merge jobs (Attest SBOM retry). Revert before merging to develop.
+    if: >-
+      github.ref == 'refs/heads/master' ||
+      github.ref == 'refs/heads/nightly' ||
+      github.ref == 'refs/heads/test-docker'
     runs-on: ${{ matrix.runner }}
     permissions:
       packages: write
