@@ -60,6 +60,7 @@ use nautilus_core::{
     datetime::{mins_to_nanos, mins_to_secs},
 };
 use nautilus_model::{
+    accounts::Account,
     enums::{
         ContingencyType, OmsType, OrderStatus, OrderType, PositionSide, TimeInForce,
         TrailingOffsetType,
@@ -2338,19 +2339,28 @@ impl ExecutionEngine {
                 return;
             };
 
-        if self.cache.borrow().account(&fill.account_id).is_none() {
-            log::error!(
-                "Cannot handle order fill: no account found for {}, {fill}",
-                fill.instrument_id.venue,
-            );
-            return;
-        }
+        let is_margin_account = {
+            let cache = self.cache.borrow();
+            let Some(account) = cache.account(&fill.account_id) else {
+                log::error!(
+                    "Cannot handle order fill: no account found for {}, {fill}",
+                    fill.instrument_id.venue,
+                );
+                return;
+            };
+
+            account.is_margin_account()
+        };
 
         // Skip portfolio position updates for combo fills (spread instruments)
         // Combo fills are only used for order management, not portfolio updates
         let position = if instrument.is_spread() {
             None
         } else {
+            if is_margin_account {
+                let portfolio_endpoint = MessagingSwitchboard::portfolio_update_order();
+                msgbus::send_order_event(portfolio_endpoint, OrderEventAny::Filled(fill));
+            }
             self.handle_position_update(&instrument, fill, oms_type);
             let position_id = fill.position_id.unwrap();
             self.cache.borrow().position_owned(&position_id)

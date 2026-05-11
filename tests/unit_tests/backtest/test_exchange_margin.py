@@ -2733,6 +2733,49 @@ class TestSimulatedExchangeMarginAccount:
         assert fill_event3.commission == Money(90, JPY)
         assert Money(999995.00, USD) == self.exchange.get_account().balance_total(USD)
 
+    def test_closing_position_updates_balance_with_realized_price_pnl(self) -> None:
+        # Arrange
+        self.exchange.add_instrument(_AUDUSD_SIM)
+        open_quote = TestDataStubs.quote_tick(
+            instrument=_AUDUSD_SIM,
+            bid_price=1.00000,
+            ask_price=1.00001,
+        )
+        self.data_engine.process(open_quote)
+        self.exchange.process_quote_tick(open_quote)
+
+        order_open = self.strategy.order_factory.market(
+            _AUDUSD_SIM.id,
+            OrderSide.BUY,
+            Quantity.from_int(100_000),
+        )
+        self.strategy.submit_order(order_open)
+        self.exchange.process(0)
+
+        position_id = self.cache.positions_open()[0].id
+
+        close_quote = TestDataStubs.quote_tick(
+            instrument=_AUDUSD_SIM,
+            bid_price=1.00011,
+            ask_price=1.00012,
+        )
+        self.data_engine.process(close_quote)
+        self.exchange.process_quote_tick(close_quote)
+
+        order_close = self.strategy.order_factory.market(
+            _AUDUSD_SIM.id,
+            OrderSide.SELL,
+            Quantity.from_int(100_000),
+        )
+
+        # Act
+        self.strategy.submit_order(order_close, position_id=position_id)
+        self.exchange.process(0)
+
+        # Assert
+        assert self.cache.positions_open() == []
+        assert self.exchange.get_account().balance_total(USD) == Money(1_000_006.00, USD)
+
     def test_expire_order(self) -> None:
         # Arrange: Prepare market
         tick1 = TestDataStubs.quote_tick(
