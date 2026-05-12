@@ -234,6 +234,8 @@ jobs:
           tags: |
             type=raw,value=nightly,enable=${{ steps.branch-name.outputs.current_branch == 'nightly' }}
             type=raw,value=latest,enable=${{ steps.branch-name.outputs.current_branch == 'master' }}
+            # TEMP: tag for test-docker validation runs. Revert with the parent test-docker commit.
+            type=raw,value=test-docker,enable=${{ steps.branch-name.outputs.current_branch == 'test-docker' }}
 
       - name: Build and push by digest
         id: build
@@ -325,6 +327,8 @@ jobs:
           tags: |
             type=raw,value=nightly,enable=${{ steps.branch-name.outputs.current_branch == 'nightly' }}
             type=raw,value=latest,enable=${{ steps.branch-name.outputs.current_branch == 'master' }}
+            # TEMP: tag for test-docker validation runs. Revert with the parent test-docker commit.
+            type=raw,value=test-docker,enable=${{ steps.branch-name.outputs.current_branch == 'test-docker' }}
 
       - name: Create manifest list and push
         id: push
@@ -511,6 +515,8 @@ jobs:
           tags: |
             type=raw,value=nightly,enable=${{ steps.branch-name.outputs.current_branch == 'nightly' }}
             type=raw,value=latest,enable=${{ steps.branch-name.outputs.current_branch == 'master' }}
+            # TEMP: tag for test-docker validation runs. Revert with the parent test-docker commit.
+            type=raw,value=test-docker,enable=${{ steps.branch-name.outputs.current_branch == 'test-docker' }}
 
       - name: Build and push by digest
         id: build
@@ -604,6 +610,8 @@ jobs:
           tags: |
             type=raw,value=nightly,enable=${{ steps.branch-name.outputs.current_branch == 'nightly' }}
             type=raw,value=latest,enable=${{ steps.branch-name.outputs.current_branch == 'master' }}
+            # TEMP: tag for test-docker validation runs. Revert with the parent test-docker commit.
+            type=raw,value=test-docker,enable=${{ steps.branch-name.outputs.current_branch == 'test-docker' }}
 
       - name: Create manifest list and push
         id: push
